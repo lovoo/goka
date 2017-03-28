@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"stash.lvint.de/lab/goka/kafka/mock"
+	"github.com/lovoo/goka/kafka/mock"
 
 	kazoo "github.com/db7/kazoo-go"
 	"github.com/facebookgo/ensure"

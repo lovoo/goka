@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"stash.lvint.de/lab/goka/kafka/mock"
+	"github.com/lovoo/goka/kafka/mock"
 
 	"github.com/Shopify/sarama"
 	"github.com/facebookgo/ensure"

@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"stash.lvint.de/lab/goka/kafka"
-	"stash.lvint.de/lab/goka/storage"
+	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/storage"
 
 	"github.com/Shopify/sarama"
 	metrics "github.com/rcrowley/go-metrics"

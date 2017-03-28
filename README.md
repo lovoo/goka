@@ -1,5 +1,7 @@
 # Goka
 
+[![Build Status](http://drone.lovoo.io/api/badges/lovoo/goka/status.svg)](http://drone.lovoo.io/lovoo/goka)
+
 Goka is a simple but powerful stream processing library for Apache Kafka that eases the development of microservices.
 Goka extends the concept of _consumer group_ with a _group table_, which represents the state of the group.
 A microservice modifies and serves the content of a table employing two complementary object types: processors and views.

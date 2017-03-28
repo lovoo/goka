@@ -8,9 +8,9 @@ import (
 	"github.com/golang/protobuf/proto"
 	metrics "github.com/rcrowley/go-metrics"
 
-	"stash.lvint.de/lab/goka/codec"
-	"stash.lvint.de/lab/goka/kafka"
-	"stash.lvint.de/lab/goka/storage"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/storage"
 )
 
 type EmitHandler func(topic string, key string, value []byte) *kafka.Promise

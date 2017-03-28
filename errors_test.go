@@ -7,7 +7,7 @@ import (
 
 	"github.com/facebookgo/ensure"
 
-	"stash.lvint.de/lab/goka/codec"
+	"github.com/lovoo/goka/codec"
 )
 
 func consume(ctx Context, msg interface{}) {

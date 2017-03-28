@@ -29,6 +29,16 @@ func (_m *MockClient) EXPECT() *_MockClientRecorder {
 	return _m.recorder
 }
 
+func (_m *MockClient) Brokers() []*sarama.Broker {
+	ret := _m.ctrl.Call(_m, "Brokers")
+	ret0, _ := ret[0].([]*sarama.Broker)
+	return ret0
+}
+
+func (_mr *_MockClientRecorder) Brokers() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "Brokers")
+}
+
 func (_m *MockClient) Close() error {
 	ret := _m.ctrl.Call(_m, "Close")
 	ret0, _ := ret[0].(error)
@@ -200,6 +210,16 @@ func (_m *MockConsumer) ConsumePartition(_param0 string, _param1 int32, _param2 
 
 func (_mr *_MockConsumerRecorder) ConsumePartition(arg0, arg1, arg2 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "ConsumePartition", arg0, arg1, arg2)
+}
+
+func (_m *MockConsumer) HighWaterMarks() map[string]map[int32]int64 {
+	ret := _m.ctrl.Call(_m, "HighWaterMarks")
+	ret0, _ := ret[0].(map[string]map[int32]int64)
+	return ret0
+}
+
+func (_mr *_MockConsumerRecorder) HighWaterMarks() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "HighWaterMarks")
 }
 
 func (_m *MockConsumer) Partitions(_param0 string) ([]int32, error) {
