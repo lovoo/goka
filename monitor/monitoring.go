@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"sync"
 
-	"stash.lvint.de/lab/goka/templates"
+	"github.com/lovoo/goka/templates"
 
 	"net/http"
 

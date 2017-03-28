@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"stash.lvint.de/lab/goka/codec"
-	"stash.lvint.de/lab/goka/kafka"
-	"stash.lvint.de/lab/goka/mock"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/mock"
 
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
@@ -246,6 +246,7 @@ func TestContext_SetErrors(t *testing.T) {
 		codec:      new(codec.String),
 	}
 
+	_ = failed
 	err := ctx.setValueForKey(key, nil)
 	ensure.NotNil(t, err)
 	ensure.StringContains(t, err.Error(), "Cannot set nil")

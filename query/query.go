@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"stash.lvint.de/lab/goka"
-	"stash.lvint.de/lab/goka/templates"
+	"github.com/lovoo/goka"
+	"github.com/lovoo/goka/templates"
 
 	"github.com/gorilla/mux"
 )

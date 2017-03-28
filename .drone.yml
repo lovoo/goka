@@ -1,0 +1,19 @@
+workspace:
+  base: /go
+  path: src/github.com/lovoo/goka
+
+debug: true
+
+pipeline:
+  build:
+    image: golang:${GO_VERSION}
+    commands:
+      - go get -u github.com/bsm/sarama-cluster/...
+      - go get -u github.com/Shopify/sarama/...
+      - go test ./...
+
+matrix:
+  GO_VERSION:
+    - 1.7
+    - 1.8
+    - latest

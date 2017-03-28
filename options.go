@@ -6,9 +6,9 @@ import (
 	"time"
 
 	metrics "github.com/rcrowley/go-metrics"
-	"stash.lvint.de/lab/goka/codec"
-	"stash.lvint.de/lab/goka/kafka"
-	"stash.lvint.de/lab/goka/storage"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/storage"
 )
 
 // UpdateCallback is invoked upon arrival of a message for a table partition.

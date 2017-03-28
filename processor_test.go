@@ -14,10 +14,10 @@ import (
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
 	metrics "github.com/rcrowley/go-metrics"
-	"stash.lvint.de/lab/goka/codec"
-	"stash.lvint.de/lab/goka/kafka"
-	"stash.lvint.de/lab/goka/mock"
-	"stash.lvint.de/lab/goka/storage"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/mock"
+	"github.com/lovoo/goka/storage"
 )
 
 var (

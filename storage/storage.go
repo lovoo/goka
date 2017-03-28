@@ -9,8 +9,8 @@ import (
 	"github.com/rcrowley/go-metrics"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 
-	"stash.lvint.de/lab/goka/codec"
-	"stash.lvint.de/lab/goka/snapshot"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/snapshot"
 )
 
 const (

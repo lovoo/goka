@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"stash.lvint.de/lab/goka/codec"
-	"stash.lvint.de/lab/goka/kafka"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/kafka"
 )
 
 type Producer struct {

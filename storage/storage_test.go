@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"stash.lvint.de/lab/goka/codec"
+	"github.com/lovoo/goka/codec"
 
 	"github.com/facebookgo/ensure"
 	"github.com/rcrowley/go-metrics"

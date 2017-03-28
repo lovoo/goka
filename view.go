@@ -7,9 +7,9 @@ import (
 	"log"
 	"sync"
 
-	"stash.lvint.de/lab/goka/codec"
-	"stash.lvint.de/lab/goka/kafka"
-	"stash.lvint.de/lab/goka/storage"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/storage"
 
 	"github.com/rcrowley/go-metrics"
 )

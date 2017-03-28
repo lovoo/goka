@@ -3,7 +3,7 @@ package storage
 import (
 	"fmt"
 
-	"stash.lvint.de/lab/goka/codec"
+	"github.com/lovoo/goka/codec"
 )
 
 type storageMock struct {

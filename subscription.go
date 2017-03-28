@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"stash.lvint.de/lab/goka/codec"
+	"github.com/lovoo/goka/codec"
 
 	"github.com/Shopify/sarama"
 )

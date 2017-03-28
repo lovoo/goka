@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"stash.lvint.de/lab/goka/codec"
-	"stash.lvint.de/lab/goka/kafka"
-	"stash.lvint.de/lab/goka/mock"
-	"stash.lvint.de/lab/goka/storage"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/mock"
+	"github.com/lovoo/goka/storage"
 
 	"github.com/facebookgo/clock"
 	"github.com/facebookgo/ensure"
@@ -31,7 +31,8 @@ func createTestView(t *testing.T, consumer kafka.Consumer, sb StorageBuilder, tm
 			recoveredMessages++
 			return nil
 		},
-		registry: metrics.DefaultRegistry,
+		registry:     metrics.DefaultRegistry,
+		gokaRegistry: metrics.DefaultRegistry,
 	}
 	opts.builders.storage = sb
 	opts.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
@@ -63,6 +64,7 @@ func TestView_createPartitions(t *testing.T) {
 	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Close()
 	v := createTestView(t, consumer, sb, tm)
+
 	err := v.createPartitions(nil)
 	ensure.Nil(t, err)
 
