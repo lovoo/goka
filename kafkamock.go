@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/facebookgo/ensure"
+	"github.com/golang/mock/gomock"
 	"github.com/golang/protobuf/proto"
 	metrics "github.com/rcrowley/go-metrics"
 
@@ -13,7 +14,28 @@ import (
 	"github.com/lovoo/goka/storage"
 )
 
+// EmitHandler abstracts a function that allows to overwrite kafkamock's Emit function to
+// simulate producer errors
 type EmitHandler func(topic string, key string, value []byte) *kafka.Promise
+
+type gomockPanicker struct {
+	reporter gomock.TestReporter
+}
+
+func (gm *gomockPanicker) Errorf(format string, args ...interface{}) {
+	gm.reporter.Errorf(format, args...)
+}
+func (gm *gomockPanicker) Fatalf(format string, args ...interface{}) {
+	defer panic(fmt.Sprintf(format, args...))
+	gm.reporter.Fatalf(format, args...)
+}
+
+// NewMockController returns a *gomock.Controller using a wrapped testing.T (or whatever)
+// which panics on a Fatalf. This is necessary when using a mock in kafkamock. Otherwise it will
+// freeze on an unexpected call.
+func NewMockController(t gomock.TestReporter) *gomock.Controller {
+	return gomock.NewController(&gomockPanicker{reporter: t})
+}
 
 // KafkaMock is allows interacting with a test processor
 type KafkaMock struct {
@@ -21,6 +43,7 @@ type KafkaMock struct {
 	storage storage.Storage
 
 	offset         int64
+	tableOffset    int64
 	incomingEvents chan kafka.Event
 	consumerEvents chan kafka.Event
 	done           chan bool
@@ -32,8 +55,9 @@ type KafkaMock struct {
 	groupTopic    string
 	emitted       []*kafka.Message
 
-	callQueue []func()
-	wg        sync.WaitGroup
+	groupTableCreator func() (string, []byte)
+	callQueue         []func()
+	wg                sync.WaitGroup
 
 	consumerMock *consumerMock
 
@@ -66,6 +90,10 @@ func NewKafkaMock(t Tester, groupName string) *KafkaMock {
 	kafkaMock.topicMgrMock = newTopicMgrMock(kafkaMock)
 
 	return kafkaMock
+}
+
+func (km *KafkaMock) SetGroupTableCreator(creator func() (string, []byte)) {
+	km.groupTableCreator = creator
 }
 
 // ProcessorOptions returns the options that must be passed to NewProcessor
@@ -104,6 +132,20 @@ func (km *KafkaMock) initProtocol() {
 	defer close(km.done)
 	km.consumerEvents <- &kafka.Assignment{
 		0: -1,
+	}
+
+	for km.groupTableCreator != nil {
+		key, value := km.groupTableCreator()
+		if key == "" || value == nil {
+			break
+		}
+		km.consumerEvents <- &kafka.Message{
+			Topic:     km.groupTopic,
+			Partition: 0,
+			Offset:    km.tableOffset,
+			Key:       key,
+			Value:     value,
+		}
 	}
 
 	km.consumerEvents <- &kafka.EOF{Partition: 0}
@@ -212,14 +254,14 @@ func (km *KafkaMock) ExpectEmit(topic string, key string, expecter func(value []
 // no emits of prior test cases are stuck in the list and mess with the test results.
 func (km *KafkaMock) Finish(fail bool) {
 	if len(km.emitted) > 0 {
-		for _, emitted := range km.emitted {
-			km.t.Errorf("    topic: %s key: %s", emitted.Topic, emitted.Key)
-		}
 		if fail {
 			km.t.Errorf("The following emits are still in the list, although it's supposed to be empty:")
+			for _, emitted := range km.emitted {
+				km.t.Errorf("    topic: %s key: %s", emitted.Topic, emitted.Key)
+			}
 		}
 	}
-	km.emitted = km.emitted[:]
+	km.emitted = make([]*kafka.Message, 0)
 }
 
 // handleEmit handles an Emit-call on the producerMock.

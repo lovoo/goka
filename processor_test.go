@@ -10,14 +10,15 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
-	metrics "github.com/rcrowley/go-metrics"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/mock"
 	"github.com/lovoo/goka/storage"
+	metrics "github.com/rcrowley/go-metrics"
 )
 
 var (
@@ -1137,4 +1138,52 @@ func TestProcessor_consumePanic(t *testing.T) {
 	<-done
 	ensure.NotNil(t, processorErrors)
 	ensure.True(t, strings.Contains(processorErrors.Error(), "panicking"))
+}
+
+func TestProcessor_failOnRecover(t *testing.T) {
+	var (
+		recovered       int
+		processorErrors error
+		done            = make(chan struct{})
+	)
+
+	km := NewKafkaMock(t, "test")
+
+	consume := func(ctx Context, msg interface{}) {
+		log.Println("consuming message..", ctx.Key())
+	}
+
+	km.SetGroupTableCreator(func() (string, []byte) {
+		time.Sleep(10 * time.Millisecond)
+		recovered++
+		if recovered > 100 {
+			return "", nil
+		}
+		return "key", []byte(fmt.Sprintf("state-%d", recovered))
+	})
+
+	proc, err := NewProcessor([]string{"broker"},
+		"test",
+		Stream("topic", new(codec.String), consume),
+		append(km.ProcessorOptions(),
+			WithGroupTable(new(codec.Bytes)),
+			WithUpdateCallback(func(s storage.Storage, partition int32, key string, value []byte) error {
+				log.Printf("recovered state: %s: %s", key, string(value))
+				return nil
+			}),
+		)...,
+	)
+
+	ensure.Nil(t, err)
+
+	go func() {
+		processorErrors = proc.Start()
+		close(done)
+	}()
+
+	log.Println("stopping")
+	proc.Stop()
+	<-done
+	log.Println("stopped")
+	ensure.NotNil(t, processorErrors)
 }
