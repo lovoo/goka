@@ -127,6 +127,11 @@ func (km *KafkaMock) ProcessorOptions() []ProcessorOption {
 // initProtocol initiates the protocol with the client basically making the KafkaMock
 // usable.
 func (km *KafkaMock) initProtocol() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("recovered from panic")
+		}
+	}()
 	km.consumerEvents <- &kafka.Assignment{
 		0: -1,
 	}

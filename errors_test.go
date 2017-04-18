@@ -15,6 +15,7 @@ func consume(ctx Context, msg interface{}) {
 }
 
 func TestError(t *testing.T) {
+	var err error
 	km := NewKafkaMock(t, "group")
 	proc, err := NewProcessor([]string{"broker"},
 		"group",
@@ -22,16 +23,18 @@ func TestError(t *testing.T) {
 		km.ProcessorOptions()...,
 	)
 	ensure.Nil(t, err)
+	done := make(chan struct{})
 	go func() {
-		err := proc.Start()
-		ensure.NotNil(t, err)
+		defer func() {
+			close(done)
+		}()
+		err = proc.Start()
 	}()
 
-	for i := 0; i < 2; i++ {
-		km.consumeData("upstream", "test", []byte("test"))
-	}
-
+	km.consumeData("upstream", "test", []byte("test"))
+	km.consumeData("upstream", "test", []byte("test"))
+	// consume an error
 	km.consumeError(errors.New("hallo welt"))
-
-	doTimed(t, proc.Stop)
+	<-done
+	ensure.NotNil(t, err)
 }
