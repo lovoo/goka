@@ -1,7 +1,6 @@
 package query
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,6 +16,10 @@ import (
 
 const jsonIndent = "  "
 
+// Marshaler takes an object in and writes into out it's human readable
+// representation.
+type Marshaler func(interface{}) (string, error)
+
 // Server is a provides HTTP routes for querying the group table.
 type Server struct {
 	m sync.RWMutex
@@ -24,14 +27,16 @@ type Server struct {
 	basePath string
 	loader   templates.Loader
 	sources  map[string]goka.Getter
+	marshal  Marshaler
 }
 
 // NewServer creates a server with the given options.
-func NewServer(basePath string, router *mux.Router) *Server {
+func NewServer(basePath string, router *mux.Router, marshal Marshaler) *Server {
 	srv := &Server{
 		basePath: basePath,
 		loader:   &templates.BinLoader{},
 		sources:  make(map[string]goka.Getter),
+		marshal:  marshal,
 	}
 
 	sub := router.PathPrefix(basePath).Subrouter()
@@ -159,13 +164,13 @@ func (s *Server) key(w http.ResponseWriter, r *http.Request) {
 	params["key"] = key
 
 	if value != nil {
-		data, err := json.MarshalIndent(value, "", jsonIndent)
+		data, err := s.marshal(value)
 		if err != nil {
 			params["error"] = fmt.Errorf("error marshaling value: %v", err)
 			s.executeQueryTemplate(w, params)
 			return
 		}
-		params["value"] = string(data)
+		params["value"] = data
 	} else {
 		params["warning"] = fmt.Errorf("Key '%s' not found!", key)
 	}
