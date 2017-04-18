@@ -46,7 +46,6 @@ type KafkaMock struct {
 	tableOffset    int64
 	incomingEvents chan kafka.Event
 	consumerEvents chan kafka.Event
-	done           chan bool
 	// Stores a map of all topics that are handled by the processor.
 	// Every time an emit is called, those messages for handled topics are relayed
 	// after the consume-function has finished.
@@ -81,7 +80,6 @@ func NewKafkaMock(t Tester, groupName string) *KafkaMock {
 		t:              t,
 		incomingEvents: make(chan kafka.Event),
 		consumerEvents: make(chan kafka.Event),
-		done:           make(chan bool),
 		handledTopics:  make(map[string]bool),
 		groupTopic:     GroupTableTopic(groupName),
 	}
@@ -129,7 +127,6 @@ func (km *KafkaMock) ProcessorOptions() []ProcessorOption {
 // initProtocol initiates the protocol with the client basically making the KafkaMock
 // usable.
 func (km *KafkaMock) initProtocol() {
-	defer close(km.done)
 	km.consumerEvents <- &kafka.Assignment{
 		0: -1,
 	}
@@ -360,10 +357,8 @@ func (km *consumerMock) RemovePartition(topic string, partition int32) {
 // No action required in the mock.
 func (km *consumerMock) Close() error {
 	close(km.kafkaMock.incomingEvents)
-	<-km.kafkaMock.done
 	close(km.kafkaMock.consumerEvents)
-
-	fmt.Println("closing consumer mock")
+	fmt.Println("closed consumer mock")
 	return nil
 }
 

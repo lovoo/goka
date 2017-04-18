@@ -1145,6 +1145,7 @@ func TestProcessor_failOnRecover(t *testing.T) {
 		recovered       int
 		processorErrors error
 		done            = make(chan struct{})
+		msgToRecover    = 100
 	)
 
 	km := NewKafkaMock(t, "test")
@@ -1156,7 +1157,7 @@ func TestProcessor_failOnRecover(t *testing.T) {
 	km.SetGroupTableCreator(func() (string, []byte) {
 		time.Sleep(10 * time.Millisecond)
 		recovered++
-		if recovered > 100 {
+		if recovered > msgToRecover {
 			return "", nil
 		}
 		return "key", []byte(fmt.Sprintf("state-%d", recovered))
@@ -1181,9 +1182,11 @@ func TestProcessor_failOnRecover(t *testing.T) {
 		close(done)
 	}()
 
+	time.Sleep(100 * time.Millisecond)
 	log.Println("stopping")
 	proc.Stop()
 	<-done
 	log.Println("stopped")
-	ensure.NotNil(t, processorErrors)
+	// make sure the recovery was aborted
+	ensure.True(t, recovered < msgToRecover)
 }
