@@ -45,11 +45,12 @@ func newSimpleConsumer(brokers []string, events chan Event, config *sarama.Confi
 func (c *simpleConsumer) Close() error {
 	c.m.Lock()
 	defer c.m.Unlock()
-	for _, pc := range c.partitions {
+	for tp, pc := range c.partitions {
 		err := pc.Close()
 		if err != nil {
 			return fmt.Errorf("Failed to terminate partition consumer (FATAL): %v", err)
 		}
+		delete(c.partitions, tp)
 	}
 	c.wg.Wait()
 

@@ -142,13 +142,11 @@ func TestSimpleConsumer_AddPartition(t *testing.T) {
 		err = c.Close()
 		ensure.NotNil(t, err)
 
-		pc.EXPECT().Close().Return(nil)
 		consumer.EXPECT().Close().Return(nil)
 		client.EXPECT().Close().Return(errors.New("some error"))
 		err = c.Close()
 		ensure.NotNil(t, err)
 
-		pc.EXPECT().Close().Return(nil)
 		consumer.EXPECT().Close().Return(nil)
 		client.EXPECT().Close().Return(nil)
 		err = c.Close()
