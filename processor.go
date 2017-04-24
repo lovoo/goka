@@ -8,7 +8,6 @@ import (
 	"runtime/debug"
 	"sync"
 
-	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/storage"
 
@@ -253,11 +252,11 @@ func (g *Processor) Get(key string) (interface{}, error) {
 	}
 
 	// make a deep copy of the object to make it read only.
-	data, err := g.opts.tableCodec.Encode(key, val)
+	data, err := g.opts.tableCodec.Encode(val)
 	if err != nil {
 		return nil, err
 	}
-	return g.opts.tableCodec.Decode(key, data)
+	return g.opts.tableCodec.Decode(data)
 }
 
 func (g *Processor) find(key string) (storage.Storage, error) {
@@ -479,7 +478,7 @@ func (s storageProxy) Stateless() bool {
 	return s.stateless
 }
 
-func (g *Processor) newStorage(topic string, id int32, codec codec.Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
+func (g *Processor) newStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
 	if g.isStateless() {
 		return &storageProxy{
 			Storage:   storage.NewMock(codec),
@@ -669,7 +668,7 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 		return fmt.Errorf("cannot handle topic %s", msg.Topic)
 	}
 	// decode message
-	m, err := stream.codec.Decode(msg.Key, msg.Data)
+	m, err := stream.codec.Decode(msg.Data)
 	if err != nil {
 		wg.Done()
 		return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/lovoo/goka/codec"
-
 	"github.com/Shopify/sarama"
 )
 
@@ -15,7 +13,7 @@ type Subscription struct {
 	Name          string
 	initialOffset int64
 	consume       ConsumeCallback
-	codec         codec.Codec
+	codec         Codec
 	internal      bool
 	table         bool
 }
@@ -88,7 +86,7 @@ func Subscribe(subs ...Subscriptions) Subscriptions {
 // Table is one or more co-partitioned, log-compacted topic. The processor
 // subscribing for a table topic will start reading from the oldest offset
 // of the partition.
-func Table(topic string, codec codec.Codec) Subscriptions {
+func Table(topic string, codec Codec) Subscriptions {
 	return []Subscription{
 		{
 			Name:          topic,
@@ -101,7 +99,7 @@ func Table(topic string, codec codec.Codec) Subscriptions {
 // Stream returns a subscription for a co-partitioned topic. The processor
 // subscribing for a stream topic will start reading from the newest offset of
 // the partition.
-func Stream(topic string, codec codec.Codec, consume ConsumeCallback) Subscriptions {
+func Stream(topic string, codec Codec, consume ConsumeCallback) Subscriptions {
 	return []Subscription{
 		{
 			Name:          topic,
@@ -112,7 +110,7 @@ func Stream(topic string, codec codec.Codec, consume ConsumeCallback) Subscripti
 }
 
 // Loop defines a consume callback on the loop topic
-func Loop(codec codec.Codec, consume ConsumeCallback) Subscriptions {
+func Loop(codec Codec, consume ConsumeCallback) Subscriptions {
 	if consume == nil {
 		log.Fatalln("cannot use nil consume callback")
 	}
@@ -127,7 +125,7 @@ func Loop(codec codec.Codec, consume ConsumeCallback) Subscriptions {
 }
 
 // Streams subscribes to multiple topics using one codec and one consume callback
-func Streams(topics []string, codec codec.Codec, consume ConsumeCallback) Subscriptions {
+func Streams(topics []string, codec Codec, consume ConsumeCallback) Subscriptions {
 	var subs Subscriptions
 	for _, t := range topics {
 		subs = append(subs, Subscription{

@@ -5,10 +5,9 @@ import (
 	"path/filepath"
 	"time"
 
-	metrics "github.com/rcrowley/go-metrics"
-	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/storage"
+	metrics "github.com/rcrowley/go-metrics"
 )
 
 // UpdateCallback is invoked upon arrival of a message for a table partition.
@@ -17,7 +16,7 @@ type UpdateCallback func(s storage.Storage, partition int32, key string, value [
 
 // StorageBuilder creates a local storage (a persistent cache) for a topic
 // table. StorageBuilder creates one storage for each partition of the topic.
-type StorageBuilder func(topic string, partition int32, codec codec.Codec, reg metrics.Registry) (storage.Storage, error)
+type StorageBuilder func(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error)
 
 ///////////////////////////////////////////////////////////////////////////////
 // default values
@@ -62,7 +61,7 @@ type poptions struct {
 	clientID string
 
 	tableEnabled            bool
-	tableCodec              codec.Codec
+	tableCodec              Codec
 	updateCallback          UpdateCallback
 	storagePath             string
 	storageSnapshotInterval time.Duration
@@ -80,7 +79,7 @@ type poptions struct {
 }
 
 // WithGroupTable enables the group table and defines a codec.
-func WithGroupTable(codec codec.Codec) ProcessorOption {
+func WithGroupTable(codec Codec) ProcessorOption {
 	return func(o *poptions) {
 		o.tableEnabled = true
 		o.tableCodec = codec
@@ -227,7 +226,7 @@ func (opt *poptions) tableTopic(group string) Subscription {
 	return Subscription{Name: tableName(group)}
 }
 
-func (opt *poptions) defaultStorageBuilder(topic string, partition int32, codec codec.Codec, reg metrics.Registry) (storage.Storage, error) {
+func (opt *poptions) defaultStorageBuilder(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
 	return storage.New(opt.storagePathForPartition(topic, partition), codec, reg, opt.storageSnapshotInterval)
 }
 
@@ -239,7 +238,7 @@ func (opt *poptions) defaultStorageBuilder(topic string, partition int32, codec 
 type ViewOption func(*voptions)
 
 type voptions struct {
-	tableCodec              codec.Codec
+	tableCodec              Codec
 	updateCallback          UpdateCallback
 	storagePath             string
 	storageSnapshotInterval time.Duration
@@ -369,7 +368,7 @@ func (opt *voptions) tableTopic(group string) Subscription {
 	return Subscription{Name: tableName(group)}
 }
 
-func (opt *voptions) defaultStorageBuilder(topic string, partition int32, codec codec.Codec, reg metrics.Registry) (storage.Storage, error) {
+func (opt *voptions) defaultStorageBuilder(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
 	return storage.New(opt.storagePathForPartition(topic, partition), codec, reg, opt.storageSnapshotInterval)
 }
 
@@ -385,7 +384,7 @@ type proptions struct {
 	clientID string
 
 	registry metrics.Registry
-	codec    codec.Codec
+	codec    Codec
 
 	builders struct {
 		topicmgr topicmgrBuilder

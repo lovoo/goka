@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/storage"
 )
@@ -54,7 +53,7 @@ type context struct {
 	failer  func(err error)
 
 	storage storage.Storage
-	codec   codec.Codec
+	codec   Codec
 	views   map[string]*partition
 
 	msg      *message
@@ -86,7 +85,7 @@ func (ctx *context) Loopback(key string, value interface{}) error {
 		return fmt.Errorf("No loop topic configured")
 	}
 
-	data, err := ctx.loopTopic.codec.Encode(key, value)
+	data, err := ctx.loopTopic.codec.Encode(value)
 	if err != nil {
 		return fmt.Errorf("Error encoding message for key %s: %v", key, err)
 	}
@@ -173,7 +172,7 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 		return fmt.Errorf("Error storing value: %v", err)
 	}
 
-	encodedValue, err := ctx.codec.Encode(key, value)
+	encodedValue, err := ctx.codec.Encode(value)
 	if err != nil {
 		return fmt.Errorf("Error encoding value: %v", err)
 	}

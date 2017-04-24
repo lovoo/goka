@@ -54,8 +54,8 @@ const DefaultStorageSnapshotInterval = 1 * time.Minute
 
 type storage struct {
 	db               *levelDbStorage
-	codec            codec.Codec
-	offsetCodec      codec.Codec
+	codec            Codec
+	offsetCodec      Codec
 	snap             *snapshot.Snapshot
 	snapshotInterval time.Duration
 	flusherDone      chan bool
@@ -113,7 +113,7 @@ func (i *iter) Key() []byte {
 
 func (i *iter) Value() (interface{}, error) {
 	if i.snapExhausted() {
-		return i.storage.codec.Decode("", i.iter.Value())
+		return i.storage.codec.Decode(i.iter.Value())
 	}
 
 	val, enc, err := i.snapshot.Get(string(i.Key()), i.storage.stateCloner(i.storage.codec))
@@ -122,7 +122,7 @@ func (i *iter) Value() (interface{}, error) {
 	}
 
 	if enc {
-		return i.storage.codec.Decode(string(i.Key()), val.([]byte))
+		return i.storage.codec.Decode(val.([]byte))
 	}
 
 	return val, nil
@@ -133,7 +133,7 @@ func (i *iter) Release() {
 }
 
 // New news new
-func New(fn string, c codec.Codec, m metrics.Registry, snapshotInterval time.Duration) (Storage, error) {
+func New(fn string, c Codec, m metrics.Registry, snapshotInterval time.Duration) (Storage, error) {
 	db, err := newLeveldbStorage(fn, true)
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func (s *storage) GetOffset(defValue int64) (int64, error) {
 	return val.(int64), nil
 }
 
-func (s *storage) get(key string, codec codec.Codec) (interface{}, error) {
+func (s *storage) get(key string, codec Codec) (interface{}, error) {
 	// is entry in snapshot?
 	value, encoded, err := s.snap.Get(key, s.stateCloner(codec))
 	if err != nil {
@@ -190,7 +190,7 @@ func (s *storage) get(key string, codec codec.Codec) (interface{}, error) {
 		if !encoded {
 			return value, nil
 		}
-		return codec.Decode(key, value.([]byte))
+		return codec.Decode(value.([]byte))
 	}
 
 	storedValue, err := s.db.Get(key)
@@ -201,7 +201,7 @@ func (s *storage) get(key string, codec codec.Codec) (interface{}, error) {
 		return nil, nil
 	}
 
-	decodedValue, err := codec.Decode(key, storedValue)
+	decodedValue, err := codec.Decode(storedValue)
 	if err != nil {
 		return nil, fmt.Errorf("Error decoding value from storage for key %s: %v", key, err)
 	}
@@ -275,7 +275,7 @@ func (s *storage) storageSnapshotFlusher() {
 			s.mOffset.Unlock()
 
 			err := s.snap.Flush(func() error {
-				off, err := s.offsetCodec.Encode("", offset)
+				off, err := s.offsetCodec.Encode(offset)
 				if err != nil {
 					return fmt.Errorf("Error encoding offset after flush: %v", err)
 				}
@@ -303,7 +303,7 @@ func (s *storage) stateFlush(key string, value interface{}, encoded bool) {
 			err = fmt.Errorf("Encoded value is not of type []byte but %T", value)
 		}
 	} else {
-		encodedValue, err = s.codec.Encode(key, value)
+		encodedValue, err = s.codec.Encode(value)
 	}
 	if err != nil {
 		log.Printf("Error encoding state (key=%s) for writing to local storage: %v", key, err)
@@ -322,7 +322,7 @@ func (s *storage) stateDelete(key string, value interface{}, encoded bool) {
 	}
 }
 
-func (s *storage) stateCloner(c codec.Codec) func(key string, value interface{}, encoded bool) (interface{}, error) {
+func (s *storage) stateCloner(c Codec) func(key string, value interface{}, encoded bool) (interface{}, error) {
 	return func(key string, value interface{}, encoded bool) (interface{}, error) {
 
 		// if encoded, just copy the byte-slice and return the copy.
@@ -337,11 +337,11 @@ func (s *storage) stateCloner(c codec.Codec) func(key string, value interface{},
 		}
 
 		// if not encoded, we need to re-encode to get a proper copy
-		encodedValue, err := c.Encode(key, value)
+		encodedValue, err := c.Encode(value)
 		if err != nil {
 			return nil, fmt.Errorf("Error encoding value for clone: %v", err)
 		}
-		decoded, err := c.Decode(key, encodedValue)
+		decoded, err := c.Decode(encodedValue)
 		if err != nil {
 			return nil, fmt.Errorf("Error decoding value for clone: %v", err)
 		}

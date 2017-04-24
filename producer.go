@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
 )
 
 type Producer struct {
-	codec    codec.Codec
+	codec    Codec
 	producer kafka.Producer
 
 	topic string
@@ -18,7 +17,7 @@ type Producer struct {
 }
 
 // NewProducer creates a new producer using passed brokers, topic, codec and possibly options
-func NewProducer(brokers []string, topic string, codec codec.Codec, options ...ProducerOption) (*Producer, error) {
+func NewProducer(brokers []string, topic string, codec Codec, options ...ProducerOption) (*Producer, error) {
 	options = append(
 		// default options comes first
 		[]ProducerOption{},
@@ -54,7 +53,7 @@ func (p *Producer) Produce(key string, msg interface{}) (*kafka.Promise, error) 
 	)
 
 	if msg != nil {
-		data, err = p.codec.Encode(key, msg)
+		data, err = p.codec.Encode(msg)
 		if err != nil {
 			return nil, fmt.Errorf("Error encoding value for key %s in topic %s: %v", key, p.topic, err)
 		}
