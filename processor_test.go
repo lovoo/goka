@@ -979,8 +979,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 		})
 
 		consume := func(ctx Context, msg interface{}) {
-			err := ctx.SetValue(msg)
-			ensure.Nil(t, err)
+			ctx.SetValue(msg)
 		}
 
 		proc, err := NewProcessor([]string{"broker"},
@@ -1014,8 +1013,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 		})
 
 		consume := func(ctx Context, msg interface{}) {
-			err := ctx.Emit("blubbb", "key", []byte("some message is emitted"))
-			ensure.Nil(t, err)
+			ctx.Emit("blubbb", "key", []byte("some message is emitted"))
 		}
 
 		proc, err := NewProcessor([]string{"broker"},
@@ -1049,9 +1047,10 @@ func TestProcessor_ProducerError(t *testing.T) {
 		})
 
 		consume := func(ctx Context, msg interface{}) {
-			_, err := ctx.Value()
-			ensure.NotNil(t, err)
-
+			func() {
+				defer PanicStringContains(t, "stateless")
+				_ = ctx.Value()
+			}()
 		}
 
 		proc, err := NewProcessor([]string{"broker"},
