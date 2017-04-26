@@ -138,11 +138,6 @@ func Streams(topics []string, codec Codec, consume ConsumeCallback) Subscription
 	return subs
 }
 
-// loopName returns the name of the loop topic for a group
-func loopName(group string) string {
-	return group + "-loop"
-}
-
 // tableName returns the name of the group table topic
 func tableName(group string) string {
 	return group + "-state"
