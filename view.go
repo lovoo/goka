@@ -34,7 +34,7 @@ type View struct {
 }
 
 // NewView creates a new View object from a group.
-func NewView(brokers []string, group string, codec Codec, options ...ViewOption) (*View, error) {
+func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) (*View, error) {
 
 	options = append(
 		// default options comes first
@@ -50,20 +50,20 @@ func NewView(brokers []string, group string, codec Codec, options ...ViewOption)
 
 	// figure out how many partitions the group has
 	opts := new(voptions)
-	err := opts.applyOptions(group, options...)
+	err := opts.applyOptions(topic, options...)
 	if err != nil {
 		return nil, fmt.Errorf("Error applying user-defined options: %v", err)
 	}
 
 	opts.tableCodec = codec
 
-	consumer, err := opts.builders.consumer(brokers, group, opts.kafkaRegistry)
+	consumer, err := opts.builders.consumer(brokers, "goka-view", opts.kafkaRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("view: cannot create Kafka consumer: %v", err)
 	}
 
 	v := &View{
-		topic:    GroupTable(group),
+		topic:    string(topic),
 		opts:     opts,
 		consumer: consumer,
 		done:     make(chan bool),

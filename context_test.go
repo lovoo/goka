@@ -120,11 +120,11 @@ func TestContext_EmitToStateTopic(t *testing.T) {
 	ctx := &context{graph: DefineGroup(group, Persist(c), Loop(c, cb))}
 	func() {
 		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to table topic, use SetValue() instead."))
-		ctx.Emit(GroupTable(group), "key", []byte("value"))
+		ctx.Emit(Stream(tableName(group)), "key", []byte("value"))
 	}()
 	func() {
 		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to loop topic, use Loopback() instead."))
-		ctx.Emit(loopName(group), "key", []byte("value"))
+		ctx.Emit(Stream(loopName(group)), "key", []byte("value"))
 	}()
 	func() {
 		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to empty topic"))
@@ -344,17 +344,17 @@ func TestContext_Join(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		key   = "key"
-		value = "value"
-		table = "table"
-		st    = mock.NewMockStorage(ctrl)
+		key         = "key"
+		value       = "value"
+		table Table = "table"
+		st          = mock.NewMockStorage(ctrl)
 	)
 
 	ctx := &context{
 		graph: DefineGroup("group", Persist(c), Loop(c, cb)),
 		msg:   &message{Key: key},
 		pviews: map[string]*partition{
-			table: &partition{
+			string(table): &partition{
 				st: &storageProxy{
 					Storage: st,
 				},
@@ -389,17 +389,17 @@ func TestContext_Lookup(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		key   = "key"
-		value = "value"
-		table = "table"
-		st    = mock.NewMockStorage(ctrl)
+		key         = "key"
+		value       = "value"
+		table Table = "table"
+		st          = mock.NewMockStorage(ctrl)
 	)
 
 	ctx := &context{
 		graph: DefineGroup("group", Persist(c), Loop(c, cb)),
 		msg:   &message{Key: key},
 		views: map[string]*View{
-			table: &View{
+			string(table): &View{
 				partitions: []*partition{
 					&partition{
 						st: &storageProxy{

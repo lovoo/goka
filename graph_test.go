@@ -37,14 +37,14 @@ func TestGroupGraph_Validate(t *testing.T) {
 	ensure.StringContains(t, err.Error(), "more than one group table")
 
 	g = DefineGroup("group",
-		Input(GroupTable("group"), c, cb),
+		Input(Stream(tableName("group")), c, cb),
 		Persist(c),
 	)
 	err = g.Validate()
 	ensure.StringContains(t, err.Error(), "group table")
 
 	g = DefineGroup("group",
-		Input(loopName("group"), c, cb),
+		Input(Stream(loopName("group")), c, cb),
 		Loop(c, cb),
 	)
 	err = g.Validate()
@@ -52,21 +52,21 @@ func TestGroupGraph_Validate(t *testing.T) {
 
 	g = DefineGroup("group",
 		Input("input-topic", c, cb),
-		Join(loopName("group"), c),
+		Join(Table(loopName("group")), c),
 	)
 	err = g.Validate()
 	ensure.StringContains(t, err.Error(), "loop stream")
 
 	g = DefineGroup("group",
 		Input("input-topic", c, cb),
-		Output(loopName("group"), c),
+		Output(Stream(loopName("group")), c),
 	)
 	err = g.Validate()
 	ensure.StringContains(t, err.Error(), "loop stream")
 
 	g = DefineGroup("group",
 		Input("input-topic", c, cb),
-		Lookup(loopName("group"), c),
+		Lookup(Table(loopName("group")), c),
 	)
 	err = g.Validate()
 	ensure.StringContains(t, err.Error(), "loop stream")
@@ -113,7 +113,7 @@ func TestGroupGraph_getters(t *testing.T) {
 	ensure.True(t, len(g.InputStreams()) == 2)
 	ensure.True(t, len(g.OutputStreams()) == 3)
 	ensure.True(t, g.GroupTable() == nil)
-	ensure.True(t, g.LoopStream().Topic() == loopName("group"))
+	ensure.DeepEqual(t, g.LoopStream().Topic(), loopName("group"))
 
 	g = DefineGroup("group",
 		Input("t1", c, cb),
@@ -134,5 +134,5 @@ func TestGroupGraph_getters(t *testing.T) {
 	ensure.True(t, len(g.OutputStreams()) == 3)
 	ensure.True(t, len(g.JointTables()) == 4)
 	ensure.True(t, len(g.LookupTables()) == 2)
-	ensure.True(t, g.GroupTable().Topic() == GroupTable("group"))
+	ensure.DeepEqual(t, g.GroupTable().Topic(), tableName("group"))
 }

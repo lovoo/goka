@@ -310,7 +310,7 @@ func WithViewPartitionChannelSize(size int) ViewOption {
 	}
 }
 
-func (opt *voptions) applyOptions(group string, opts ...ViewOption) error {
+func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 	for _, o := range opts {
 		o(opt)
 	}
@@ -330,11 +330,11 @@ func (opt *voptions) applyOptions(group string, opts ...ViewOption) error {
 
 	// Set a default registry to pass it to the kafka consumer builders.
 	if opt.kafkaRegistry == nil {
-		opt.kafkaRegistry = metrics.NewPrefixedChildRegistry(opt.registry, fmt.Sprintf("kafka.view-%s.", group))
+		opt.kafkaRegistry = metrics.NewPrefixedChildRegistry(opt.registry, fmt.Sprintf("kafka.view-%s.", topic))
 	}
 
 	// prefix registry
-	opt.gokaRegistry = metrics.NewPrefixedChildRegistry(opt.registry, fmt.Sprintf("goka.view-%s.", group))
+	opt.gokaRegistry = metrics.NewPrefixedChildRegistry(opt.registry, fmt.Sprintf("goka.view-%s.", topic))
 
 	if opt.storageSnapshotInterval == 0 {
 		opt.storageSnapshotInterval = storage.DefaultStorageSnapshotInterval
