@@ -83,7 +83,7 @@ func (ctx *context) Emit(topic string, key string, value interface{}) {
 	}
 	data, err := c.Encode(value)
 	if err != nil {
-		ctx.Fail(fmt.Errorf("error encoding message for topic %s", topic))
+		ctx.Fail(fmt.Errorf("error encoding message for topic %s: %v", topic, err))
 	}
 
 	ctx.emit(topic, key, data)
