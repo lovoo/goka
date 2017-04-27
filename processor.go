@@ -278,12 +278,12 @@ func (g *Processor) hash(key string) (int32, error) {
 func (g *Processor) Start() error {
 	// start all views
 	for t, v := range g.views {
-		go func() {
+		go func(t string, v *View) {
 			err := v.Start()
 			if err != nil {
 				g.fail(fmt.Errorf("error in view %s: %v", t, err))
 			}
-		}()
+		}(t, v)
 	}
 
 	topics := make(map[string]int64)
@@ -379,7 +379,11 @@ func (g *Processor) run() {
 			}
 
 		case *kafka.NOP:
-			_ = g.pushToPartition(ev.Partition, ev)
+			if g.graph.joint(ev.Topic) {
+				_ = g.pushToPartitionView(ev.Topic, ev.Partition, ev)
+			} else {
+				_ = g.pushToPartition(ev.Partition, ev)
+			}
 
 		case *kafka.Error:
 			g.fail(ev.Err)
@@ -522,9 +526,21 @@ func (g *Processor) createPartition(id int32) error {
 	if err != nil {
 		return fmt.Errorf("processor: error creating storage: %v", err)
 	}
+
+	// collect dependencies
+	var wait []func() bool
+	if pviews, has := g.partitionViews[id]; has {
+		for _, p := range pviews {
+			wait = append(wait, p.ready)
+		}
+	}
+	for _, v := range g.views {
+		wait = append(wait, v.Ready)
+	}
+
 	g.partitions[id] = newPartition(
 		groupTable,
-		g.process, st, &proxy{id, g.consumer},
+		g.process, st, &delayProxy{partition: id, consumer: g.consumer, wait: wait},
 		reg,
 		g.opts.partitionChannelSize,
 	)

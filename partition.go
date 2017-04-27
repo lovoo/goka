@@ -276,13 +276,13 @@ func (p *partition) load(catchup bool) error {
 
 			case *kafka.EOF:
 				p.mxPartitionLoaderHwm.Update(ev.Hwm)
-				if catchup {
-					continue
-				}
 				if atomic.LoadInt32(&p.readyFlag) == 0 {
 					log.Println("readyFlag was false when EOF arrived")
 					p.mxStatus.Update(partitionRecovered)
 					atomic.StoreInt32(&p.readyFlag, 1)
+				}
+				if catchup {
+					continue
 				}
 				return nil
 

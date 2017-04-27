@@ -727,6 +727,17 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	ch <- &kafka.EOF{
 		Partition: 1,
 	}
+	ensure.False(t, p.partitionViews[1][table].ready())
+	time.Sleep(delayProxyInterval)
+	ensure.False(t, p.partitionViews[1][table].ready())
+	ch <- &kafka.EOF{
+		Topic:     table,
+		Partition: 1,
+	}
+	err = syncWith(t, ch)
+	ensure.Nil(t, err)
+	time.Sleep(delayProxyInterval)
+	ensure.True(t, p.partitionViews[1][table].ready())
 
 	// 5. process messages in partition 1
 	ch <- &kafka.Message{

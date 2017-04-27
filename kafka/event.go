@@ -64,6 +64,7 @@ func (e *Error) string() string {
 
 // NOP does not carry any information. Useful for debugging.
 type NOP struct {
+	Topic     string
 	Partition int32
 }
 
