@@ -187,7 +187,7 @@ type loopStream inputStream
 
 // Loop defines a consume callback on the loop topic
 func Loop(c Codec, cb ConsumeCallback) Edge {
-	return &loopStream{&topicDef{"-", c}, cb}
+	return &loopStream{&topicDef{codec: c}, cb}
 }
 
 func (s *loopStream) setGroup(group string) {
@@ -218,7 +218,7 @@ type groupTable struct {
 }
 
 func Persist(c Codec) Edge {
-	return &groupTable{&topicDef{"-", c}}
+	return &groupTable{&topicDef{codec: c}}
 }
 
 func (t *groupTable) setGroup(group string) {
