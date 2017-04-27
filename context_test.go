@@ -136,6 +136,10 @@ func PanicStringContains(t *testing.T, s string) {
 	if r := recover(); r != nil {
 		err := r.(error)
 		ensure.StringContains(t, err.Error(), s)
+	} else {
+		// there was no panic
+		t.Errorf("panic expected")
+		t.FailNow()
 	}
 }
 
