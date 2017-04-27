@@ -27,9 +27,11 @@ type Context interface {
 	// SetValue updates the value of the key in the group table.
 	SetValue(value interface{})
 
-	// Join returns the value of key in the copartitioned table. Only
-	// subscribed tables are accessible with Join.
+	// Join returns the value of key in the copartitioned table.
 	Join(table string) interface{}
+
+	// Lookup returns the value of key in the view of table.
+	Lookup(table string, key string) interface{}
 
 	// Emit asynchronously writes a message into a topic.
 	Emit(topic string, key string, value interface{})
@@ -53,7 +55,8 @@ type context struct {
 	failer  func(err error)
 
 	storage storage.Storage
-	views   map[string]*partition
+	pviews  map[string]*partition
+	views   map[string]*View
 
 	msg      *message
 	done     bool
@@ -139,6 +142,21 @@ func (ctx *context) Topic() string {
 }
 
 func (ctx *context) Join(table string) interface{} {
+	if ctx.pviews == nil {
+		ctx.Fail(fmt.Errorf("table %s not subscribed", table))
+	}
+	v, ok := ctx.pviews[table]
+	if !ok {
+		ctx.Fail(fmt.Errorf("table %s not subscribed", table))
+	}
+	val, err := v.st.Get(ctx.Key())
+	if err != nil {
+		ctx.Fail(err)
+	}
+	return val
+}
+
+func (ctx *context) Lookup(table string, key string) interface{} {
 	if ctx.views == nil {
 		ctx.Fail(fmt.Errorf("table %s not subscribed", table))
 	}
@@ -146,7 +164,7 @@ func (ctx *context) Join(table string) interface{} {
 	if !ok {
 		ctx.Fail(fmt.Errorf("table %s not subscribed", table))
 	}
-	val, err := v.st.Get(ctx.Key())
+	val, err := v.Get(key)
 	if err != nil {
 		ctx.Fail(err)
 	}

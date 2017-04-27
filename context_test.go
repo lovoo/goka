@@ -340,7 +340,6 @@ func TestContext_Loopback(t *testing.T) {
 }
 
 func TestContext_Join(t *testing.T) {
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -354,7 +353,7 @@ func TestContext_Join(t *testing.T) {
 	ctx := &context{
 		graph: DefineGroup("group", Persist(c), Loop(c, cb)),
 		msg:   &message{Key: key},
-		views: map[string]*partition{
+		pviews: map[string]*partition{
 			table: &partition{
 				st: &storageProxy{
 					Storage: st,
@@ -378,10 +377,59 @@ func TestContext_Join(t *testing.T) {
 		_ = ctx.Join("other-table")
 	}()
 
-	ctx.views = nil
+	ctx.pviews = nil
 	func() {
 		defer PanicStringContains(t, "not subs")
 		_ = ctx.Join(table)
+	}()
+}
+
+func TestContext_Lookup(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var (
+		key   = "key"
+		value = "value"
+		table = "table"
+		st    = mock.NewMockStorage(ctrl)
+	)
+
+	ctx := &context{
+		graph: DefineGroup("group", Persist(c), Loop(c, cb)),
+		msg:   &message{Key: key},
+		views: map[string]*View{
+			table: &View{
+				partitions: []*partition{
+					&partition{
+						st: &storageProxy{
+							Storage: st,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	st.EXPECT().Get(key).Return(value, nil)
+	v := ctx.Lookup(table, key)
+	ensure.DeepEqual(t, v, value)
+
+	func() {
+		defer ensure.PanicDeepEqual(t, errSome)
+		st.EXPECT().Get(key).Return(nil, errSome)
+		_ = ctx.Lookup(table, key)
+	}()
+
+	func() {
+		defer PanicStringContains(t, "not subs")
+		_ = ctx.Lookup("other-table", key)
+	}()
+
+	ctx.views = nil
+	func() {
+		defer PanicStringContains(t, "not subs")
+		_ = ctx.Lookup(table, key)
 	}()
 }
 

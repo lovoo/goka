@@ -24,6 +24,7 @@ type Processor struct {
 	partitions     map[int32]*partition
 	partitionViews map[int32]map[string]*partition
 	partitionCount int
+	views          map[string]*View
 
 	graph *GroupGraph
 	m     sync.RWMutex
@@ -93,6 +94,17 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 		return nil, fmt.Errorf(errBuildProducer, err)
 	}
 
+	// create views
+	views := make(map[string]*View)
+	for _, t := range gg.LookupTables() {
+		// TODO(diogo) use options from graph if available
+		view, err := NewView(brokers, t.Topic(), t.Codec())
+		if err != nil {
+			return nil, fmt.Errorf("error creating view: %v", err)
+		}
+		views[t.Topic()] = view
+	}
+
 	// combine things together
 	processor := &Processor{
 		opts: opts,
@@ -100,6 +112,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 		partitions:     make(map[int32]*partition),
 		partitionViews: make(map[int32]map[string]*partition),
 		partitionCount: npar,
+		views:          views,
 
 		graph: gg,
 
@@ -263,6 +276,16 @@ func (g *Processor) hash(key string) (int32, error) {
 // Start starts receiving messages from Kafka for the subscribed topics. For each
 // partition, a recovery will be attempted.
 func (g *Processor) Start() error {
+	// start all views
+	for t, v := range g.views {
+		go func() {
+			err := v.Start()
+			if err != nil {
+				g.errors.collect(fmt.Errorf("error in view %s: %v", t, err))
+			}
+		}()
+	}
+
 	topics := make(map[string]int64)
 	for _, e := range g.graph.InputStreams() {
 		topics[e.Topic()] = -1
@@ -387,6 +410,11 @@ func (g *Processor) stop() {
 		log.Println("Processor: removing partitions")
 		for partition := range g.partitions {
 			g.removePartition(partition)
+		}
+
+		// stop all views
+		for _, v := range g.views {
+			v.Stop()
 		}
 
 		// close connection to Kafka
@@ -606,7 +634,8 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	ctx := &context{
 		graph: g.graph,
 
-		views:  views,
+		pviews: views,
+		views:  g.views,
 		wg:     wg,
 		msg:    msg,
 		failer: g.fail,
