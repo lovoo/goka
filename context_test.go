@@ -117,27 +117,47 @@ func TestContext_EmitError(t *testing.T) {
 }
 
 func TestContext_EmitToStateTopic(t *testing.T) {
-	ctx := &context{tableTopic: Subscription{Name: "test"}}
-	err := ctx.Emit("test", "key", []byte("value"))
-	ensure.NotNil(t, err)
-	err = ctx.Emit("", "key", []byte("value"))
-	ensure.NotNil(t, err)
+	ctx := &context{tableTopic: Subscription{Name: "test"}, loopTopic: Subscription{Name: "loop"}}
+	func() {
+		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to table topic, use SetValue() instead."))
+		ctx.Emit("test", "key", []byte("value"))
+	}()
+	func() {
+		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to loop topic, use Loopback() instead."))
+		ctx.Emit("loop", "key", []byte("value"))
+	}()
+	func() {
+		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to empty topic"))
+		ctx.Emit("", "key", []byte("value"))
+	}()
+}
+
+func PanicStringContains(t *testing.T, s string) {
+	if r := recover(); r != nil {
+		err := r.(error)
+		ensure.StringContains(t, err.Error(), s)
+	} else {
+		// there was no panic
+		t.Errorf("panic expected")
+		t.FailNow()
+	}
 }
 
 func TestContext_GetSetStateless(t *testing.T) {
 	// ctx stateless since no storage passed
 	ctx := &context{tableTopic: Subscription{Name: "test"}, msg: new(message)}
-	_, err := ctx.Value()
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "stateless")
-
-	err = ctx.SetValue("whatever")
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "stateless")
-
-	_, err = ctx.Has("something")
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "stateless")
+	func() {
+		defer PanicStringContains(t, "stateless")
+		_ = ctx.Value()
+	}()
+	func() {
+		defer PanicStringContains(t, "stateless")
+		ctx.SetValue("whatever")
+	}()
+	func() {
+		defer PanicStringContains(t, "stateless")
+		_ = ctx.Has("something")
+	}()
 }
 
 func TestContext_Set(t *testing.T) {
@@ -178,6 +198,7 @@ func TestContext_Set(t *testing.T) {
 }
 
 func TestContext_GetSetStateful(t *testing.T) {
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -204,23 +225,19 @@ func TestContext_GetSetStateful(t *testing.T) {
 	}
 
 	storage.EXPECT().Get(key).Return(nil, nil)
-	val, err := ctx.Value()
-	ensure.Nil(t, err)
+	val := ctx.Value()
 	ensure.True(t, val == nil)
 
 	storage.EXPECT().Set(key, value).Return(nil)
 	storage.EXPECT().SetOffset(offset).Return(nil)
-	err = ctx.SetValue(value)
-	ensure.Nil(t, err)
+	ctx.SetValue(value)
 
 	storage.EXPECT().Has(key).Return(true, nil)
-	ok, err := ctx.Has(key)
-	ensure.Nil(t, err)
+	ok := ctx.Has(key)
 	ensure.True(t, ok)
 
 	storage.EXPECT().Get(key).Return(value, nil)
-	val, err = ctx.Value()
-	ensure.Nil(t, err)
+	val = ctx.Value()
 	ensure.DeepEqual(t, val, value)
 }
 
@@ -246,7 +263,6 @@ func TestContext_SetErrors(t *testing.T) {
 		codec:      new(codec.String),
 	}
 
-	_ = failed
 	err := ctx.setValueForKey(key, nil)
 	ensure.NotNil(t, err)
 	ensure.StringContains(t, err.Error(), "Cannot set nil")
@@ -290,12 +306,14 @@ func TestContext_SetErrors(t *testing.T) {
 func TestContext_LoopbackNoLoop(t *testing.T) {
 	// ctx has no loop set
 	ctx := &context{tableTopic: tableTopic, msg: new(message)}
-	err := ctx.Loopback("some-key", "whatever")
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "loop")
+	func() {
+		defer PanicStringContains(t, "loop")
+		ctx.Loopback("some-key", "whatever")
+	}()
 }
 
 func TestContext_Loopback(t *testing.T) {
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -318,12 +336,12 @@ func TestContext_Loopback(t *testing.T) {
 		},
 	}
 
-	err := ctx.Loopback(key, value)
-	ensure.Nil(t, err)
+	ctx.Loopback(key, value)
 	ensure.True(t, cnt == 1)
 }
 
 func TestContext_Join(t *testing.T) {
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -348,24 +366,28 @@ func TestContext_Join(t *testing.T) {
 	}
 
 	st.EXPECT().Get(key).Return(value, nil)
-	v, err := ctx.Join(table)
-	ensure.Nil(t, err)
+	v := ctx.Join(table)
 	ensure.DeepEqual(t, v, value)
 
-	st.EXPECT().Get(key).Return(nil, errSome)
-	_, err = ctx.Join(table)
-	ensure.NotNil(t, err)
+	func() {
+		defer ensure.PanicDeepEqual(t, errSome)
+		st.EXPECT().Get(key).Return(nil, errSome)
+		_ = ctx.Join(table)
+	}()
 
-	_, err = ctx.Join("other-table")
-	ensure.NotNil(t, err)
+	func() {
+		defer PanicStringContains(t, "not subs")
+		_ = ctx.Join("other-table")
+	}()
 
 	ctx.views = nil
-	_, err = ctx.Join(table)
-	ensure.NotNil(t, err)
+	func() {
+		defer PanicStringContains(t, "not subs")
+		_ = ctx.Join(table)
+	}()
 }
 
 func TestContext_Fail(t *testing.T) {
-
 	ctx := new(context)
 
 	defer func() {

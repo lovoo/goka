@@ -1,19 +1,15 @@
 package storage
 
-import (
-	"fmt"
-
-	"github.com/lovoo/goka/codec"
-)
+import "fmt"
 
 type storageMock struct {
 	storage map[string]interface{}
 	offset  *int64
-	c       codec.Codec
+	c       Codec
 }
 
 // NewMock creates a mock storage for testing
-func NewMock(c codec.Codec) Storage {
+func NewMock(c Codec) Storage {
 	return &storageMock{
 		storage: make(map[string]interface{}),
 		c:       c,
@@ -76,7 +72,7 @@ func (sm *storageMock) Get(key string) (interface{}, error) {
 }
 
 func (sm *storageMock) SetEncoded(key string, data []byte) error {
-	decoded, err := sm.c.Decode(key, data)
+	decoded, err := sm.c.Decode(data)
 	if err != nil {
 		return fmt.Errorf("Error decoding data: %v", err)
 	}

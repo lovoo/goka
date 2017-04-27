@@ -7,7 +7,6 @@ import (
 	"log"
 	"sync"
 
-	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/storage"
 
@@ -35,7 +34,7 @@ type View struct {
 }
 
 // NewView creates a new View object from a group.
-func NewView(brokers []string, group string, codec codec.Codec, options ...ViewOption) (*View, error) {
+func NewView(brokers []string, group string, codec Codec, options ...ViewOption) (*View, error) {
 
 	options = append(
 		// default options comes first

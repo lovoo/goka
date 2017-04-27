@@ -424,7 +424,7 @@ func TestProcessor_StartWithErrorBeforeRebalance(t *testing.T) {
 				err      error
 				consumer = mock.NewMockConsumer(ctrl)
 				st       = mock.NewMockStorage(ctrl)
-				sb       = func(topic string, par int32, c codec.Codec, r metrics.Registry) (storage.Storage, error) {
+				sb       = func(topic string, par int32, c Codec, r metrics.Registry) (storage.Storage, error) {
 					return st, nil
 				}
 				final = make(chan bool)
@@ -464,7 +464,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, c codec.Codec, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32, c Codec, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		final = make(chan bool)
@@ -543,7 +543,7 @@ func TestProcessor_Start(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, c codec.Codec, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32, c Codec, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		final = make(chan bool)
@@ -693,7 +693,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, c codec.Codec, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32, c Codec, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		final    = make(chan bool)
@@ -805,7 +805,7 @@ func TestProcessor_rebalanceError(t *testing.T) {
 		wait     = make(chan bool)
 		ch       = make(chan kafka.Event)
 		p        = createProcessor(ctrl, consumer, 1,
-			func(topic string, partition int32, c codec.Codec, r metrics.Registry) (storage.Storage, error) {
+			func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
 				return nil, errors.New("some error")
 			})
 	)
@@ -839,7 +839,7 @@ func TestProcessor_HasGet(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, c codec.Codec, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -979,8 +979,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 		})
 
 		consume := func(ctx Context, msg interface{}) {
-			err := ctx.SetValue(msg)
-			ensure.Nil(t, err)
+			ctx.SetValue(msg)
 		}
 
 		proc, err := NewProcessor([]string{"broker"},
@@ -1014,8 +1013,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 		})
 
 		consume := func(ctx Context, msg interface{}) {
-			err := ctx.Emit("blubbb", "key", []byte("some message is emitted"))
-			ensure.Nil(t, err)
+			ctx.Emit("blubbb", "key", []byte("some message is emitted"))
 		}
 
 		proc, err := NewProcessor([]string{"broker"},
@@ -1049,9 +1047,10 @@ func TestProcessor_ProducerError(t *testing.T) {
 		})
 
 		consume := func(ctx Context, msg interface{}) {
-			_, err := ctx.Value()
-			ensure.NotNil(t, err)
-
+			func() {
+				defer PanicStringContains(t, "stateless")
+				_ = ctx.Value()
+			}()
 		}
 
 		proc, err := NewProcessor([]string{"broker"},

@@ -1,10 +1,10 @@
 package goka
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
-	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/storage"
 )
@@ -22,22 +22,22 @@ type Context interface {
 	Key() string
 
 	// Value returns the value of the key in the group table.
-	Value() (interface{}, error)
+	Value() interface{}
 
 	// SetValue updates the value of the key in the group table.
-	SetValue(value interface{}) error
+	SetValue(value interface{})
 
 	// Join returns the value of key in the copartitioned table. Only
 	// subscribed tables are accessible with Join.
-	Join(table string) (interface{}, error)
+	Join(table string) interface{}
 
 	// Emit asynchronously writes a message into a topic.
-	Emit(topic string, key string, value []byte) error
+	Emit(topic string, key string, value []byte)
 
 	// Loopback asynchronously sends a message to another key of the group
 	// table. Value passed to loopback is encoded via the codec given in the
 	// Loop subscription.
-	Loopback(key string, value interface{}) error
+	Loopback(key string, value interface{})
 
 	// Fail stops execution and shuts down the processor
 	Fail(err error)
@@ -54,7 +54,7 @@ type context struct {
 	failer  func(err error)
 
 	storage storage.Storage
-	codec   codec.Codec
+	codec   Codec
 	views   map[string]*partition
 
 	msg      *message
@@ -69,34 +69,38 @@ type context struct {
 }
 
 // Emit sends a message asynchronously to a topic.
-func (ctx *context) Emit(topic string, key string, value []byte) error {
+func (ctx *context) Emit(topic string, key string, value []byte) {
 	if ctx.loopTopic.is(topic) {
-		return fmt.Errorf("Cannot emit to loop topic, use Loopback() instead.")
+		ctx.Fail(errors.New("Cannot emit to loop topic, use Loopback() instead."))
 	}
 	if ctx.tableTopic.is(topic) {
-		return fmt.Errorf("Cannot emit to table topic, use SetValue() instead.")
+		ctx.Fail(errors.New("Cannot emit to table topic, use SetValue() instead."))
 	}
 
-	return ctx.emit(topic, key, value)
+	if err := ctx.emit(topic, key, value); err != nil {
+		ctx.Fail(err)
+	}
 }
 
 // Loopback sends a message to another key of the processor.
-func (ctx *context) Loopback(key string, value interface{}) error {
+func (ctx *context) Loopback(key string, value interface{}) {
 	if ctx.loopTopic.null() {
-		return fmt.Errorf("No loop topic configured")
+		ctx.Fail(errors.New("No loop topic configured"))
 	}
 
-	data, err := ctx.loopTopic.codec.Encode(key, value)
+	data, err := ctx.loopTopic.codec.Encode(value)
 	if err != nil {
-		return fmt.Errorf("Error encoding message for key %s: %v", key, err)
+		ctx.Fail(fmt.Errorf("Error encoding message for key %s: %v", key, err))
 	}
 
-	return ctx.emit(ctx.loopTopic.Name, key, data)
+	if err := ctx.emit(ctx.loopTopic.Name, key, data); err != nil {
+		ctx.Fail(err)
+	}
 }
 
 func (ctx *context) emit(topic string, key string, value []byte) error {
 	if topic == "" {
-		return fmt.Errorf("Cannot emit to emtpy topic (%s)", topic)
+		return errors.New("Cannot emit to empty topic")
 	}
 	if ctx.tableTopic.is(topic) {
 		return fmt.Errorf("Cannot emit to consumer group state (%s)", topic)
@@ -112,13 +116,19 @@ func (ctx *context) emit(topic string, key string, value []byte) error {
 }
 
 // Value returns the value of the key in the group table.
-func (ctx *context) Value() (interface{}, error) {
-	return ctx.valueForKey(string(ctx.msg.Key))
+func (ctx *context) Value() interface{} {
+	val, err := ctx.valueForKey(string(ctx.msg.Key))
+	if err != nil {
+		ctx.Fail(err)
+	}
+	return val
 }
 
 // SetValue updates the value of the key in the group table.
-func (ctx *context) SetValue(value interface{}) error {
-	return ctx.setValueForKey(string(ctx.msg.Key), value)
+func (ctx *context) SetValue(value interface{}) {
+	if err := ctx.setValueForKey(string(ctx.msg.Key), value); err != nil {
+		ctx.Fail(err)
+	}
 }
 
 func (ctx *context) Key() string {
@@ -129,24 +139,32 @@ func (ctx *context) Topic() string {
 	return string(ctx.msg.Topic)
 }
 
-func (ctx *context) Join(table string) (interface{}, error) {
+func (ctx *context) Join(table string) interface{} {
 	if ctx.views == nil {
-		return nil, fmt.Errorf("table %s not subscribed", table)
+		ctx.Fail(fmt.Errorf("table %s not subscribed", table))
 	}
 	v, ok := ctx.views[table]
 	if !ok {
-		return nil, fmt.Errorf("table %s not subscribed", table)
+		ctx.Fail(fmt.Errorf("table %s not subscribed", table))
 	}
-	return v.st.Get(ctx.Key())
+	val, err := v.st.Get(ctx.Key())
+	if err != nil {
+		ctx.Fail(err)
+	}
+	return val
 }
 
 // Has returns true if key has a value in the processor state, otherwise false.
-func (ctx *context) Has(key string) (bool, error) {
+func (ctx *context) Has(key string) bool {
 	if ctx.storage == nil {
-		return false, fmt.Errorf("Cannot access state in stateless processor")
+		ctx.Fail(fmt.Errorf("Cannot access state in stateless processor"))
 	}
 
-	return ctx.storage.Has(key)
+	has, err := ctx.storage.Has(key)
+	if err != nil {
+		ctx.Fail(err)
+	}
+	return has
 }
 
 // valueForKey returns the value of key in the processor state.
@@ -173,7 +191,7 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 		return fmt.Errorf("Error storing value: %v", err)
 	}
 
-	encodedValue, err := ctx.codec.Encode(key, value)
+	encodedValue, err := ctx.codec.Encode(value)
 	if err != nil {
 		return fmt.Errorf("Error encoding value: %v", err)
 	}
