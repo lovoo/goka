@@ -438,38 +438,6 @@ func (g *Processor) Stop() {
 // partition management (rebalance)
 ///////////////////////////////////////////////////////////////////////////////
 
-type proxy struct {
-	partition int32
-	consumer  kafka.Consumer
-}
-
-func (p *proxy) Add(topic string, offset int64) {
-	p.consumer.AddPartition(topic, p.partition, offset)
-}
-
-func (p *proxy) Remove(topic string) {
-	p.consumer.RemovePartition(topic, p.partition)
-}
-
-func (p *proxy) AddGroup() {
-	p.consumer.AddGroupPartition(p.partition)
-}
-
-type storageProxy struct {
-	storage.Storage
-	partition int32
-	stateless bool
-	update    UpdateCallback
-}
-
-func (s storageProxy) Update(k string, v []byte) error {
-	return s.update(s.Storage, s.partition, k, v)
-}
-
-func (s storageProxy) Stateless() bool {
-	return s.stateless
-}
-
 func (g *Processor) newStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
 	if g.isStateless() {
 		return &storageProxy{
@@ -540,7 +508,7 @@ func (g *Processor) createPartition(id int32) error {
 	if _, has := g.partitions[id]; has {
 		return nil
 	}
-	// TODO(diogo what name to use for stateless processors?
+	// TODO(diogo) what name to use for stateless processors?
 	var groupTable string
 	var groupCodec Codec
 	if gt := g.graph.GroupTable(); gt != nil {

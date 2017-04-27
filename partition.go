@@ -74,6 +74,7 @@ type kafkaProxy interface {
 	Add(string, int64)
 	Remove(string)
 	AddGroup()
+	Stop()
 }
 
 type processCallback func(msg *message, st storage.Storage, wg *sync.WaitGroup) error
@@ -106,6 +107,7 @@ func newPartition(topic string, cb processCallback, st *storageProxy, proxy kafk
 
 func (p *partition) start() error {
 	defer close(p.done)
+	defer p.proxy.Stop()
 	defer p.mxStatus.Update(partitionClosed)
 
 	if !p.st.Stateless() {
@@ -131,6 +133,7 @@ func (p *partition) start() error {
 
 func (p *partition) startCatchup() error {
 	defer close(p.done)
+	defer p.proxy.Stop()
 
 	err := p.st.Open()
 	if err != nil {

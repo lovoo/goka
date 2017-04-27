@@ -28,10 +28,8 @@ func (_m *MockContext) EXPECT() *_MockContextRecorder {
 	return _m.recorder
 }
 
-func (_m *MockContext) Emit(_param0 string, _param1 string, _param2 []byte) error {
-	ret := _m.ctrl.Call(_m, "Emit", _param0, _param1, _param2)
-	ret0, _ := ret[0].(error)
-	return ret0
+func (_m *MockContext) Emit(_param0 string, _param1 string, _param2 interface{}) {
+	_m.ctrl.Call(_m, "Emit", _param0, _param1, _param2)
 }
 
 func (_mr *_MockContextRecorder) Emit(arg0, arg1, arg2 interface{}) *gomock.Call {
@@ -46,11 +44,10 @@ func (_mr *_MockContextRecorder) Fail(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Fail", arg0)
 }
 
-func (_m *MockContext) Join(_param0 string) (interface{}, error) {
+func (_m *MockContext) Join(_param0 string) interface{} {
 	ret := _m.ctrl.Call(_m, "Join", _param0)
 	ret0, _ := ret[0].(interface{})
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 func (_mr *_MockContextRecorder) Join(arg0 interface{}) *gomock.Call {
@@ -67,20 +64,26 @@ func (_mr *_MockContextRecorder) Key() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Key")
 }
 
-func (_m *MockContext) Loopback(_param0 string, _param1 interface{}) error {
-	ret := _m.ctrl.Call(_m, "Loopback", _param0, _param1)
-	ret0, _ := ret[0].(error)
+func (_m *MockContext) Lookup(_param0 string, _param1 string) interface{} {
+	ret := _m.ctrl.Call(_m, "Lookup", _param0, _param1)
+	ret0, _ := ret[0].(interface{})
 	return ret0
+}
+
+func (_mr *_MockContextRecorder) Lookup(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "Lookup", arg0, arg1)
+}
+
+func (_m *MockContext) Loopback(_param0 string, _param1 interface{}) {
+	_m.ctrl.Call(_m, "Loopback", _param0, _param1)
 }
 
 func (_mr *_MockContextRecorder) Loopback(arg0, arg1 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Loopback", arg0, arg1)
 }
 
-func (_m *MockContext) SetValue(_param0 interface{}) error {
-	ret := _m.ctrl.Call(_m, "SetValue", _param0)
-	ret0, _ := ret[0].(error)
-	return ret0
+func (_m *MockContext) SetValue(_param0 interface{}) {
+	_m.ctrl.Call(_m, "SetValue", _param0)
 }
 
 func (_mr *_MockContextRecorder) SetValue(arg0 interface{}) *gomock.Call {
@@ -97,11 +100,10 @@ func (_mr *_MockContextRecorder) Topic() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Topic")
 }
 
-func (_m *MockContext) Value() (interface{}, error) {
+func (_m *MockContext) Value() interface{} {
 	ret := _m.ctrl.Call(_m, "Value")
 	ret0, _ := ret[0].(interface{})
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 func (_mr *_MockContextRecorder) Value() *gomock.Call {

@@ -56,6 +56,7 @@ func TestPartition_startStateless(t *testing.T) {
 		metrics.DefaultRegistry, defaultPartitionChannelSize)
 
 	proxy.EXPECT().AddGroup().Do(func() { close(wait) })
+	proxy.EXPECT().Stop()
 	go func() {
 		err := p.start()
 		ensure.Nil(t, err)
@@ -91,6 +92,7 @@ func TestPartition_startStateful(t *testing.T) {
 		st.EXPECT().Sync(),
 		proxy.EXPECT().Remove(topic),
 		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
 	)
 	go func() {
 		err := p.start()
@@ -131,6 +133,7 @@ func TestPartition_runStateless(t *testing.T) {
 	p := newPartition(topic, consume, newNullStorageProxy(0), proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
 
 	proxy.EXPECT().AddGroup()
+	proxy.EXPECT().Stop()
 	go func() {
 		err := p.start()
 		ensure.Nil(t, err)
@@ -181,6 +184,7 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 		proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
 
 	proxy.EXPECT().AddGroup()
+	proxy.EXPECT().Stop()
 	go func() {
 		err := p.start()
 		ensure.NotNil(t, err)
@@ -209,6 +213,7 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 	wait = make(chan bool)
 
 	proxy.EXPECT().AddGroup()
+	proxy.EXPECT().Stop()
 	go func() {
 		err := p.start()
 		ensure.NotNil(t, err)
@@ -261,6 +266,7 @@ func TestPartition_runStateful(t *testing.T) {
 		st.EXPECT().Sync(),
 		st.EXPECT().Sync(),
 		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
 	)
 
 	go func() {
@@ -343,6 +349,7 @@ func TestPartition_runStatefulWithError(t *testing.T) {
 		st.EXPECT().Sync(),
 		st.EXPECT().Sync(),
 		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
 	)
 
 	go func() {
@@ -425,6 +432,7 @@ func TestPartition_loadStateful(t *testing.T) {
 		st.EXPECT().Sync(),
 		st.EXPECT().Sync(),
 		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
 	)
 
 	go func() {
@@ -502,6 +510,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 		proxy.EXPECT().Add(topic, offset),
 		proxy.EXPECT().Remove(topic),
 		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
 	)
 
 	go func() {
@@ -537,6 +546,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 		st.EXPECT().SetOffset(int64(offset)).Return(errors.New("some error")),
 		proxy.EXPECT().Remove(topic),
 		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
 	)
 
 	go func() {
@@ -568,6 +578,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(0), errors.New("some error")),
 		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
 	)
 
 	go func() {
@@ -624,6 +635,7 @@ func TestPartition_catchupStateful(t *testing.T) {
 		st.EXPECT().Sync(),
 		proxy.EXPECT().Remove(topic),
 		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
 	)
 
 	go func() {
@@ -739,6 +751,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 		st.EXPECT().Sync(),
 		proxy.EXPECT().Remove(topic),
 		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
 	)
 
 	go func() {
