@@ -26,15 +26,15 @@ func (gg *GroupGraph) Group() string {
 	return gg.group
 }
 
-func (gg *GroupGraph) InputStreams() []Edge {
+func (gg *GroupGraph) InputStreams() Edges {
 	return append(gg.inputStreams, gg.loopStream...)
 }
 
-func (gg *GroupGraph) JointTables() []Edge {
+func (gg *GroupGraph) JointTables() Edges {
 	return gg.inputTables
 }
 
-func (gg *GroupGraph) LookupTables() []Edge {
+func (gg *GroupGraph) LookupTables() Edges {
 	return gg.crossTables
 }
 
@@ -54,8 +54,13 @@ func (gg *GroupGraph) GroupTable() Edge {
 	return nil
 }
 
-func (gg *GroupGraph) OutputStreams() []Edge {
+func (gg *GroupGraph) OutputStreams() Edges {
 	return append(gg.outputStreams, gg.loopStream...)
+}
+
+// inputs returns all input topics (tables and streams)
+func (gg *GroupGraph) inputs() Edges {
+	return append(append(gg.inputStreams, gg.inputTables...), gg.crossTables...)
 }
 
 func (gg *GroupGraph) codec(topic string) Codec {
@@ -64,6 +69,15 @@ func (gg *GroupGraph) codec(topic string) Codec {
 
 func (gg *GroupGraph) callback(topic string) ConsumeCallback {
 	return gg.callbacks[topic]
+}
+
+func (gg *GroupGraph) joint(topic string) bool {
+	for _, t := range gg.inputTables {
+		if t.Topic() == topic {
+			return true
+		}
+	}
+	return false
 }
 
 func DefineGroup(group string, edges ...Edge) *GroupGraph {
@@ -130,6 +144,16 @@ type Edge interface {
 	Codec() Codec
 }
 
+type Edges []Edge
+
+func (e Edges) Topics() []string {
+	var t []string
+	for _, i := range e {
+		t = append(t, i.Topic())
+	}
+	return t
+}
+
 type topicDef struct {
 	name  string
 	codec Codec
@@ -152,13 +176,17 @@ type inputStream struct {
 	cb ConsumeCallback
 }
 
+// Stream returns a subscription for a co-partitioned topic. The processor
+// subscribing for a stream topic will start reading from the newest offset of
+// the partition.
 func Input(stream string, c Codec, cb ConsumeCallback) Edge {
 	return &inputStream{&topicDef{stream, c}, cb}
 }
 
 type loopStream inputStream
 
-func LoopStream(c Codec, cb ConsumeCallback) Edge {
+// Loop defines a consume callback on the loop topic
+func Loop(c Codec, cb ConsumeCallback) Edge {
 	return &loopStream{&topicDef{"-", c}, cb}
 }
 
@@ -170,6 +198,9 @@ type inputTable struct {
 	*topicDef
 }
 
+// Table is one or more co-partitioned, log-compacted topic. The processor
+// subscribing for a table topic will start reading from the oldest offset
+// of the partition.
 func Join(table string, c Codec) Edge {
 	return &inputTable{&topicDef{table, c}}
 }

@@ -219,13 +219,6 @@ func (opt *poptions) storagePathForPartition(topic string, partitionID int32) st
 	return filepath.Join(opt.storagePath, "processor", fmt.Sprintf("%s.%d", topic, partitionID))
 }
 
-func (opt *poptions) tableTopic(group string) Subscription {
-	if !opt.tableEnabled {
-		return Subscription{}
-	}
-	return Subscription{Name: tableName(group)}
-}
-
 func (opt *poptions) defaultStorageBuilder(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
 	return storage.New(opt.storagePathForPartition(topic, partition), codec, reg, opt.storageSnapshotInterval)
 }
@@ -362,10 +355,6 @@ func (opt *voptions) applyOptions(group string, opts ...ViewOption) error {
 
 func (opt *voptions) storagePathForPartition(topic string, partitionID int32) string {
 	return filepath.Join(opt.storagePath, "view", fmt.Sprintf("%s.%d", topic, partitionID))
-}
-
-func (opt *voptions) tableTopic(group string) Subscription {
-	return Subscription{Name: tableName(group)}
 }
 
 func (opt *voptions) defaultStorageBuilder(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {

@@ -81,7 +81,7 @@ func NewKafkaMock(t Tester, groupName string) *KafkaMock {
 		incomingEvents: make(chan kafka.Event),
 		consumerEvents: make(chan kafka.Event),
 		handledTopics:  make(map[string]bool),
-		groupTopic:     GroupTableTopic(groupName),
+		groupTopic:     GroupTable(groupName),
 	}
 	kafkaMock.consumerMock = newConsumerMock(kafkaMock)
 	kafkaMock.producerMock = newProducerMock(kafkaMock.handleEmit)

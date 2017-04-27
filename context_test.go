@@ -54,6 +54,7 @@ func TestContext_Emit(t *testing.T) {
 	emitted := 0
 
 	ctx := &context{
+		graph:  DefineGroup(group),
 		commit: func() { ack++ },
 		wg:     &sync.WaitGroup{},
 	}
@@ -89,6 +90,7 @@ func TestContext_EmitError(t *testing.T) {
 
 	// test error case
 	ctx := &context{
+		graph:  DefineGroup(group),
 		commit: func() { ack++ },
 		wg:     &sync.WaitGroup{},
 	}
@@ -117,14 +119,14 @@ func TestContext_EmitError(t *testing.T) {
 }
 
 func TestContext_EmitToStateTopic(t *testing.T) {
-	ctx := &context{tableTopic: Subscription{Name: "test"}, loopTopic: Subscription{Name: "loop"}}
+	ctx := &context{graph: DefineGroup(group, Persist(c), Loop(c, cb))}
 	func() {
 		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to table topic, use SetValue() instead."))
-		ctx.Emit("test", "key", []byte("value"))
+		ctx.Emit(GroupTable(group), "key", []byte("value"))
 	}()
 	func() {
 		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to loop topic, use Loopback() instead."))
-		ctx.Emit("loop", "key", []byte("value"))
+		ctx.Emit(loopName(group), "key", []byte("value"))
 	}()
 	func() {
 		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to empty topic"))
@@ -145,7 +147,7 @@ func PanicStringContains(t *testing.T, s string) {
 
 func TestContext_GetSetStateless(t *testing.T) {
 	// ctx stateless since no storage passed
-	ctx := &context{tableTopic: Subscription{Name: "test"}, msg: new(message)}
+	ctx := &context{graph: DefineGroup("group"), msg: new(message)}
 	func() {
 		defer PanicStringContains(t, "stateless")
 		_ = ctx.Value()
@@ -171,6 +173,7 @@ func TestContext_Set(t *testing.T) {
 	value := "value"
 
 	ctx := &context{
+		graph:   DefineGroup(group, Persist(rawCodec)),
 		codec:   new(codec.String),
 		storage: storage,
 		wg:      new(sync.WaitGroup),
@@ -209,15 +212,16 @@ func TestContext_GetSetStateful(t *testing.T) {
 		offset  = int64(123)
 		wg      = new(sync.WaitGroup)
 	)
+	graph := DefineGroup(group, Persist(c))
 	ctx := &context{
-		wg:         wg,
-		tableTopic: tableTopic,
-		msg:        &message{Key: key, Offset: offset},
-		storage:    storage,
-		codec:      new(codec.String),
+		wg:      wg,
+		graph:   graph,
+		msg:     &message{Key: key, Offset: offset},
+		storage: storage,
+		codec:   new(codec.String),
 		emitter: func(tp string, k string, v []byte) *kafka.Promise {
 			wg.Add(1)
-			ensure.DeepEqual(t, tp, tableTopic.Name)
+			ensure.DeepEqual(t, tp, graph.GroupTable().Topic())
 			ensure.DeepEqual(t, string(k), key)
 			ensure.DeepEqual(t, string(v), value)
 			return kafka.NewPromise().Finish(nil)
@@ -255,12 +259,12 @@ func TestContext_SetErrors(t *testing.T) {
 	)
 
 	ctx := &context{
-		wg:         wg,
-		tableTopic: tableTopic,
-		msg:        &message{Key: key, Offset: offset},
-		storage:    storage,
-		failer:     func(err error) { failed = err },
-		codec:      new(codec.String),
+		wg:      wg,
+		graph:   DefineGroup(group, Persist(c)),
+		msg:     &message{Key: key, Offset: offset},
+		storage: storage,
+		failer:  func(err error) { failed = err },
+		codec:   new(codec.String),
 	}
 
 	err := ctx.setValueForKey(key, nil)
@@ -305,7 +309,7 @@ func TestContext_SetErrors(t *testing.T) {
 
 func TestContext_LoopbackNoLoop(t *testing.T) {
 	// ctx has no loop set
-	ctx := &context{tableTopic: tableTopic, msg: new(message)}
+	ctx := &context{graph: DefineGroup("group", Persist(c)), msg: new(message)}
 	func() {
 		defer PanicStringContains(t, "loop")
 		ctx.Loopback("some-key", "whatever")
@@ -323,13 +327,13 @@ func TestContext_Loopback(t *testing.T) {
 		cnt   = 0
 	)
 
+	graph := DefineGroup("group", Persist(c), Loop(c, cb))
 	ctx := &context{
-		tableTopic: tableTopic,
-		loopTopic:  loopTopic,
-		msg:        new(message),
+		graph: graph,
+		msg:   new(message),
 		emitter: func(tp string, k string, v []byte) *kafka.Promise {
 			cnt++
-			ensure.DeepEqual(t, tp, loopTopic.Name)
+			ensure.DeepEqual(t, tp, graph.getLoopStream().Topic())
 			ensure.DeepEqual(t, string(k), key)
 			ensure.DeepEqual(t, string(v), value)
 			return kafka.NewPromise()
@@ -353,9 +357,8 @@ func TestContext_Join(t *testing.T) {
 	)
 
 	ctx := &context{
-		tableTopic: tableTopic,
-		loopTopic:  loopTopic,
-		msg:        &message{Key: key},
+		graph: DefineGroup("group", Persist(c), Loop(c, cb)),
+		msg:   &message{Key: key},
 		views: map[string]*partition{
 			table: &partition{
 				st: &storageProxy{

@@ -19,17 +19,14 @@ import (
 // topics. Messages as well as rows in the group table are key-value pairs.
 // A group is composed by multiple processor instances.
 type Processor struct {
-	opts       *poptions
-	tableTopic Subscription
-	loopTopic  Subscription
+	opts *poptions
 
 	partitions     map[int32]*partition
 	partitionViews map[int32]map[string]*partition
 	partitionCount int
 
-	tables  map[string]Subscription
-	streams map[string]Subscription
-	m       sync.RWMutex
+	graph *GroupGraph
+	m     sync.RWMutex
 
 	consumer kafka.Consumer
 	producer kafka.Producer
@@ -56,7 +53,7 @@ type ConsumeCallback func(ctx Context, msg interface{})
 // NewProcessor creates a processor instance in a group given the address of
 // Kafka brokers, the consumer group name, a list of subscriptions (topics,
 // codecs, and callbacks), and series of options.
-func NewProcessor(brokers []string, group string, topics Subscriptions, options ...ProcessorOption) (*Processor, error) {
+func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) (*Processor, error) {
 	options = append(
 		// default options comes first
 		[]ProcessorOption{
@@ -69,55 +66,23 @@ func NewProcessor(brokers []string, group string, topics Subscriptions, options 
 		options...,
 	)
 
+	if err := gg.Validate(); err != nil {
+		return nil, err
+	}
+
 	opts := new(poptions)
-	err := opts.applyOptions(group, options...)
+	err := opts.applyOptions(gg.Group(), options...)
 	if err != nil {
 		return nil, fmt.Errorf(errApplyOptions, err)
 	}
 
-	subs := make(Subscriptions, len(topics))
-	copy(subs, topics)
-	if err = subs.validate(); err != nil {
-		return nil, err
-	}
-
-	// separate tables from streams
-	var (
-		streams      = make(map[string]Subscription) // stream topics to be consumed
-		tables       = make(map[string]Subscription) // table topics to be joined
-		checkTopics  []string                        // topics to be checked for npar
-		ensureTopics []string                        // topics to be created if possible
-	)
-	for _, topic := range subs {
-		if topic.internal {
-			// internal topics need to have group prefix and will be created be
-			// the topic manager
-			topic = *topic.addPrefix(group)
-			ensureTopics = append(ensureTopics, topic.Name)
-		} else {
-			// other topics subscribed should be checked to match the number of
-			// partitions
-			checkTopics = append(checkTopics, topic.Name)
-		}
-
-		if topic.table {
-			// if the topic is a table, we don't have a consume callback
-			tables[topic.Name] = topic
-		} else {
-			// other topics have a consume callback
-			streams[topic.Name] = topic
-		}
-	}
-
-	tableTopic := opts.tableTopic(group)
-
-	npar, err := prepareTopics(brokers, tableTopic, ensureTopics, checkTopics, opts)
+	npar, err := prepareTopics(brokers, gg, opts)
 	if err != nil {
 		return nil, err
 	}
 
 	// create kafka consumer
-	consumer, err := opts.builders.consumer(brokers, group, opts.kafkaRegistry)
+	consumer, err := opts.builders.consumer(brokers, gg.Group(), opts.kafkaRegistry)
 	if err != nil {
 		return nil, fmt.Errorf(errBuildConsumer, err)
 	}
@@ -128,20 +93,15 @@ func NewProcessor(brokers []string, group string, topics Subscriptions, options 
 		return nil, fmt.Errorf(errBuildProducer, err)
 	}
 
-	loopTopic := streams[loopName(group)]
-
 	// combine things together
 	processor := &Processor{
-		opts:       opts,
-		tableTopic: tableTopic,
-		loopTopic:  loopTopic,
+		opts: opts,
 
 		partitions:     make(map[int32]*partition),
 		partitionViews: make(map[int32]map[string]*partition),
 		partitionCount: npar,
 
-		streams: streams,
-		tables:  tables,
+		graph: gg,
 
 		consumer: consumer,
 		producer: producer,
@@ -153,7 +113,7 @@ func NewProcessor(brokers []string, group string, topics Subscriptions, options 
 	return processor, nil
 }
 
-func prepareTopics(brokers []string, tableTopic Subscription, ensureTopics, checkTopics []string, opts *poptions) (npar int, err error) {
+func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, err error) {
 	// create topic manager
 	tm, err := opts.builders.topicmgr(brokers)
 	if err != nil {
@@ -167,19 +127,23 @@ func prepareTopics(brokers []string, tableTopic Subscription, ensureTopics, chec
 	}()
 
 	// check co-partitioned (external) topics have the same number of partitions
-	npar, err = copartitioned(tm, checkTopics)
+	npar, err = copartitioned(tm, gg.inputs().Topics())
 	if err != nil {
 		return 0, err
 	}
 
-	for _, t := range ensureTopics {
-		if err = tm.EnsureStreamExists(t, npar); err != nil {
-			return
+	// TODO(diogo): add output topics
+	if ls := gg.getLoopStream(); ls != nil {
+		ensureStreams := []string{ls.Topic()}
+		for _, t := range ensureStreams {
+			if err = tm.EnsureStreamExists(t, npar); err != nil {
+				return
+			}
 		}
 	}
 
-	if !tableTopic.null() {
-		if err = tm.EnsureTableExists(tableTopic.Name, npar); err != nil {
+	if gt := gg.GroupTable(); gt != nil {
+		if err = tm.EnsureTableExists(gt.Topic(), npar); err != nil {
 			return
 		}
 	}
@@ -221,7 +185,7 @@ func (g *Processor) Registry() metrics.Registry {
 
 // isStateless returns whether the processor is a stateless one.
 func (g *Processor) isStateless() bool {
-	return g.tableTopic.null()
+	return g.graph.GroupTable() == nil
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -300,8 +264,8 @@ func (g *Processor) hash(key string) (int32, error) {
 // partition, a recovery will be attempted.
 func (g *Processor) Start() error {
 	topics := make(map[string]int64)
-	for name, topic := range g.streams {
-		topics[name] = topic.initialOffset
+	for _, e := range g.graph.InputStreams() {
+		topics[e.Topic()] = -1
 	}
 	if err := g.consumer.Subscribe(topics); err != nil {
 		g.errors.collect(fmt.Errorf("error subscribing topics: %v", err))
@@ -360,10 +324,10 @@ func (g *Processor) run() {
 
 		case *kafka.Message:
 			var err error
-			if _, has := g.tables[ev.Topic]; !has {
-				err = g.pushToPartition(ev.Partition, ev)
-			} else {
+			if g.graph.joint(ev.Topic) {
 				err = g.pushToPartitionView(ev.Topic, ev.Partition, ev)
+			} else {
+				err = g.pushToPartition(ev.Partition, ev)
 			}
 			if err != nil {
 				g.fail(fmt.Errorf("error consuming message: %v", err))
@@ -371,10 +335,10 @@ func (g *Processor) run() {
 
 		case *kafka.BOF:
 			var err error
-			if _, has := g.tables[ev.Topic]; !has {
-				err = g.pushToPartition(ev.Partition, ev)
-			} else {
+			if g.graph.joint(ev.Topic) {
 				err = g.pushToPartitionView(ev.Topic, ev.Partition, ev)
+			} else {
+				err = g.pushToPartition(ev.Partition, ev)
 			}
 			if err != nil {
 				g.fail(fmt.Errorf("error consuming BOF: %v", err))
@@ -382,10 +346,10 @@ func (g *Processor) run() {
 
 		case *kafka.EOF:
 			var err error
-			if _, has := g.tables[ev.Topic]; !has {
-				err = g.pushToPartition(ev.Partition, ev)
-			} else {
+			if g.graph.joint(ev.Topic) {
 				err = g.pushToPartitionView(ev.Topic, ev.Partition, ev)
+			} else {
+				err = g.pushToPartition(ev.Partition, ev)
 			}
 			if err != nil {
 				g.fail(fmt.Errorf("error consuming EOF: %v", err))
@@ -506,24 +470,24 @@ func (g *Processor) createPartitionViews(id int32) error {
 		g.partitionViews[id] = make(map[string]*partition)
 	}
 
-	for name, topic := range g.tables {
+	for _, t := range g.graph.JointTables() {
 		if _, has := g.partitions[id]; has {
 			continue
 		}
 		reg := metrics.NewPrefixedChildRegistry(g.opts.gokaRegistry,
-			fmt.Sprintf("%s.%d.", name, id))
+			fmt.Sprintf("%s.%d.", t.Topic(), id))
 
-		st, err := g.newStorage(name, id, topic.codec, DefaultUpdate, reg)
+		st, err := g.newStorage(t.Topic(), id, t.Codec(), DefaultUpdate, reg)
 		if err != nil {
 			return fmt.Errorf("processor: error creating storage: %v", err)
 		}
 		p := newPartition(
-			name,
+			t.Topic(),
 			nil, st, &proxy{id, g.consumer},
 			reg,
 			g.opts.partitionChannelSize,
 		)
-		g.partitionViews[id][name] = p
+		g.partitionViews[id][t.Topic()] = p
 
 		go func(par *partition, pid int32) {
 			defer func() {
@@ -548,15 +512,21 @@ func (g *Processor) createPartition(id int32) error {
 	if _, has := g.partitions[id]; has {
 		return nil
 	}
+	groupTable := ""
+	var groupCodec Codec
+	if gt := g.graph.GroupTable(); gt != nil {
+		groupTable = gt.Topic()
+		groupCodec = gt.Codec()
+	}
 	reg := metrics.NewPrefixedChildRegistry(g.opts.gokaRegistry,
-		fmt.Sprintf("%s.%d.", g.tableTopic.Name, id))
+		fmt.Sprintf("%s.%d.", groupTable, id))
 
-	st, err := g.newStorage(g.tableTopic.Name, id, g.opts.tableCodec, g.opts.updateCallback, reg)
+	st, err := g.newStorage(groupTable, id, groupCodec, g.opts.updateCallback, reg)
 	if err != nil {
 		return fmt.Errorf("processor: error creating storage: %v", err)
 	}
 	g.partitions[id] = newPartition(
-		g.tableTopic.Name,
+		groupTable,
 		g.process, st, &proxy{id, g.consumer},
 		reg,
 		g.opts.partitionChannelSize,
@@ -633,8 +603,7 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	g.m.RUnlock()
 
 	ctx := &context{
-		tableTopic: g.tableTopic,
-		loopTopic:  g.loopTopic,
+		graph: g.graph,
 
 		codec:  g.opts.tableCodec,
 		views:  views,
@@ -662,20 +631,25 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	}
 
 	// get stream subcription
-	stream, ok := g.streams[msg.Topic]
-	if !ok {
+	codec := g.graph.codec(msg.Topic)
+	if codec == nil {
 		wg.Done()
 		return fmt.Errorf("cannot handle topic %s", msg.Topic)
 	}
 	// decode message
-	m, err := stream.codec.Decode(msg.Data)
+	m, err := codec.Decode(msg.Data)
 	if err != nil {
 		wg.Done()
 		return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
 	}
 
 	defer ctx.markDone() // execute even in case of panic
-	stream.consume(ctx, m)
+	cb := g.graph.callback(msg.Topic)
+	if cb == nil {
+		wg.Done()
+		return fmt.Errorf("error processing message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
+	}
+	cb(ctx, m)
 
 	return nil
 }

@@ -22,8 +22,8 @@ func TestGroupGraph_Validate(t *testing.T) {
 
 	g = DefineGroup("group",
 		Input("input-topic", c, cb),
-		LoopStream(c, cb),
-		LoopStream(c, cb),
+		Loop(c, cb),
+		Loop(c, cb),
 	)
 	err = g.Validate()
 	ensure.StringContains(t, err.Error(), "more than one loop")
@@ -45,7 +45,7 @@ func TestGroupGraph_Validate(t *testing.T) {
 
 	g = DefineGroup("group",
 		Input(loopName("group"), c, cb),
-		LoopStream(c, cb),
+		Loop(c, cb),
 	)
 	err = g.Validate()
 	ensure.StringContains(t, err.Error(), "loop stream")
@@ -108,7 +108,7 @@ func TestGroupGraph_getters(t *testing.T) {
 		Output("t3", c),
 		Output("t4", c),
 		Output("t5", c),
-		LoopStream(c, cb),
+		Loop(c, cb),
 	)
 	ensure.True(t, len(g.InputStreams()) == 3)
 	ensure.True(t, len(g.OutputStreams()) == 4)
@@ -121,7 +121,7 @@ func TestGroupGraph_getters(t *testing.T) {
 		Output("t3", c),
 		Output("t4", c),
 		Output("t5", c),
-		LoopStream(c, cb),
+		Loop(c, cb),
 		Join("a1", c),
 		Join("a2", c),
 		Join("a3", c),

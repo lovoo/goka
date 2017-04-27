@@ -51,10 +51,10 @@ func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, 
 	tm.EXPECT().Partitions(topic2).Return(partitions, nil)
 	tm.EXPECT().EnsureStreamExists(loopName(group), len(partitions)).Return(nil)
 	tm.EXPECT().Close().Return(nil)
-	p, _ := NewProcessor(nil, group,
-		Subscribe(
-			Stream(topic, rawCodec, cb),
-			Stream(topic2, rawCodec, cb),
+	p, _ := NewProcessor(nil,
+		DefineGroup(group,
+			Input(topic, rawCodec, cb),
+			Input(topic2, rawCodec, cb),
 			Loop(rawCodec, cb),
 		),
 		WithTopicManager(tm),
@@ -81,19 +81,19 @@ func createProcessor(ctrl *gomock.Controller, consumer kafka.Consumer, npar int,
 	tm.EXPECT().Partitions(topic).Return(partitions, nil)
 	tm.EXPECT().Partitions(topic2).Return(partitions, nil)
 	tm.EXPECT().EnsureStreamExists(loopName(group), len(partitions)).Return(nil)
-	tm.EXPECT().EnsureTableExists(tableName(group), len(partitions)).Return(nil)
+	tm.EXPECT().EnsureTableExists(GroupTable(group), len(partitions)).Return(nil)
 	tm.EXPECT().Close().Return(nil)
-	p, _ := NewProcessor(nil, group,
-		Subscribe(
-			Stream(topic, rawCodec, cb),
-			Stream(topic2, rawCodec, cb),
+	p, _ := NewProcessor(nil,
+		DefineGroup(group,
+			Input(topic, rawCodec, cb),
+			Input(topic2, rawCodec, cb),
 			Loop(rawCodec, cb),
+			Persist(rawCodec),
 		),
 		WithTopicManager(tm),
 		WithConsumer(consumer),
 		WithProducer(producer),
 		WithStorageBuilder(sb),
-		WithGroupTable(rawCodec),
 		WithPartitionChannelSize(0),
 	)
 	return p
@@ -113,20 +113,20 @@ func createProcessorWithTable(ctrl *gomock.Controller, consumer kafka.Consumer, 
 	tm.EXPECT().Partitions(topic2).Return(partitions, nil)
 	tm.EXPECT().Partitions(table).Return(partitions, nil)
 	tm.EXPECT().EnsureStreamExists(loopName(group), len(partitions)).Return(nil)
-	tm.EXPECT().EnsureTableExists(tableName(group), len(partitions)).Return(nil)
+	tm.EXPECT().EnsureTableExists(GroupTable(group), len(partitions)).Return(nil)
 	tm.EXPECT().Close().Return(nil)
-	p, _ := NewProcessor(nil, group,
-		Subscribe(
-			Stream(topic, rawCodec, cb),
-			Stream(topic2, rawCodec, cb),
+	p, _ := NewProcessor(nil,
+		DefineGroup(group,
+			Input(topic, rawCodec, cb),
+			Input(topic2, rawCodec, cb),
 			Loop(rawCodec, cb),
-			Table(table, rawCodec),
+			Join(table, rawCodec),
+			Persist(rawCodec),
 		),
 		WithTopicManager(tm),
 		WithConsumer(consumer),
 		WithProducer(producer),
 		WithStorageBuilder(sb),
-		WithGroupTable(rawCodec),
 		WithPartitionChannelSize(0),
 	)
 	return p
@@ -163,15 +163,11 @@ func TestProcessor_process(t *testing.T) {
 			tableCodec: new(codec.String),
 		},
 
-		tableTopic: Subscription{Name: "group"},
-		loopTopic:  Subscription{Name: "loop"},
-
-		streams: map[string]Subscription{
-			"sometopic": Subscription{
-				consume: cb,
-				codec:   rawCodec,
-			},
-		},
+		graph: DefineGroup(group,
+			Persist(c),
+			Loop(c, cb),
+			Input("sometopic", rawCodec, cb),
+		),
 
 		consumer: consumer,
 		producer: producer,
@@ -184,10 +180,10 @@ func TestProcessor_process(t *testing.T) {
 }
 
 func TestNewProcessor(t *testing.T) {
-	_, err := NewProcessor(nil, group, nil)
+	_, err := NewProcessor(nil, DefineGroup(group))
 	ensure.NotNil(t, err)
 
-	_, err = NewProcessor(nil, group, Stream("topic", rawCodec, nil))
+	_, err = NewProcessor(nil, DefineGroup(group, Input("topic", rawCodec, nil)))
 	ensure.NotNil(t, err)
 
 	ctrl := gomock.NewController(t)
@@ -202,8 +198,8 @@ func TestNewProcessor(t *testing.T) {
 	// prepareTopics fails
 	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, errors.New("some error"))
 	tm.EXPECT().Close().Return(nil)
-	_, err = NewProcessor(nil, group,
-		Stream(topic, rawCodec, cb),
+	_, err = NewProcessor(nil,
+		DefineGroup(group, Input(topic, rawCodec, cb)),
 		WithTopicManager(tm),
 	)
 	ensure.NotNil(t, err)
@@ -211,8 +207,8 @@ func TestNewProcessor(t *testing.T) {
 	// consumer builder fails
 	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Close().Return(nil)
-	_, err = NewProcessor(nil, group,
-		Stream(topic, rawCodec, cb),
+	_, err = NewProcessor(nil,
+		DefineGroup(group, Input(topic, rawCodec, cb)),
 		WithTopicManager(tm),
 		WithConsumer(nil),
 		WithProducer(nil),
@@ -222,8 +218,8 @@ func TestNewProcessor(t *testing.T) {
 	// processor builder fails
 	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Close().Return(nil)
-	_, err = NewProcessor(nil, group,
-		Stream(topic, rawCodec, cb),
+	_, err = NewProcessor(nil,
+		DefineGroup(group, Input(topic, rawCodec, cb)),
 		WithTopicManager(tm),
 		WithConsumer(consumer),
 		WithProducer(nil),
@@ -234,100 +230,64 @@ func TestNewProcessor(t *testing.T) {
 	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Partitions(topic2).Return([]int32{0, 1}, nil)
 	tm.EXPECT().EnsureStreamExists(loopName(group), 2).Return(nil)
-	tm.EXPECT().EnsureTableExists(tableName(group), 2).Return(nil)
+	tm.EXPECT().EnsureTableExists(GroupTable(group), 2).Return(nil)
 	tm.EXPECT().Close().Return(nil)
-	p, err := NewProcessor(nil, group,
-		Subscribe(
-			Stream(topic, rawCodec, cb),
-			Stream(topic2, rawCodec, cb),
+	p, err := NewProcessor(nil,
+		DefineGroup(group,
+			Input(topic, rawCodec, cb),
+			Input(topic2, rawCodec, cb),
 			Loop(rawCodec, cb),
+			Persist(rawCodec),
 		),
 		WithTopicManager(tm),
 		WithConsumer(consumer),
 		WithProducer(producer),
-		WithGroupTable(rawCodec),
 	)
 	ensure.Nil(t, err)
-	ensure.True(t, p.tableTopic.Name == tableName(group))
-	ensure.True(t, p.loopTopic.Name == loopName(group))
+	ensure.True(t, p.graph.GroupTable().Topic() == GroupTable(group))
+	ensure.True(t, p.graph.getLoopStream().Topic() == loopName(group))
 	ensure.True(t, p.partitionCount == 2)
-	ensure.True(t, len(p.streams) == 3)
-	expected := map[string]Subscription{
-		topic:           Subscription{Name: topic, initialOffset: -1},
-		loopName(group): Subscription{Name: loopName(group), internal: true, initialOffset: -1},
-		topic2:          Subscription{Name: topic2, initialOffset: -1},
-	}
-	for name, topic := range p.streams {
-		ensure.DeepEqual(t, topic.Name, expected[name].Name)
-		ensure.DeepEqual(t, topic.internal, expected[name].internal)
-		ensure.DeepEqual(t, topic.initialOffset, expected[name].initialOffset)
-	}
+	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.False(t, p.isStateless())
 
 	// successfully create stateless processor
 	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Partitions(topic2).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Close().Return(nil)
-	p, err = NewProcessor(nil, group,
-		Subscribe(
-			Stream(topic, rawCodec, cb),
-			Stream(topic2, rawCodec, cb),
+	p, err = NewProcessor(nil,
+		DefineGroup(group,
+			Input(topic, rawCodec, cb),
+			Input(topic2, rawCodec, cb),
 		),
 		WithTopicManager(tm),
 		WithConsumer(consumer),
 		WithProducer(producer),
 	)
 	ensure.Nil(t, err)
-	ensure.True(t, p.tableTopic.null())
-	ensure.True(t, p.loopTopic.null())
+	ensure.True(t, p.graph.GroupTable() == nil)
+	ensure.True(t, p.graph.getLoopStream() == nil)
 	ensure.True(t, p.partitionCount == 2)
-	ensure.True(t, len(p.streams) == 2)
-	expected = map[string]Subscription{
-		topic:  Subscription{Name: topic, initialOffset: -1},
-		topic2: Subscription{Name: topic2, initialOffset: -1},
-	}
-	for name, topic := range p.streams {
-		ensure.DeepEqual(t, topic.Name, expected[name].Name)
-		ensure.DeepEqual(t, topic.internal, expected[name].internal)
-		ensure.DeepEqual(t, topic.initialOffset, expected[name].initialOffset)
-	}
+	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.True(t, p.isStateless())
 
 	// successfully create a processor with tables
 	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Partitions(table).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Close().Return(nil)
-	p, err = NewProcessor(nil, group,
-		Subscribe(
-			Stream(topic, rawCodec, cb),
-			Table(table, rawCodec),
+	p, err = NewProcessor(nil,
+		DefineGroup(group,
+			Input(topic, rawCodec, cb),
+			Join(table, rawCodec),
 		),
 		WithTopicManager(tm),
 		WithConsumer(consumer),
 		WithProducer(producer),
 	)
 	ensure.Nil(t, err)
-	ensure.True(t, p.tableTopic.null())
-	ensure.True(t, p.loopTopic.null())
+	ensure.True(t, p.graph.GroupTable() == nil)
+	ensure.True(t, p.graph.getLoopStream() == nil)
 	ensure.True(t, p.partitionCount == 2)
-	ensure.True(t, len(p.streams) == 1)
-	ensure.True(t, len(p.tables) == 1)
-	expected = map[string]Subscription{
-		topic: Subscription{Name: topic, initialOffset: -1},
-		table: Subscription{Name: table, initialOffset: -2, table: true},
-	}
-	for name, topic := range p.streams {
-		ensure.DeepEqual(t, topic.Name, expected[name].Name)
-		ensure.DeepEqual(t, topic.internal, expected[name].internal)
-		ensure.DeepEqual(t, topic.table, expected[name].table)
-		ensure.DeepEqual(t, topic.initialOffset, expected[name].initialOffset)
-	}
-	for name, topic := range p.tables {
-		ensure.DeepEqual(t, topic.Name, expected[name].Name)
-		ensure.DeepEqual(t, topic.internal, expected[name].internal)
-		ensure.DeepEqual(t, topic.table, expected[name].table)
-		ensure.DeepEqual(t, topic.initialOffset, expected[name].initialOffset)
-	}
+	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.True(t, p.isStateless())
 
 }
@@ -481,9 +441,9 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 	// 2. rebalance
 	st.EXPECT().Open().Times(3)
 	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(3)
-	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
+	consumer.EXPECT().AddPartition(GroupTable(group), int32(0), int64(123))
+	consumer.EXPECT().AddPartition(GroupTable(group), int32(1), int64(123))
+	consumer.EXPECT().AddPartition(GroupTable(group), int32(2), int64(123))
 	// 3. message
 	gomock.InOrder(
 		st.EXPECT().SetEncoded("key", nil).Return(nil),
@@ -493,9 +453,9 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 
 	// 4. error
 	consumer.EXPECT().Close().Do(func() { close(ch) })
-	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(1))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
+	consumer.EXPECT().RemovePartition(GroupTable(group), int32(0))
+	consumer.EXPECT().RemovePartition(GroupTable(group), int32(1))
+	consumer.EXPECT().RemovePartition(GroupTable(group), int32(2))
 	st.EXPECT().Sync().Times(3)
 	st.EXPECT().Close().Times(3)
 
@@ -516,7 +476,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 
 	// 3. message
 	ch <- &kafka.Message{
-		Topic:     tableName(group),
+		Topic:     GroupTable(group),
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
@@ -558,16 +518,16 @@ func TestProcessor_Start(t *testing.T) {
 	// 2. rebalance
 	st.EXPECT().Open().Times(3)
 	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(3)
-	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
+	consumer.EXPECT().AddPartition(GroupTable(group), int32(0), int64(123))
+	consumer.EXPECT().AddPartition(GroupTable(group), int32(1), int64(123))
+	consumer.EXPECT().AddPartition(GroupTable(group), int32(2), int64(123))
 	// 3. load message partition 1
 	st.EXPECT().SetEncoded("key", nil).Return(nil)
 	st.EXPECT().SetOffset(int64(1))
 	st.EXPECT().Sync()
 	// 4. end of recovery partition 1
 	gomock.InOrder(
-		consumer.EXPECT().RemovePartition(tableName(group), int32(1)),
+		consumer.EXPECT().RemovePartition(GroupTable(group), int32(1)),
 		consumer.EXPECT().AddGroupPartition(int32(1)),
 	)
 	// 5. process message partition 1
@@ -576,12 +536,12 @@ func TestProcessor_Start(t *testing.T) {
 	// 6. new assignment remove partition 1 and 2
 	st.EXPECT().Sync()  // partition 1 final sync
 	st.EXPECT().Close() // partition 1 close
-	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
+	consumer.EXPECT().RemovePartition(GroupTable(group), int32(2))
 	st.EXPECT().Sync()  // partition 2 final sync
 	st.EXPECT().Close() // partition 2 close
 	// 7. stop processor
 	consumer.EXPECT().Close().Do(func() { close(ch) })
-	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
+	consumer.EXPECT().RemovePartition(GroupTable(group), int32(0))
 	st.EXPECT().Sync()
 	st.EXPECT().Close()
 
@@ -602,7 +562,7 @@ func TestProcessor_Start(t *testing.T) {
 
 	// 3. load message partition 1
 	ch <- &kafka.Message{
-		Topic:     tableName(group),
+		Topic:     GroupTable(group),
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
@@ -709,9 +669,9 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	// 2. rebalance
 	st.EXPECT().Open().Times(6)
 	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(6)
-	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
+	consumer.EXPECT().AddPartition(GroupTable(group), int32(0), int64(123))
+	consumer.EXPECT().AddPartition(GroupTable(group), int32(1), int64(123))
+	consumer.EXPECT().AddPartition(GroupTable(group), int32(2), int64(123))
 	consumer.EXPECT().AddPartition(table, int32(0), int64(123))
 	consumer.EXPECT().AddPartition(table, int32(1), int64(123))
 	consumer.EXPECT().AddPartition(table, int32(2), int64(123))
@@ -721,7 +681,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	st.EXPECT().Sync()
 	// 4. finish recovery of partition 1
 	gomock.InOrder(
-		consumer.EXPECT().RemovePartition(tableName(group), int32(1)),
+		consumer.EXPECT().RemovePartition(GroupTable(group), int32(1)),
 		consumer.EXPECT().AddGroupPartition(int32(1)),
 	)
 	// 5. process messages in partition 1
@@ -734,11 +694,11 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	st.EXPECT().Close().Times(4) // close group and other table partitions
 	consumer.EXPECT().RemovePartition(table, int32(1))
 	consumer.EXPECT().RemovePartition(table, int32(2))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
+	consumer.EXPECT().RemovePartition(GroupTable(group), int32(2))
 	// 7. stop processor
 	consumer.EXPECT().Close().Do(func() { close(ch) })
 	consumer.EXPECT().RemovePartition(table, int32(0))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
+	consumer.EXPECT().RemovePartition(GroupTable(group), int32(0))
 	st.EXPECT().Sync().Times(2)  // final sync
 	st.EXPECT().Close().Times(2) // close group table and other table
 	producer.EXPECT().Close().Return(nil)
@@ -759,7 +719,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 
 	// 3. message to group table
 	ch <- &kafka.Message{
-		Topic:     tableName(group),
+		Topic:     GroupTable(group),
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
@@ -866,7 +826,7 @@ func TestProcessor_HasGet(t *testing.T) {
 	gomock.InOrder(
 		st.EXPECT().Open(),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil),
-		consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123)),
+		consumer.EXPECT().AddPartition(GroupTable(group), int32(0), int64(123)),
 	)
 	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1})
 	ch <- new(kafka.NOP)
@@ -884,7 +844,7 @@ func TestProcessor_HasGet(t *testing.T) {
 	gomock.InOrder(
 		consumer.EXPECT().Close().Do(func() { close(ch) }),
 		st.EXPECT().Sync(),
-		consumer.EXPECT().RemovePartition(tableName(group), int32(0)),
+		consumer.EXPECT().RemovePartition(GroupTable(group), int32(0)),
 		st.EXPECT().Close(),
 	)
 
@@ -896,12 +856,12 @@ func TestProcessor_HasGet(t *testing.T) {
 }
 
 func TestProcessor_HasGetStateless(t *testing.T) {
-	p := &Processor{tableTopic: Subscription{}}
+	p := &Processor{graph: DefineGroup(group)}
 	_, err := p.Get("item1")
 	ensure.NotNil(t, err)
 	ensure.StringContains(t, err.Error(), "stateless processor")
 
-	p = &Processor{tableTopic: Subscription{Name: group}}
+	p = &Processor{graph: DefineGroup(group, Persist(c))}
 	p.partitions = map[int32]*partition{
 		0: new(partition),
 	}
@@ -910,7 +870,7 @@ func TestProcessor_HasGetStateless(t *testing.T) {
 	ensure.NotNil(t, err)
 	ensure.StringContains(t, err.Error(), "0 partitions")
 
-	p = &Processor{tableTopic: Subscription{Name: group}}
+	p = &Processor{graph: DefineGroup(group, Persist(c))}
 	p.partitions = map[int32]*partition{
 		0: new(partition),
 	}
@@ -923,7 +883,7 @@ func TestProcessor_HasGetStateless(t *testing.T) {
 	defer ctrl.Finish()
 
 	st := mock.NewMockStorage(ctrl)
-	p = &Processor{tableTopic: Subscription{Name: group}}
+	p = &Processor{graph: DefineGroup(group, Persist(c))}
 	p.partitions = map[int32]*partition{
 		0: &partition{st: &storageProxy{Storage: st, partition: 0}},
 	}
@@ -952,7 +912,7 @@ func ExampleProcessor_simplest() {
 		fmt.Printf("Hello world: %v", m)
 	}
 
-	c, err := NewProcessor(brokers, group, Stream(topic, rawCodec, consume))
+	c, err := NewProcessor(brokers, DefineGroup(group, Input(topic, rawCodec, consume)))
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -983,10 +943,11 @@ func TestProcessor_ProducerError(t *testing.T) {
 		}
 
 		proc, err := NewProcessor([]string{"broker"},
-			"test",
-			Stream("topic", new(codec.String), consume),
-			append(km.ProcessorOptions(),
-				WithGroupTable(new(codec.String)))...,
+			DefineGroup("test",
+				Input("topic", new(codec.String), consume),
+				Persist(new(codec.String)),
+			),
+			km.ProcessorOptions()...,
 		)
 
 		ensure.Nil(t, err)
@@ -1017,10 +978,11 @@ func TestProcessor_ProducerError(t *testing.T) {
 		}
 
 		proc, err := NewProcessor([]string{"broker"},
-			"test",
-			Stream("topic", new(codec.String), consume),
-			append(km.ProcessorOptions(),
-				WithGroupTable(new(codec.String)))...,
+			DefineGroup("test",
+				Input("topic", new(codec.String), consume),
+				Persist(new(codec.String)),
+			),
+			km.ProcessorOptions()...,
 		)
 
 		ensure.Nil(t, err)
@@ -1054,8 +1016,9 @@ func TestProcessor_ProducerError(t *testing.T) {
 		}
 
 		proc, err := NewProcessor([]string{"broker"},
-			"test",
-			Stream("topic", new(codec.String), consume),
+			DefineGroup("test",
+				Input("topic", new(codec.String), consume),
+			),
 			append(km.ProcessorOptions())...,
 		)
 
@@ -1086,8 +1049,9 @@ func TestProcessor_consumeFail(t *testing.T) {
 	}
 
 	proc, err := NewProcessor([]string{"broker"},
-		"test",
-		Stream("topic", new(codec.String), consume),
+		DefineGroup("test",
+			Input("topic", new(codec.String), consume),
+		),
 		append(km.ProcessorOptions())...,
 	)
 
@@ -1116,8 +1080,9 @@ func TestProcessor_consumePanic(t *testing.T) {
 	}
 
 	proc, err := NewProcessor([]string{"broker"},
-		"test",
-		Stream("topic", new(codec.String), consume),
+		DefineGroup("test",
+			Input("topic", new(codec.String), consume),
+		),
 		append(km.ProcessorOptions())...,
 	)
 
@@ -1163,10 +1128,11 @@ func TestProcessor_failOnRecover(t *testing.T) {
 	})
 
 	proc, err := NewProcessor([]string{"broker"},
-		"test",
-		Stream("topic", new(codec.String), consume),
+		DefineGroup("test",
+			Input("topic", new(codec.String), consume),
+			Persist(rawCodec),
+		),
 		append(km.ProcessorOptions(),
-			WithGroupTable(new(codec.Bytes)),
 			WithUpdateCallback(func(s storage.Storage, partition int32, key string, value []byte) error {
 				log.Printf("recovered state: %s: %s", key, string(value))
 				return nil
