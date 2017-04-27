@@ -100,7 +100,6 @@ func DefineGroup(group string, edges ...Edge) *GroupGraph {
 		case *outputStream:
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.outputStreams = append(gg.outputStreams, e)
-
 		case *inputTable:
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.inputTables = append(gg.inputTables, e)
