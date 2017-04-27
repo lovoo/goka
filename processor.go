@@ -216,11 +216,11 @@ func (g *Processor) Get(key string) (interface{}, error) {
 	}
 
 	// make a deep copy of the object to make it read only.
-	data, err := g.opts.tableCodec.Encode(val)
+	data, err := g.graph.GroupTable().Codec().Encode(val)
 	if err != nil {
 		return nil, err
 	}
-	return g.opts.tableCodec.Decode(data)
+	return g.graph.GroupTable().Codec().Decode(data)
 }
 
 func (g *Processor) find(key string) (storage.Storage, error) {
@@ -512,7 +512,8 @@ func (g *Processor) createPartition(id int32) error {
 	if _, has := g.partitions[id]; has {
 		return nil
 	}
-	groupTable := ""
+	// TODO(diogo what name to use for stateless processors?
+	var groupTable string
 	var groupCodec Codec
 	if gt := g.graph.GroupTable(); gt != nil {
 		groupTable = gt.Topic()
@@ -605,7 +606,6 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	ctx := &context{
 		graph: g.graph,
 
-		codec:  g.opts.tableCodec,
 		views:  views,
 		wg:     wg,
 		msg:    msg,

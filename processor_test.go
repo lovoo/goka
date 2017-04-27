@@ -88,7 +88,7 @@ func createProcessor(ctrl *gomock.Controller, consumer kafka.Consumer, npar int,
 			Input(topic, rawCodec, cb),
 			Input(topic2, rawCodec, cb),
 			Loop(rawCodec, cb),
-			Persist(rawCodec),
+			Persist(new(codec.String)),
 		),
 		WithTopicManager(tm),
 		WithConsumer(consumer),
@@ -159,12 +159,8 @@ func TestProcessor_process(t *testing.T) {
 	)
 
 	p := &Processor{
-		opts: &poptions{
-			tableCodec: new(codec.String),
-		},
-
 		graph: DefineGroup(group,
-			Persist(c),
+			Persist(new(codec.String)),
 			Loop(c, cb),
 			Input("sometopic", rawCodec, cb),
 		),
@@ -809,7 +805,6 @@ func TestProcessor_HasGet(t *testing.T) {
 	)
 
 	ensure.True(t, p.partitionCount == 1)
-	p.opts.tableCodec = new(codec.String)
 
 	consumer.EXPECT().Subscribe(topOff).Return(nil)
 	consumer.EXPECT().Events().Return(ch)

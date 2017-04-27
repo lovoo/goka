@@ -60,8 +60,6 @@ type ProcessorOption func(*poptions)
 type poptions struct {
 	clientID string
 
-	tableEnabled            bool
-	tableCodec              Codec
 	updateCallback          UpdateCallback
 	storagePath             string
 	storageSnapshotInterval time.Duration
@@ -76,14 +74,6 @@ type poptions struct {
 	}
 	gokaRegistry  metrics.Registry
 	kafkaRegistry metrics.Registry
-}
-
-// WithGroupTable enables the group table and defines a codec.
-func WithGroupTable(codec Codec) ProcessorOption {
-	return func(o *poptions) {
-		o.tableEnabled = true
-		o.tableCodec = codec
-	}
 }
 
 // WithUpdateCallback defines the callback called upon recovering a message
