@@ -151,7 +151,7 @@ func (ctx *context) Join(table string) interface{} {
 	}
 	val, err := v.st.Get(ctx.Key())
 	if err != nil {
-		ctx.Fail(err)
+		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", ctx.Key(), table, err))
 	}
 	return val
 }
@@ -166,7 +166,7 @@ func (ctx *context) Lookup(table string, key string) interface{} {
 	}
 	val, err := v.Get(key)
 	if err != nil {
-		ctx.Fail(err)
+		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", key, table, err))
 	}
 	return val
 }

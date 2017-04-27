@@ -281,7 +281,7 @@ func (g *Processor) Start() error {
 		go func() {
 			err := v.Start()
 			if err != nil {
-				g.errors.collect(fmt.Errorf("error in view %s: %v", t, err))
+				g.fail(fmt.Errorf("error in view %s: %v", t, err))
 			}
 		}()
 	}

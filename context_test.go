@@ -367,7 +367,7 @@ func TestContext_Join(t *testing.T) {
 	ensure.DeepEqual(t, v, value)
 
 	func() {
-		defer ensure.PanicDeepEqual(t, errSome)
+		defer PanicStringContains(t, errSome.Error())
 		st.EXPECT().Get(key).Return(nil, errSome)
 		_ = ctx.Join(table)
 	}()
@@ -416,7 +416,7 @@ func TestContext_Lookup(t *testing.T) {
 	ensure.DeepEqual(t, v, value)
 
 	func() {
-		defer ensure.PanicDeepEqual(t, errSome)
+		defer PanicStringContains(t, errSome.Error())
 		st.EXPECT().Get(key).Return(nil, errSome)
 		_ = ctx.Lookup(table, key)
 	}()
