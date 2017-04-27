@@ -173,8 +173,7 @@ func TestContext_Set(t *testing.T) {
 	value := "value"
 
 	ctx := &context{
-		graph:   DefineGroup(group, Persist(rawCodec)),
-		codec:   new(codec.String),
+		graph:   DefineGroup(group, Persist(new(codec.String))),
 		storage: storage,
 		wg:      new(sync.WaitGroup),
 		commit:  func() { ack++ },
@@ -212,13 +211,12 @@ func TestContext_GetSetStateful(t *testing.T) {
 		offset  = int64(123)
 		wg      = new(sync.WaitGroup)
 	)
-	graph := DefineGroup(group, Persist(c))
+	graph := DefineGroup(group, Persist(new(codec.String)))
 	ctx := &context{
 		wg:      wg,
 		graph:   graph,
 		msg:     &message{Key: key, Offset: offset},
 		storage: storage,
-		codec:   new(codec.String),
 		emitter: func(tp string, k string, v []byte) *kafka.Promise {
 			wg.Add(1)
 			ensure.DeepEqual(t, tp, graph.GroupTable().Topic())
@@ -260,11 +258,10 @@ func TestContext_SetErrors(t *testing.T) {
 
 	ctx := &context{
 		wg:      wg,
-		graph:   DefineGroup(group, Persist(c)),
+		graph:   DefineGroup(group, Persist(new(codec.String))),
 		msg:     &message{Key: key, Offset: offset},
 		storage: storage,
 		failer:  func(err error) { failed = err },
-		codec:   new(codec.String),
 	}
 
 	err := ctx.setValueForKey(key, nil)

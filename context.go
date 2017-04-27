@@ -53,7 +53,6 @@ type context struct {
 	failer  func(err error)
 
 	storage storage.Storage
-	codec   Codec
 	views   map[string]*partition
 
 	msg      *message
@@ -191,7 +190,7 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 		return fmt.Errorf("Error storing value: %v", err)
 	}
 
-	encodedValue, err := ctx.codec.Encode(value)
+	encodedValue, err := ctx.graph.GroupTable().Codec().Encode(value)
 	if err != nil {
 		return fmt.Errorf("Error encoding value: %v", err)
 	}
