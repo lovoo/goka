@@ -60,8 +60,6 @@ type ProcessorOption func(*poptions)
 type poptions struct {
 	clientID string
 
-	tableEnabled            bool
-	tableCodec              Codec
 	updateCallback          UpdateCallback
 	storagePath             string
 	storageSnapshotInterval time.Duration
@@ -76,14 +74,6 @@ type poptions struct {
 	}
 	gokaRegistry  metrics.Registry
 	kafkaRegistry metrics.Registry
-}
-
-// WithGroupTable enables the group table and defines a codec.
-func WithGroupTable(codec Codec) ProcessorOption {
-	return func(o *poptions) {
-		o.tableEnabled = true
-		o.tableCodec = codec
-	}
 }
 
 // WithUpdateCallback defines the callback called upon recovering a message
@@ -217,13 +207,6 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 
 func (opt *poptions) storagePathForPartition(topic string, partitionID int32) string {
 	return filepath.Join(opt.storagePath, "processor", fmt.Sprintf("%s.%d", topic, partitionID))
-}
-
-func (opt *poptions) tableTopic(group string) Subscription {
-	if !opt.tableEnabled {
-		return Subscription{}
-	}
-	return Subscription{Name: tableName(group)}
 }
 
 func (opt *poptions) defaultStorageBuilder(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
@@ -362,10 +345,6 @@ func (opt *voptions) applyOptions(group string, opts ...ViewOption) error {
 
 func (opt *voptions) storagePathForPartition(topic string, partitionID int32) string {
 	return filepath.Join(opt.storagePath, "view", fmt.Sprintf("%s.%d", topic, partitionID))
-}
-
-func (opt *voptions) tableTopic(group string) Subscription {
-	return Subscription{Name: tableName(group)}
 }
 
 func (opt *voptions) defaultStorageBuilder(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {

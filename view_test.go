@@ -40,7 +40,7 @@ func createTestView(t *testing.T, consumer kafka.Consumer, sb StorageBuilder, tm
 	}
 
 	reader := &View{
-		topic:    tableName(group),
+		topic:    GroupTable(group),
 		opts:     opts,
 		consumer: consumer,
 		done:     make(chan bool),
@@ -61,20 +61,20 @@ func TestView_createPartitions(t *testing.T) {
 		tm = mock.NewMockTopicManager(ctrl)
 	)
 
-	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1}, nil)
+	tm.EXPECT().Partitions(GroupTable(group)).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Close()
 	v := createTestView(t, consumer, sb, tm)
 
 	err := v.createPartitions(nil)
 	ensure.Nil(t, err)
 
-	tm.EXPECT().Partitions(tableName(group)).Return(nil, errors.New("some error"))
+	tm.EXPECT().Partitions(GroupTable(group)).Return(nil, errors.New("some error"))
 	tm.EXPECT().Close()
 	v = createTestView(t, consumer, sb, tm)
 	err = v.createPartitions(nil)
 	ensure.NotNil(t, err)
 
-	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 4}, nil)
+	tm.EXPECT().Partitions(GroupTable(group)).Return([]int32{0, 4}, nil)
 	tm.EXPECT().Close()
 	v = createTestView(t, consumer, sb, tm)
 	err = v.createPartitions(nil)
@@ -83,7 +83,7 @@ func TestView_createPartitions(t *testing.T) {
 	sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
 		return nil, errors.New("some error")
 	}
-	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1}, nil)
+	tm.EXPECT().Partitions(GroupTable(group)).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Close()
 	v = createTestView(t, consumer, sb, tm)
 	err = v.createPartitions(nil)
@@ -106,7 +106,7 @@ func TestView_HasGet(t *testing.T) {
 	)
 
 	gomock.InOrder(
-		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1, 2}, nil),
+		tm.EXPECT().Partitions(GroupTable(group)).Return([]int32{0, 1, 2}, nil),
 		tm.EXPECT().Close(),
 		st.EXPECT().Has("item1").Return(false, nil),
 		st.EXPECT().Get("item1").Return("item1-value", nil),
@@ -145,19 +145,19 @@ func TestView_StartStop(t *testing.T) {
 	)
 
 	gomock.InOrder(
-		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0}, nil),
+		tm.EXPECT().Partitions(GroupTable(group)).Return([]int32{0}, nil),
 		tm.EXPECT().Close(),
 		consumer.EXPECT().Events().Return(ch),
 	)
 	gomock.InOrder(
 		st.EXPECT().Open(),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil),
-		consumer.EXPECT().AddPartition(tableName(group), int32(par), int64(offset)),
+		consumer.EXPECT().AddPartition(GroupTable(group), int32(par), int64(offset)),
 	)
 	gomock.InOrder(
 		consumer.EXPECT().Close().Do(chClose).Return(nil),
 		st.EXPECT().Sync(),
-		consumer.EXPECT().RemovePartition(tableName(group), int32(par)),
+		consumer.EXPECT().RemovePartition(GroupTable(group), int32(par)),
 		st.EXPECT().Close(),
 	)
 
@@ -194,7 +194,7 @@ func TestView_StartStopWithError(t *testing.T) {
 		ch       = make(chan kafka.Event)
 	)
 
-	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0}, nil)
+	tm.EXPECT().Partitions(GroupTable(group)).Return([]int32{0}, nil)
 	tm.EXPECT().Close()
 	err := v.createPartitions(nil)
 	ensure.Nil(t, err)
@@ -242,7 +242,7 @@ func TestView_GetErrors(t *testing.T) {
 
 	v = createTestView(t, consumer, sb, tm)
 
-	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0}, nil)
+	tm.EXPECT().Partitions(GroupTable(group)).Return([]int32{0}, nil)
 	tm.EXPECT().Close()
 	err = v.createPartitions(nil)
 	ensure.Nil(t, err)
@@ -264,19 +264,19 @@ func TestNewView(t *testing.T) {
 	ensure.NotNil(t, err)
 
 	gomock.InOrder(
-		tm.EXPECT().Partitions(tableName(group)).Return(nil, errors.New("some error")),
+		tm.EXPECT().Partitions(GroupTable(group)).Return(nil, errors.New("some error")),
 		tm.EXPECT().Close(),
 	)
 	_, err = NewView(nil, group, new(codec.Bytes), WithViewConsumer(consumer), WithViewTopicManager(tm))
 	ensure.NotNil(t, err)
 
 	gomock.InOrder(
-		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1, 2}, nil),
+		tm.EXPECT().Partitions(GroupTable(group)).Return([]int32{0, 1, 2}, nil),
 		tm.EXPECT().Close(),
 	)
 	v, err := NewView(nil, group, new(codec.Bytes), WithViewConsumer(consumer), WithViewTopicManager(tm))
 	ensure.Nil(t, err)
-	ensure.DeepEqual(t, v.topic, tableName(group))
+	ensure.DeepEqual(t, v.topic, GroupTable(group))
 	ensure.DeepEqual(t, v.consumer, consumer)
 	ensure.True(t, len(v.partitions) == 3)
 }

@@ -18,8 +18,10 @@ func TestError(t *testing.T) {
 	var err error
 	km := NewKafkaMock(t, "group")
 	proc, err := NewProcessor([]string{"broker"},
-		"group",
-		Stream("upstream", new(codec.String), consume),
+		DefineGroup("group",
+			Input("upstream", new(codec.String), consume),
+			Persist(c),
+		),
 		km.ProcessorOptions()...,
 	)
 	ensure.Nil(t, err)

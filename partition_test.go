@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/mock"
 	"github.com/lovoo/goka/storage"
@@ -19,11 +18,6 @@ import (
 const (
 	group = "group"
 	topic = "topic"
-)
-
-var (
-	tableTopic = Subscription{Name: tableName(group)}
-	loopTopic  = Subscription{Name: loopName(group), codec: new(codec.String)}
 )
 
 func newStorageProxy(st storage.Storage, id int32, update UpdateCallback) *storageProxy {

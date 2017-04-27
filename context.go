@@ -46,15 +46,13 @@ type Context interface {
 type emitter func(topic string, key string, value []byte) *kafka.Promise
 
 type context struct {
-	loopTopic  Subscription
-	tableTopic Subscription
+	graph *GroupGraph
 
 	commit  func()
 	emitter emitter
 	failer  func(err error)
 
 	storage storage.Storage
-	codec   Codec
 	views   map[string]*partition
 
 	msg      *message
@@ -70,10 +68,10 @@ type context struct {
 
 // Emit sends a message asynchronously to a topic.
 func (ctx *context) Emit(topic string, key string, value []byte) {
-	if ctx.loopTopic.is(topic) {
+	if loopName(ctx.graph.Group()) == topic {
 		ctx.Fail(errors.New("Cannot emit to loop topic, use Loopback() instead."))
 	}
-	if ctx.tableTopic.is(topic) {
+	if GroupTable(ctx.graph.Group()) == topic {
 		ctx.Fail(errors.New("Cannot emit to table topic, use SetValue() instead."))
 	}
 
@@ -84,16 +82,17 @@ func (ctx *context) Emit(topic string, key string, value []byte) {
 
 // Loopback sends a message to another key of the processor.
 func (ctx *context) Loopback(key string, value interface{}) {
-	if ctx.loopTopic.null() {
+	l := ctx.graph.getLoopStream()
+	if l == nil {
 		ctx.Fail(errors.New("No loop topic configured"))
 	}
 
-	data, err := ctx.loopTopic.codec.Encode(value)
+	data, err := l.Codec().Encode(value)
 	if err != nil {
 		ctx.Fail(fmt.Errorf("Error encoding message for key %s: %v", key, err))
 	}
 
-	if err := ctx.emit(ctx.loopTopic.Name, key, data); err != nil {
+	if err := ctx.emit(l.Topic(), key, data); err != nil {
 		ctx.Fail(err)
 	}
 }
@@ -102,7 +101,7 @@ func (ctx *context) emit(topic string, key string, value []byte) error {
 	if topic == "" {
 		return errors.New("Cannot emit to empty topic")
 	}
-	if ctx.tableTopic.is(topic) {
+	if GroupTable(ctx.graph.Group()) == topic {
 		return fmt.Errorf("Cannot emit to consumer group state (%s)", topic)
 	}
 	ctx.incCalls()
@@ -178,7 +177,7 @@ func (ctx *context) valueForKey(key string) (interface{}, error) {
 
 // setValueForKey sets a value for a key in the processor state.
 func (ctx *context) setValueForKey(key string, value interface{}) error {
-	if ctx.storage == nil {
+	if ctx.graph.GroupTable() == nil {
 		return fmt.Errorf("Cannot access state in stateless processor")
 	}
 
@@ -191,7 +190,7 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 		return fmt.Errorf("Error storing value: %v", err)
 	}
 
-	encodedValue, err := ctx.codec.Encode(value)
+	encodedValue, err := ctx.graph.GroupTable().Codec().Encode(value)
 	if err != nil {
 		return fmt.Errorf("Error encoding value: %v", err)
 	}
@@ -199,7 +198,7 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 	// increment wait counter
 	ctx.incCalls()
 	// write it to the log.
-	ctx.emitter(ctx.tableTopic.Name, key, encodedValue).Then(func(err error) {
+	ctx.emitter(ctx.graph.GroupTable().Topic(), key, encodedValue).Then(func(err error) {
 		if err != nil {
 			return
 		}

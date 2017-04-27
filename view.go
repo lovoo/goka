@@ -63,7 +63,7 @@ func NewView(brokers []string, group string, codec Codec, options ...ViewOption)
 	}
 
 	v := &View{
-		topic:    tableName(group),
+		topic:    GroupTable(group),
 		opts:     opts,
 		consumer: consumer,
 		done:     make(chan bool),
