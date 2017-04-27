@@ -68,8 +68,7 @@ func TestContext_Emit(t *testing.T) {
 		ensure.Nil(t, err)
 	})
 
-	err := ctx.emit("emit-topic", "key", []byte("value"))
-	ensure.Nil(t, err)
+	ctx.emit("emit-topic", "key", []byte("value"))
 
 	// and the partition-goroutine marks the context as done
 	ctx.markDone()
@@ -102,8 +101,7 @@ func TestContext_EmitError(t *testing.T) {
 		ensure.NotNil(t, err)
 		ensure.DeepEqual(t, err, errToEmit)
 	})
-	err := ctx.emit("emit-topic", "key", []byte("value"))
-	ensure.Nil(t, err)
+	ctx.emit("emit-topic", "key", []byte("value"))
 
 	// and the partition-goroutine marks the context as done
 	ctx.markDone()

@@ -32,7 +32,7 @@ type Context interface {
 	Join(table string) interface{}
 
 	// Emit asynchronously writes a message into a topic.
-	Emit(topic string, key string, value []byte)
+	Emit(topic string, key string, value interface{})
 
 	// Loopback asynchronously sends a message to another key of the group
 	// table. Value passed to loopback is encoded via the codec given in the
@@ -67,17 +67,26 @@ type context struct {
 }
 
 // Emit sends a message asynchronously to a topic.
-func (ctx *context) Emit(topic string, key string, value []byte) {
+func (ctx *context) Emit(topic string, key string, value interface{}) {
+	if topic == "" {
+		ctx.Fail(errors.New("Cannot emit to empty topic"))
+	}
 	if loopName(ctx.graph.Group()) == topic {
 		ctx.Fail(errors.New("Cannot emit to loop topic, use Loopback() instead."))
 	}
 	if GroupTable(ctx.graph.Group()) == topic {
 		ctx.Fail(errors.New("Cannot emit to table topic, use SetValue() instead."))
 	}
-
-	if err := ctx.emit(topic, key, value); err != nil {
-		ctx.Fail(err)
+	c := ctx.graph.codec(topic)
+	if c == nil {
+		ctx.Fail(fmt.Errorf("no codec for topic %s", topic))
 	}
+	data, err := c.Encode(value)
+	if err != nil {
+		ctx.Fail(fmt.Errorf("error encoding message for topic %s", topic))
+	}
+
+	ctx.emit(topic, key, data)
 }
 
 // Loopback sends a message to another key of the processor.
@@ -92,18 +101,10 @@ func (ctx *context) Loopback(key string, value interface{}) {
 		ctx.Fail(fmt.Errorf("Error encoding message for key %s: %v", key, err))
 	}
 
-	if err := ctx.emit(l.Topic(), key, data); err != nil {
-		ctx.Fail(err)
-	}
+	ctx.emit(l.Topic(), key, data)
 }
 
-func (ctx *context) emit(topic string, key string, value []byte) error {
-	if topic == "" {
-		return errors.New("Cannot emit to empty topic")
-	}
-	if GroupTable(ctx.graph.Group()) == topic {
-		return fmt.Errorf("Cannot emit to consumer group state (%s)", topic)
-	}
+func (ctx *context) emit(topic string, key string, value []byte) {
 	ctx.incCalls()
 
 	ctx.emitter(topic, key, value).Then(func(err error) {
@@ -111,7 +112,6 @@ func (ctx *context) emit(topic string, key string, value []byte) error {
 		// acknowledge the message consumption
 		ctx.notifyCallDone()
 	})
-	return nil
 }
 
 // Value returns the value of the key in the group table.
