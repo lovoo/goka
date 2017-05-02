@@ -46,6 +46,14 @@ func (p *delayProxy) Add(topic string, offset int64) {
 func (p *delayProxy) Remove(topic string) {
 	p.consumer.RemovePartition(topic, p.partition)
 }
+func (p *delayProxy) waitersDone() bool {
+	for _, r := range p.wait {
+		if !r() {
+			return false
+		}
+	}
+	return true
+}
 
 func (p *delayProxy) AddGroup() {
 	if len(p.wait) == 0 {
@@ -62,16 +70,10 @@ func (p *delayProxy) AddGroup() {
 				p.m.Unlock()
 				return
 			}
-			// wait for all conditions
-			done := true
-			for _, r := range p.wait {
-				if !r() {
-					done = false
-					break
-				}
-			}
-			if done {
+			if p.waitersDone() {
 				p.consumer.AddGroupPartition(p.partition)
+				p.m.Unlock()
+				return
 			}
 			p.m.Unlock()
 		}
