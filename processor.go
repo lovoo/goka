@@ -146,7 +146,7 @@ func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, 
 	}
 
 	// TODO(diogo): add output topics
-	if ls := gg.getLoopStream(); ls != nil {
+	if ls := gg.LoopStream(); ls != nil {
 		ensureStreams := []string{ls.Topic()}
 		for _, t := range ensureStreams {
 			if err = tm.EnsureStreamExists(t, npar); err != nil {
@@ -278,17 +278,20 @@ func (g *Processor) hash(key string) (int32, error) {
 func (g *Processor) Start() error {
 	// start all views
 	for t, v := range g.views {
-		go func() {
+		go func(t string, v *View) {
 			err := v.Start()
 			if err != nil {
 				g.fail(fmt.Errorf("error in view %s: %v", t, err))
 			}
-		}()
+		}(t, v)
 	}
 
 	topics := make(map[string]int64)
 	for _, e := range g.graph.InputStreams() {
 		topics[e.Topic()] = -1
+	}
+	if lt := g.graph.LoopStream(); lt != nil {
+		topics[lt.Topic()] = -1
 	}
 	if err := g.consumer.Subscribe(topics); err != nil {
 		g.errors.collect(fmt.Errorf("error subscribing topics: %v", err))
@@ -379,7 +382,11 @@ func (g *Processor) run() {
 			}
 
 		case *kafka.NOP:
-			_ = g.pushToPartition(ev.Partition, ev)
+			if g.graph.joint(ev.Topic) {
+				_ = g.pushToPartitionView(ev.Topic, ev.Partition, ev)
+			} else {
+				_ = g.pushToPartition(ev.Partition, ev)
+			}
 
 		case *kafka.Error:
 			g.fail(ev.Err)
@@ -437,38 +444,6 @@ func (g *Processor) Stop() {
 ///////////////////////////////////////////////////////////////////////////////
 // partition management (rebalance)
 ///////////////////////////////////////////////////////////////////////////////
-
-type proxy struct {
-	partition int32
-	consumer  kafka.Consumer
-}
-
-func (p *proxy) Add(topic string, offset int64) {
-	p.consumer.AddPartition(topic, p.partition, offset)
-}
-
-func (p *proxy) Remove(topic string) {
-	p.consumer.RemovePartition(topic, p.partition)
-}
-
-func (p *proxy) AddGroup() {
-	p.consumer.AddGroupPartition(p.partition)
-}
-
-type storageProxy struct {
-	storage.Storage
-	partition int32
-	stateless bool
-	update    UpdateCallback
-}
-
-func (s storageProxy) Update(k string, v []byte) error {
-	return s.update(s.Storage, s.partition, k, v)
-}
-
-func (s storageProxy) Stateless() bool {
-	return s.stateless
-}
 
 func (g *Processor) newStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
 	if g.isStateless() {
@@ -540,7 +515,7 @@ func (g *Processor) createPartition(id int32) error {
 	if _, has := g.partitions[id]; has {
 		return nil
 	}
-	// TODO(diogo what name to use for stateless processors?
+	// TODO(diogo) what name to use for stateless processors?
 	var groupTable string
 	var groupCodec Codec
 	if gt := g.graph.GroupTable(); gt != nil {
@@ -554,9 +529,21 @@ func (g *Processor) createPartition(id int32) error {
 	if err != nil {
 		return fmt.Errorf("processor: error creating storage: %v", err)
 	}
+
+	// collect dependencies
+	var wait []func() bool
+	if pviews, has := g.partitionViews[id]; has {
+		for _, p := range pviews {
+			wait = append(wait, p.ready)
+		}
+	}
+	for _, v := range g.views {
+		wait = append(wait, v.Ready)
+	}
+
 	g.partitions[id] = newPartition(
 		groupTable,
-		g.process, st, &proxy{id, g.consumer},
+		g.process, st, &delayProxy{partition: id, consumer: g.consumer, wait: wait},
 		reg,
 		g.opts.partitionChannelSize,
 	)

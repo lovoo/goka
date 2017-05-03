@@ -241,7 +241,7 @@ func TestNewProcessor(t *testing.T) {
 	)
 	ensure.Nil(t, err)
 	ensure.True(t, p.graph.GroupTable().Topic() == GroupTable(group))
-	ensure.True(t, p.graph.getLoopStream().Topic() == loopName(group))
+	ensure.True(t, p.graph.LoopStream().Topic() == loopName(group))
 	ensure.True(t, p.partitionCount == 2)
 	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.False(t, p.isStateless())
@@ -261,7 +261,7 @@ func TestNewProcessor(t *testing.T) {
 	)
 	ensure.Nil(t, err)
 	ensure.True(t, p.graph.GroupTable() == nil)
-	ensure.True(t, p.graph.getLoopStream() == nil)
+	ensure.True(t, p.graph.LoopStream() == nil)
 	ensure.True(t, p.partitionCount == 2)
 	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.True(t, p.isStateless())
@@ -281,7 +281,7 @@ func TestNewProcessor(t *testing.T) {
 	)
 	ensure.Nil(t, err)
 	ensure.True(t, p.graph.GroupTable() == nil)
-	ensure.True(t, p.graph.getLoopStream() == nil)
+	ensure.True(t, p.graph.LoopStream() == nil)
 	ensure.True(t, p.partitionCount == 2)
 	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.True(t, p.isStateless())
@@ -324,10 +324,11 @@ func TestProcessor_StartStopEmpty(t *testing.T) {
 	}()
 
 	consumer.EXPECT().Close().Return(nil).Do(func() { close(ch) })
-	doTimed(t, func() {
+	err := doTimed(t, func() {
 		p.Stop()
 		<-wait
 	})
+	ensure.Nil(t, err)
 }
 
 func TestProcessor_StartStopEmptyError(t *testing.T) {
@@ -727,6 +728,17 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	ch <- &kafka.EOF{
 		Partition: 1,
 	}
+	ensure.False(t, p.partitionViews[1][table].ready())
+	time.Sleep(delayProxyInterval)
+	ensure.False(t, p.partitionViews[1][table].ready())
+	ch <- &kafka.EOF{
+		Topic:     table,
+		Partition: 1,
+	}
+	err = syncWith(t, ch)
+	ensure.Nil(t, err)
+	time.Sleep(delayProxyInterval)
+	ensure.True(t, p.partitionViews[1][table].ready())
 
 	// 5. process messages in partition 1
 	ch <- &kafka.Message{

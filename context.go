@@ -94,7 +94,7 @@ func (ctx *context) Emit(topic string, key string, value interface{}) {
 
 // Loopback sends a message to another key of the processor.
 func (ctx *context) Loopback(key string, value interface{}) {
-	l := ctx.graph.getLoopStream()
+	l := ctx.graph.LoopStream()
 	if l == nil {
 		ctx.Fail(errors.New("No loop topic configured"))
 	}

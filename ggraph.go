@@ -27,7 +27,7 @@ func (gg *GroupGraph) Group() string {
 }
 
 func (gg *GroupGraph) InputStreams() Edges {
-	return append(gg.inputStreams, gg.loopStream...)
+	return gg.inputStreams
 }
 
 func (gg *GroupGraph) JointTables() Edges {
@@ -38,7 +38,7 @@ func (gg *GroupGraph) LookupTables() Edges {
 	return gg.crossTables
 }
 
-func (gg *GroupGraph) getLoopStream() Edge {
+func (gg *GroupGraph) LoopStream() Edge {
 	// only 1 loop stream is valid
 	if len(gg.loopStream) > 0 {
 		return gg.loopStream[0]
@@ -55,7 +55,7 @@ func (gg *GroupGraph) GroupTable() Edge {
 }
 
 func (gg *GroupGraph) OutputStreams() Edges {
-	return append(gg.outputStreams, gg.loopStream...)
+	return gg.outputStreams
 }
 
 // inputs returns all input topics (tables and streams)

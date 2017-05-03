@@ -91,6 +91,17 @@ func (_mr *_MockClientRecorder) GetOffset(arg0, arg1, arg2 interface{}) *gomock.
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetOffset", arg0, arg1, arg2)
 }
 
+func (_m *MockClient) InSyncReplicas(_param0 string, _param1 int32) ([]int32, error) {
+	ret := _m.ctrl.Call(_m, "InSyncReplicas", _param0, _param1)
+	ret0, _ := ret[0].([]int32)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockClientRecorder) InSyncReplicas(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "InSyncReplicas", arg0, arg1)
+}
+
 func (_m *MockClient) Leader(_param0 string, _param1 int32) (*sarama.Broker, error) {
 	ret := _m.ctrl.Call(_m, "Leader", _param0, _param1)
 	ret0, _ := ret[0].(*sarama.Broker)

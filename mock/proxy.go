@@ -51,3 +51,11 @@ func (_m *MockkafkaProxy) AddGroup() {
 func (_mr *_MockkafkaProxyRecorder) AddGroup() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "AddGroup")
 }
+
+func (_m *MockkafkaProxy) Stop() {
+	_m.ctrl.Call(_m, "Stop")
+}
+
+func (_mr *_MockkafkaProxyRecorder) Stop() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "Stop")
+}
