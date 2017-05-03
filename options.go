@@ -352,14 +352,15 @@ func (opt *voptions) defaultStorageBuilder(topic string, partition int32, codec 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// producer options
+// emitter options
 ///////////////////////////////////////////////////////////////////////////////
 
-// ProducerOption defines a configuration option to be used when creating a producer
-type ProducerOption func(*proptions)
+// EmitterOption defines a configuration option to be used when creating an
+// emitter.
+type EmitterOption func(*eoptions)
 
-// producer options
-type proptions struct {
+// emitter options
+type eoptions struct {
 	clientID string
 
 	registry metrics.Registry
@@ -372,16 +373,16 @@ type proptions struct {
 	kafkaRegistry metrics.Registry
 }
 
-// WithProducerClientID defines the client ID used to identify with kafka.
-func WithProducerClientID(clientID string) ProducerOption {
-	return func(o *proptions) {
+// WithEmitterClientID defines the client ID used to identify with kafka.
+func WithEmitterClientID(clientID string) EmitterOption {
+	return func(o *eoptions) {
 		o.clientID = clientID
 	}
 }
 
-// WithProducerTopicManager defines a topic manager.
-func WithProducerTopicManager(tm kafka.TopicManager) ProducerOption {
-	return func(o *proptions) {
+// WithEmitterTopicManager defines a topic manager.
+func WithEmitterTopicManager(tm kafka.TopicManager) EmitterOption {
+	return func(o *eoptions) {
 		o.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
 			if tm == nil {
 				return nil, fmt.Errorf("TopicManager cannot be nil")
@@ -391,9 +392,9 @@ func WithProducerTopicManager(tm kafka.TopicManager) ProducerOption {
 	}
 }
 
-// WithProducerProducer replaces goka's default producer. Mainly for testing.
-func WithProducerProducer(p kafka.Producer) ProducerOption {
-	return func(o *proptions) {
+// WithEmitterProducer replaces goka's default producer. Mainly for testing.
+func WithEmitterProducer(p kafka.Producer) EmitterOption {
+	return func(o *eoptions) {
 		o.builders.producer = func(brokers []string, registry metrics.Registry) (kafka.Producer, error) {
 			if p == nil {
 				return nil, fmt.Errorf("producer cannot be nil")
@@ -403,16 +404,16 @@ func WithProducerProducer(p kafka.Producer) ProducerOption {
 	}
 }
 
-// WithProducerKafkaMetrics sets a go-metrics registry to collect
+// WithEmitterKafkaMetrics sets a go-metrics registry to collect
 // kafka metrics.
 // The metric-points are https://godoc.org/github.com/Shopify/sarama
-func WithProducerKafkaMetrics(registry metrics.Registry) ProducerOption {
-	return func(o *proptions) {
+func WithEmitterKafkaMetrics(registry metrics.Registry) EmitterOption {
+	return func(o *eoptions) {
 		o.kafkaRegistry = registry
 	}
 }
 
-func (opt *proptions) applyOptions(opts ...ProducerOption) error {
+func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
 	opt.clientID = defaultClientID
 
 	for _, o := range opts {
