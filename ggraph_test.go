@@ -100,7 +100,7 @@ func TestGroupGraph_getters(t *testing.T) {
 	ensure.True(t, g.Group() == "group")
 	ensure.True(t, len(g.InputStreams()) == 2)
 	ensure.True(t, len(g.OutputStreams()) == 3)
-	ensure.True(t, g.getLoopStream() == nil)
+	ensure.True(t, g.LoopStream() == nil)
 
 	g = DefineGroup("group",
 		Input("t1", c, cb),
@@ -110,10 +110,10 @@ func TestGroupGraph_getters(t *testing.T) {
 		Output("t5", c),
 		Loop(c, cb),
 	)
-	ensure.True(t, len(g.InputStreams()) == 3)
-	ensure.True(t, len(g.OutputStreams()) == 4)
+	ensure.True(t, len(g.InputStreams()) == 2)
+	ensure.True(t, len(g.OutputStreams()) == 3)
 	ensure.True(t, g.GroupTable() == nil)
-	ensure.True(t, g.getLoopStream().Topic() == loopName("group"))
+	ensure.True(t, g.LoopStream().Topic() == loopName("group"))
 
 	g = DefineGroup("group",
 		Input("t1", c, cb),
@@ -130,8 +130,8 @@ func TestGroupGraph_getters(t *testing.T) {
 		Lookup("b2", c),
 		Persist(c),
 	)
-	ensure.True(t, len(g.InputStreams()) == 3)
-	ensure.True(t, len(g.OutputStreams()) == 4)
+	ensure.True(t, len(g.InputStreams()) == 2)
+	ensure.True(t, len(g.OutputStreams()) == 3)
 	ensure.True(t, len(g.JointTables()) == 4)
 	ensure.True(t, len(g.LookupTables()) == 2)
 	ensure.True(t, g.GroupTable().Topic() == GroupTable("group"))

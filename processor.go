@@ -146,7 +146,7 @@ func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, 
 	}
 
 	// TODO(diogo): add output topics
-	if ls := gg.getLoopStream(); ls != nil {
+	if ls := gg.LoopStream(); ls != nil {
 		ensureStreams := []string{ls.Topic()}
 		for _, t := range ensureStreams {
 			if err = tm.EnsureStreamExists(t, npar); err != nil {
@@ -289,6 +289,9 @@ func (g *Processor) Start() error {
 	topics := make(map[string]int64)
 	for _, e := range g.graph.InputStreams() {
 		topics[e.Topic()] = -1
+	}
+	if lt := g.graph.LoopStream(); lt != nil {
+		topics[lt.Topic()] = -1
 	}
 	if err := g.consumer.Subscribe(topics); err != nil {
 		g.errors.collect(fmt.Errorf("error subscribing topics: %v", err))

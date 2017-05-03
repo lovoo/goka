@@ -328,7 +328,7 @@ func TestContext_Loopback(t *testing.T) {
 		msg:   new(message),
 		emitter: func(tp string, k string, v []byte) *kafka.Promise {
 			cnt++
-			ensure.DeepEqual(t, tp, graph.getLoopStream().Topic())
+			ensure.DeepEqual(t, tp, graph.LoopStream().Topic())
 			ensure.DeepEqual(t, string(k), key)
 			ensure.DeepEqual(t, string(v), value)
 			return kafka.NewPromise()

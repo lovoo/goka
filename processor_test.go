@@ -241,7 +241,7 @@ func TestNewProcessor(t *testing.T) {
 	)
 	ensure.Nil(t, err)
 	ensure.True(t, p.graph.GroupTable().Topic() == GroupTable(group))
-	ensure.True(t, p.graph.getLoopStream().Topic() == loopName(group))
+	ensure.True(t, p.graph.LoopStream().Topic() == loopName(group))
 	ensure.True(t, p.partitionCount == 2)
 	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.False(t, p.isStateless())
@@ -261,7 +261,7 @@ func TestNewProcessor(t *testing.T) {
 	)
 	ensure.Nil(t, err)
 	ensure.True(t, p.graph.GroupTable() == nil)
-	ensure.True(t, p.graph.getLoopStream() == nil)
+	ensure.True(t, p.graph.LoopStream() == nil)
 	ensure.True(t, p.partitionCount == 2)
 	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.True(t, p.isStateless())
@@ -281,7 +281,7 @@ func TestNewProcessor(t *testing.T) {
 	)
 	ensure.Nil(t, err)
 	ensure.True(t, p.graph.GroupTable() == nil)
-	ensure.True(t, p.graph.getLoopStream() == nil)
+	ensure.True(t, p.graph.LoopStream() == nil)
 	ensure.True(t, p.partitionCount == 2)
 	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.True(t, p.isStateless())
@@ -324,10 +324,11 @@ func TestProcessor_StartStopEmpty(t *testing.T) {
 	}()
 
 	consumer.EXPECT().Close().Return(nil).Do(func() { close(ch) })
-	doTimed(t, func() {
+	err := doTimed(t, func() {
 		p.Stop()
 		<-wait
 	})
+	ensure.Nil(t, err)
 }
 
 func TestProcessor_StartStopEmptyError(t *testing.T) {
