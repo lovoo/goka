@@ -19,7 +19,7 @@ type GroupGraph struct {
 	groupTable    []Edge
 
 	codecs    map[string]Codec
-	callbacks map[string]ConsumeCallback
+	callbacks map[string]ProcessCallback
 }
 
 func (gg *GroupGraph) Group() Group {
@@ -67,7 +67,7 @@ func (gg *GroupGraph) codec(topic string) Codec {
 	return gg.codecs[topic]
 }
 
-func (gg *GroupGraph) callback(topic string) ConsumeCallback {
+func (gg *GroupGraph) callback(topic string) ProcessCallback {
 	return gg.callbacks[topic]
 }
 
@@ -83,7 +83,7 @@ func (gg *GroupGraph) joint(topic string) bool {
 func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 	gg := GroupGraph{group: string(group),
 		codecs:    make(map[string]Codec),
-		callbacks: make(map[string]ConsumeCallback),
+		callbacks: make(map[string]ProcessCallback),
 	}
 
 	for _, e := range edges {
@@ -172,20 +172,20 @@ func (t *topicDef) Codec() Codec {
 
 type inputStream struct {
 	*topicDef
-	cb ConsumeCallback
+	cb ProcessCallback
 }
 
 // Stream returns a subscription for a co-partitioned topic. The processor
 // subscribing for a stream topic will start reading from the newest offset of
 // the partition.
-func Input(topic Stream, c Codec, cb ConsumeCallback) Edge {
+func Input(topic Stream, c Codec, cb ProcessCallback) Edge {
 	return &inputStream{&topicDef{string(topic), c}, cb}
 }
 
 type loopStream inputStream
 
 // Loop defines a consume callback on the loop topic
-func Loop(c Codec, cb ConsumeCallback) Edge {
+func Loop(c Codec, cb ProcessCallback) Edge {
 	return &loopStream{&topicDef{codec: c}, cb}
 }
 

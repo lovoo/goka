@@ -47,9 +47,9 @@ type message struct {
 	Offset    int64
 }
 
-// ConsumeCallback function is called for every message received by the
+// ProcessCallback function is called for every message received by the
 // processor.
-type ConsumeCallback func(ctx Context, msg interface{})
+type ProcessCallback func(ctx Context, msg interface{})
 
 // NewProcessor creates a processor instance in a group given the address of
 // Kafka brokers, the consumer group name, a list of subscriptions (topics,
