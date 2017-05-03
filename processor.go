@@ -47,9 +47,9 @@ type message struct {
 	Offset    int64
 }
 
-// ConsumeCallback function is called for every message received by the
+// ProcessCallback function is called for every message received by the
 // processor.
-type ConsumeCallback func(ctx Context, msg interface{})
+type ProcessCallback func(ctx Context, msg interface{})
 
 // NewProcessor creates a processor instance in a group given the address of
 // Kafka brokers, the consumer group name, a list of subscriptions (topics,
@@ -72,7 +72,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	}
 
 	opts := new(poptions)
-	err := opts.applyOptions(gg.Group(), options...)
+	err := opts.applyOptions(string(gg.Group()), options...)
 	if err != nil {
 		return nil, fmt.Errorf(errApplyOptions, err)
 	}
@@ -83,7 +83,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	}
 
 	// create kafka consumer
-	consumer, err := opts.builders.consumer(brokers, gg.Group(), opts.kafkaRegistry)
+	consumer, err := opts.builders.consumer(brokers, string(gg.Group()), opts.kafkaRegistry)
 	if err != nil {
 		return nil, fmt.Errorf(errBuildConsumer, err)
 	}
@@ -97,8 +97,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	// create views
 	views := make(map[string]*View)
 	for _, t := range gg.LookupTables() {
-		// TODO(diogo) use options from graph if available
-		view, err := NewView(brokers, t.Topic(), t.Codec())
+		view, err := NewView(brokers, Table(t.Topic()), t.Codec())
 		if err != nil {
 			return nil, fmt.Errorf("error creating view: %v", err)
 		}

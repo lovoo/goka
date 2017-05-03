@@ -16,7 +16,7 @@ import (
 // with the input message.
 type Context interface {
 	// Topic returns the topic of input message.
-	Topic() string
+	Topic() Stream
 
 	// Key returns the key of the input message.
 	Key() string
@@ -28,13 +28,13 @@ type Context interface {
 	SetValue(value interface{})
 
 	// Join returns the value of key in the copartitioned table.
-	Join(table string) interface{}
+	Join(topic Table) interface{}
 
 	// Lookup returns the value of key in the view of table.
-	Lookup(table string, key string) interface{}
+	Lookup(topic Table, key string) interface{}
 
 	// Emit asynchronously writes a message into a topic.
-	Emit(topic string, key string, value interface{})
+	Emit(topic Stream, key string, value interface{})
 
 	// Loopback asynchronously sends a message to another key of the group
 	// table. Value passed to loopback is encoded via the codec given in the
@@ -70,17 +70,17 @@ type context struct {
 }
 
 // Emit sends a message asynchronously to a topic.
-func (ctx *context) Emit(topic string, key string, value interface{}) {
+func (ctx *context) Emit(topic Stream, key string, value interface{}) {
 	if topic == "" {
 		ctx.Fail(errors.New("Cannot emit to empty topic"))
 	}
-	if loopName(ctx.graph.Group()) == topic {
+	if loopName(ctx.graph.Group()) == string(topic) {
 		ctx.Fail(errors.New("Cannot emit to loop topic, use Loopback() instead."))
 	}
-	if GroupTable(ctx.graph.Group()) == topic {
+	if tableName(ctx.graph.Group()) == string(topic) {
 		ctx.Fail(errors.New("Cannot emit to table topic, use SetValue() instead."))
 	}
-	c := ctx.graph.codec(topic)
+	c := ctx.graph.codec(string(topic))
 	if c == nil {
 		ctx.Fail(fmt.Errorf("no codec for topic %s", topic))
 	}
@@ -89,7 +89,7 @@ func (ctx *context) Emit(topic string, key string, value interface{}) {
 		ctx.Fail(fmt.Errorf("error encoding message for topic %s: %v", topic, err))
 	}
 
-	ctx.emit(topic, key, data)
+	ctx.emit(string(topic), key, data)
 }
 
 // Loopback sends a message to another key of the processor.
@@ -137,36 +137,36 @@ func (ctx *context) Key() string {
 	return string(ctx.msg.Key)
 }
 
-func (ctx *context) Topic() string {
-	return string(ctx.msg.Topic)
+func (ctx *context) Topic() Stream {
+	return Stream(ctx.msg.Topic)
 }
 
-func (ctx *context) Join(table string) interface{} {
+func (ctx *context) Join(topic Table) interface{} {
 	if ctx.pviews == nil {
-		ctx.Fail(fmt.Errorf("table %s not subscribed", table))
+		ctx.Fail(fmt.Errorf("table %s not subscribed", topic))
 	}
-	v, ok := ctx.pviews[table]
+	v, ok := ctx.pviews[string(topic)]
 	if !ok {
-		ctx.Fail(fmt.Errorf("table %s not subscribed", table))
+		ctx.Fail(fmt.Errorf("table %s not subscribed", topic))
 	}
 	val, err := v.st.Get(ctx.Key())
 	if err != nil {
-		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", ctx.Key(), table, err))
+		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", ctx.Key(), topic, err))
 	}
 	return val
 }
 
-func (ctx *context) Lookup(table string, key string) interface{} {
+func (ctx *context) Lookup(topic Table, key string) interface{} {
 	if ctx.views == nil {
-		ctx.Fail(fmt.Errorf("table %s not subscribed", table))
+		ctx.Fail(fmt.Errorf("topic %s not subscribed", topic))
 	}
-	v, ok := ctx.views[table]
+	v, ok := ctx.views[string(topic)]
 	if !ok {
-		ctx.Fail(fmt.Errorf("table %s not subscribed", table))
+		ctx.Fail(fmt.Errorf("topic %s not subscribed", topic))
 	}
 	val, err := v.Get(key)
 	if err != nil {
-		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", key, table, err))
+		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", key, topic, err))
 	}
 	return val
 }

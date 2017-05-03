@@ -81,7 +81,7 @@ func createProcessor(ctrl *gomock.Controller, consumer kafka.Consumer, npar int,
 	tm.EXPECT().Partitions(topic).Return(partitions, nil)
 	tm.EXPECT().Partitions(topic2).Return(partitions, nil)
 	tm.EXPECT().EnsureStreamExists(loopName(group), len(partitions)).Return(nil)
-	tm.EXPECT().EnsureTableExists(GroupTable(group), len(partitions)).Return(nil)
+	tm.EXPECT().EnsureTableExists(tableName(group), len(partitions)).Return(nil)
 	tm.EXPECT().Close().Return(nil)
 	p, _ := NewProcessor(nil,
 		DefineGroup(group,
@@ -113,7 +113,7 @@ func createProcessorWithTable(ctrl *gomock.Controller, consumer kafka.Consumer, 
 	tm.EXPECT().Partitions(topic2).Return(partitions, nil)
 	tm.EXPECT().Partitions(table).Return(partitions, nil)
 	tm.EXPECT().EnsureStreamExists(loopName(group), len(partitions)).Return(nil)
-	tm.EXPECT().EnsureTableExists(GroupTable(group), len(partitions)).Return(nil)
+	tm.EXPECT().EnsureTableExists(tableName(group), len(partitions)).Return(nil)
 	tm.EXPECT().Close().Return(nil)
 	p, _ := NewProcessor(nil,
 		DefineGroup(group,
@@ -138,13 +138,13 @@ var (
 		loopName(group): -1,
 		topic2:          -1,
 	}
+	errSome = errors.New("some error")
+	cb      = func(ctx Context, msg interface{}) {}
 )
 
-var (
-	errSome = errors.New("some error")
-	topic2  = "topic2"
-	table   = "table"
-	cb      = func(ctx Context, msg interface{}) {}
+const (
+	topic2 = "topic2"
+	table  = "table"
 )
 
 func TestProcessor_process(t *testing.T) {
@@ -224,9 +224,9 @@ func TestNewProcessor(t *testing.T) {
 
 	// successfully create processor
 	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	tm.EXPECT().Partitions(topic2).Return([]int32{0, 1}, nil)
+	tm.EXPECT().Partitions(string(topic2)).Return([]int32{0, 1}, nil)
 	tm.EXPECT().EnsureStreamExists(loopName(group), 2).Return(nil)
-	tm.EXPECT().EnsureTableExists(GroupTable(group), 2).Return(nil)
+	tm.EXPECT().EnsureTableExists(tableName(group), 2).Return(nil)
 	tm.EXPECT().Close().Return(nil)
 	p, err := NewProcessor(nil,
 		DefineGroup(group,
@@ -240,15 +240,15 @@ func TestNewProcessor(t *testing.T) {
 		WithProducer(producer),
 	)
 	ensure.Nil(t, err)
-	ensure.True(t, p.graph.GroupTable().Topic() == GroupTable(group))
-	ensure.True(t, p.graph.LoopStream().Topic() == loopName(group))
+	ensure.DeepEqual(t, p.graph.GroupTable().Topic(), tableName(group))
+	ensure.DeepEqual(t, p.graph.LoopStream().Topic(), loopName(group))
 	ensure.True(t, p.partitionCount == 2)
 	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.False(t, p.isStateless())
 
 	// successfully create stateless processor
 	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	tm.EXPECT().Partitions(topic2).Return([]int32{0, 1}, nil)
+	tm.EXPECT().Partitions(string(topic2)).Return([]int32{0, 1}, nil)
 	tm.EXPECT().Close().Return(nil)
 	p, err = NewProcessor(nil,
 		DefineGroup(group,
@@ -438,9 +438,9 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 	// 2. rebalance
 	st.EXPECT().Open().Times(3)
 	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(3)
-	consumer.EXPECT().AddPartition(GroupTable(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(GroupTable(group), int32(1), int64(123))
-	consumer.EXPECT().AddPartition(GroupTable(group), int32(2), int64(123))
+	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
+	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
+	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
 	// 3. message
 	gomock.InOrder(
 		st.EXPECT().SetEncoded("key", nil).Return(nil),
@@ -450,9 +450,9 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 
 	// 4. error
 	consumer.EXPECT().Close().Do(func() { close(ch) })
-	consumer.EXPECT().RemovePartition(GroupTable(group), int32(0))
-	consumer.EXPECT().RemovePartition(GroupTable(group), int32(1))
-	consumer.EXPECT().RemovePartition(GroupTable(group), int32(2))
+	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
+	consumer.EXPECT().RemovePartition(tableName(group), int32(1))
+	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
 	st.EXPECT().Sync().Times(3)
 	st.EXPECT().Close().Times(3)
 
@@ -473,7 +473,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 
 	// 3. message
 	ch <- &kafka.Message{
-		Topic:     GroupTable(group),
+		Topic:     tableName(group),
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
@@ -515,16 +515,16 @@ func TestProcessor_Start(t *testing.T) {
 	// 2. rebalance
 	st.EXPECT().Open().Times(3)
 	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(3)
-	consumer.EXPECT().AddPartition(GroupTable(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(GroupTable(group), int32(1), int64(123))
-	consumer.EXPECT().AddPartition(GroupTable(group), int32(2), int64(123))
+	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
+	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
+	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
 	// 3. load message partition 1
 	st.EXPECT().SetEncoded("key", nil).Return(nil)
 	st.EXPECT().SetOffset(int64(1))
 	st.EXPECT().Sync()
 	// 4. end of recovery partition 1
 	gomock.InOrder(
-		consumer.EXPECT().RemovePartition(GroupTable(group), int32(1)),
+		consumer.EXPECT().RemovePartition(tableName(group), int32(1)),
 		consumer.EXPECT().AddGroupPartition(int32(1)),
 	)
 	// 5. process message partition 1
@@ -533,12 +533,12 @@ func TestProcessor_Start(t *testing.T) {
 	// 6. new assignment remove partition 1 and 2
 	st.EXPECT().Sync()  // partition 1 final sync
 	st.EXPECT().Close() // partition 1 close
-	consumer.EXPECT().RemovePartition(GroupTable(group), int32(2))
+	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
 	st.EXPECT().Sync()  // partition 2 final sync
 	st.EXPECT().Close() // partition 2 close
 	// 7. stop processor
 	consumer.EXPECT().Close().Do(func() { close(ch) })
-	consumer.EXPECT().RemovePartition(GroupTable(group), int32(0))
+	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
 	st.EXPECT().Sync()
 	st.EXPECT().Close()
 
@@ -559,7 +559,7 @@ func TestProcessor_Start(t *testing.T) {
 
 	// 3. load message partition 1
 	ch <- &kafka.Message{
-		Topic:     GroupTable(group),
+		Topic:     tableName(group),
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
@@ -666,9 +666,9 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	// 2. rebalance
 	st.EXPECT().Open().Times(6)
 	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(6)
-	consumer.EXPECT().AddPartition(GroupTable(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(GroupTable(group), int32(1), int64(123))
-	consumer.EXPECT().AddPartition(GroupTable(group), int32(2), int64(123))
+	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
+	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
+	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
 	consumer.EXPECT().AddPartition(table, int32(0), int64(123))
 	consumer.EXPECT().AddPartition(table, int32(1), int64(123))
 	consumer.EXPECT().AddPartition(table, int32(2), int64(123))
@@ -678,7 +678,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	st.EXPECT().Sync()
 	// 4. finish recovery of partition 1
 	gomock.InOrder(
-		consumer.EXPECT().RemovePartition(GroupTable(group), int32(1)),
+		consumer.EXPECT().RemovePartition(tableName(group), int32(1)),
 		consumer.EXPECT().AddGroupPartition(int32(1)),
 	)
 	// 5. process messages in partition 1
@@ -691,11 +691,11 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	st.EXPECT().Close().Times(4) // close group and other table partitions
 	consumer.EXPECT().RemovePartition(table, int32(1))
 	consumer.EXPECT().RemovePartition(table, int32(2))
-	consumer.EXPECT().RemovePartition(GroupTable(group), int32(2))
+	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
 	// 7. stop processor
 	consumer.EXPECT().Close().Do(func() { close(ch) })
 	consumer.EXPECT().RemovePartition(table, int32(0))
-	consumer.EXPECT().RemovePartition(GroupTable(group), int32(0))
+	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
 	st.EXPECT().Sync().Times(2)  // final sync
 	st.EXPECT().Close().Times(2) // close group table and other table
 	producer.EXPECT().Close().Return(nil)
@@ -716,7 +716,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 
 	// 3. message to group table
 	ch <- &kafka.Message{
-		Topic:     GroupTable(group),
+		Topic:     tableName(group),
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
@@ -833,7 +833,7 @@ func TestProcessor_HasGet(t *testing.T) {
 	gomock.InOrder(
 		st.EXPECT().Open(),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil),
-		consumer.EXPECT().AddPartition(GroupTable(group), int32(0), int64(123)),
+		consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123)),
 	)
 	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1})
 	ch <- new(kafka.NOP)
@@ -851,7 +851,7 @@ func TestProcessor_HasGet(t *testing.T) {
 	gomock.InOrder(
 		consumer.EXPECT().Close().Do(func() { close(ch) }),
 		st.EXPECT().Sync(),
-		consumer.EXPECT().RemovePartition(GroupTable(group), int32(0)),
+		consumer.EXPECT().RemovePartition(tableName(group), int32(0)),
 		st.EXPECT().Close(),
 	)
 
@@ -911,9 +911,11 @@ func TestProcessor_HasGetStateless(t *testing.T) {
 // goroutine will be created. Topics should be co-partitioned (they should have
 // the same number of partitions and be partitioned by the same key).
 func ExampleProcessor_simplest() {
-	brokers := []string{"127.0.0.1:9092"}
-	group := "group"
-	topic := "topic"
+	var (
+		brokers        = []string{"127.0.0.1:9092"}
+		group   Group  = "group"
+		topic   Stream = "topic"
+	)
 
 	consume := func(ctx Context, m interface{}) {
 		fmt.Printf("Hello world: %v", m)

@@ -5,9 +5,9 @@ import (
 	"fmt"
 )
 
-//type Stream string
-//type Table string
-//type Group string
+type Stream string
+type Table string
+type Group string
 
 type GroupGraph struct {
 	group         string
@@ -19,11 +19,11 @@ type GroupGraph struct {
 	groupTable    []Edge
 
 	codecs    map[string]Codec
-	callbacks map[string]ConsumeCallback
+	callbacks map[string]ProcessCallback
 }
 
-func (gg *GroupGraph) Group() string {
-	return gg.group
+func (gg *GroupGraph) Group() Group {
+	return Group(gg.group)
 }
 
 func (gg *GroupGraph) InputStreams() Edges {
@@ -67,7 +67,7 @@ func (gg *GroupGraph) codec(topic string) Codec {
 	return gg.codecs[topic]
 }
 
-func (gg *GroupGraph) callback(topic string) ConsumeCallback {
+func (gg *GroupGraph) callback(topic string) ProcessCallback {
 	return gg.callbacks[topic]
 }
 
@@ -80,10 +80,10 @@ func (gg *GroupGraph) joint(topic string) bool {
 	return false
 }
 
-func DefineGroup(group string, edges ...Edge) *GroupGraph {
-	gg := GroupGraph{group: group,
+func DefineGroup(group Group, edges ...Edge) *GroupGraph {
+	gg := GroupGraph{group: string(group),
 		codecs:    make(map[string]Codec),
-		callbacks: make(map[string]ConsumeCallback),
+		callbacks: make(map[string]ProcessCallback),
 	}
 
 	for _, e := range edges {
@@ -127,10 +127,10 @@ func (gg *GroupGraph) Validate() error {
 	}
 	for _, t := range append(gg.outputStreams,
 		append(gg.inputStreams, append(gg.inputTables, gg.crossTables...)...)...) {
-		if t.Topic() == loopName(gg.group) {
+		if t.Topic() == loopName(gg.Group()) {
 			return errors.New("should not directly use loop stream")
 		}
-		if t.Topic() == GroupTable(gg.group) {
+		if t.Topic() == tableName(gg.Group()) {
 			return errors.New("should not directly use group table")
 		}
 	}
@@ -172,25 +172,25 @@ func (t *topicDef) Codec() Codec {
 
 type inputStream struct {
 	*topicDef
-	cb ConsumeCallback
+	cb ProcessCallback
 }
 
 // Stream returns a subscription for a co-partitioned topic. The processor
 // subscribing for a stream topic will start reading from the newest offset of
 // the partition.
-func Input(stream string, c Codec, cb ConsumeCallback) Edge {
-	return &inputStream{&topicDef{stream, c}, cb}
+func Input(topic Stream, c Codec, cb ProcessCallback) Edge {
+	return &inputStream{&topicDef{string(topic), c}, cb}
 }
 
 type loopStream inputStream
 
 // Loop defines a consume callback on the loop topic
-func Loop(c Codec, cb ConsumeCallback) Edge {
+func Loop(c Codec, cb ProcessCallback) Edge {
 	return &loopStream{&topicDef{codec: c}, cb}
 }
 
-func (s *loopStream) setGroup(group string) {
-	s.topicDef.name = loopName(group)
+func (s *loopStream) setGroup(group Group) {
+	s.topicDef.name = string(loopName(group))
 }
 
 type inputTable struct {
@@ -200,16 +200,16 @@ type inputTable struct {
 // Table is one or more co-partitioned, log-compacted topic. The processor
 // subscribing for a table topic will start reading from the oldest offset
 // of the partition.
-func Join(table string, c Codec) Edge {
-	return &inputTable{&topicDef{table, c}}
+func Join(topic Table, c Codec) Edge {
+	return &inputTable{&topicDef{string(topic), c}}
 }
 
 type crossTable struct {
 	*topicDef
 }
 
-func Lookup(table string, c Codec) Edge {
-	return &crossTable{&topicDef{table, c}}
+func Lookup(topic Table, c Codec) Edge {
+	return &crossTable{&topicDef{string(topic), c}}
 }
 
 type groupTable struct {
@@ -220,24 +220,28 @@ func Persist(c Codec) Edge {
 	return &groupTable{&topicDef{codec: c}}
 }
 
-func (t *groupTable) setGroup(group string) {
-	t.topicDef.name = GroupTable(group)
+func (t *groupTable) setGroup(group Group) {
+	t.topicDef.name = string(GroupTable(group))
 }
 
 type outputStream struct {
 	*topicDef
 }
 
-func Output(stream string, c Codec) Edge {
-	return &outputStream{&topicDef{stream, c}}
+func Output(topic Stream, c Codec) Edge {
+	return &outputStream{&topicDef{string(topic), c}}
 }
 
 // GroupTable returns the name of the group table of group.
-func GroupTable(group string) string {
-	return group + "-state"
+func GroupTable(group Group) Table {
+	return Table(tableName(group))
+}
+
+func tableName(group Group) string {
+	return string(group) + "-state"
 }
 
 // loopName returns the name of the loop topic of group.
-func loopName(group string) string {
-	return group + "-loop"
+func loopName(group Group) string {
+	return string(group) + "-loop"
 }
