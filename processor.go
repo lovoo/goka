@@ -397,6 +397,7 @@ func (g *Processor) run() {
 }
 
 func (g *Processor) fail(err error) {
+	log.Printf("failing: %v", err)
 	g.errors.collect(err)
 	go g.stop()
 }
