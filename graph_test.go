@@ -2,6 +2,7 @@ package goka
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/facebookgo/ensure"
@@ -75,18 +76,27 @@ func TestGroupGraph_Validate(t *testing.T) {
 
 func TestGroupGraph_codec(t *testing.T) {
 	g := DefineGroup("group",
-		Input("input-topic", c, cb))
+		Input("input-topic", c, cb),
+		Inputs(Streams{"input-topic2", "input-topic3"}, c, cb),
+	)
 
-	codec := g.codec("input-topic")
-	ensure.DeepEqual(t, codec, c)
+	for _, topic := range []string{"input-topic", "input-topic2", "input-topic3"} {
+		codec := g.codec(topic)
+		ensure.DeepEqual(t, codec, c)
+	}
+
 }
 
 func TestGroupGraph_callback(t *testing.T) {
 	g := DefineGroup("group",
-		Input("input-topic", c, cb))
+		Input("input-topic", c, cb),
+		Inputs(Streams{"input-topic2", "input-topic3"}, c, cb),
+	)
 
-	callback := g.callback("input-topic")
-	ensure.True(t, reflect.ValueOf(callback).Pointer() == reflect.ValueOf(cb).Pointer())
+	for _, topic := range []string{"input-topic", "input-topic2", "input-topic3"} {
+		callback := g.callback(topic)
+		ensure.True(t, reflect.ValueOf(callback).Pointer() == reflect.ValueOf(cb).Pointer())
+	}
 }
 
 func TestGroupGraph_getters(t *testing.T) {
@@ -96,9 +106,10 @@ func TestGroupGraph_getters(t *testing.T) {
 		Output("t3", c),
 		Output("t4", c),
 		Output("t5", c),
+		Inputs(Streams{"t6", "t7"}, c, cb),
 	)
 	ensure.True(t, g.Group() == "group")
-	ensure.True(t, len(g.InputStreams()) == 2)
+	ensure.True(t, len(g.InputStreams()) == 4)
 	ensure.True(t, len(g.OutputStreams()) == 3)
 	ensure.True(t, g.LoopStream() == nil)
 
@@ -135,4 +146,11 @@ func TestGroupGraph_getters(t *testing.T) {
 	ensure.True(t, len(g.JointTables()) == 4)
 	ensure.True(t, len(g.LookupTables()) == 2)
 	ensure.DeepEqual(t, g.GroupTable().Topic(), tableName("group"))
+}
+
+func TestGroupGraph_Inputs(t *testing.T) {
+
+	topics := Inputs(Streams{"a", "b", "c"}, c, cb)
+	ensure.DeepEqual(t, topics.Topic(), "a,b,c")
+	ensure.True(t, strings.Contains(topics.String(), "a,b,c/*codec.String"))
 }

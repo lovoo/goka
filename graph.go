@@ -3,9 +3,11 @@ package goka
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type Stream string
+type Streams []Stream
 type Table string
 type Group string
 
@@ -88,6 +90,13 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 
 	for _, e := range edges {
 		switch e := e.(type) {
+		case inputStreams:
+			for _, input := range e {
+				inputStr := input.(*inputStream)
+				gg.codecs[input.Topic()] = input.Codec()
+				gg.callbacks[input.Topic()] = inputStr.cb
+				gg.inputStreams = append(gg.inputStreams, inputStr)
+			}
 		case *inputStream:
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.callbacks[e.Topic()] = e.cb
@@ -180,6 +189,48 @@ type inputStream struct {
 // the partition.
 func Input(topic Stream, c Codec, cb ProcessCallback) Edge {
 	return &inputStream{&topicDef{string(topic), c}, cb}
+}
+
+type inputStreams Edges
+
+func (is inputStreams) String() string {
+	if is == nil {
+		return "empty input streams"
+	}
+
+	return fmt.Sprintf("input streams: %s/%T", is.Topic(), is.Codec())
+}
+
+func (is inputStreams) Topic() string {
+	if is == nil {
+		return ""
+	}
+	var topics []string
+
+	for _, stream := range is {
+		topics = append(topics, stream.Topic())
+	}
+	return strings.Join(topics, ",")
+}
+
+func (is inputStreams) Codec() Codec {
+	if is == nil {
+		return nil
+	}
+	return is[0].Codec()
+}
+
+// Inputs creates Edges for multiple input streams sharing the same
+// codec and callback.
+func Inputs(topics Streams, c Codec, cb ProcessCallback) Edge {
+	if len(topics) == 0 {
+		return nil
+	}
+	var edges Edges
+	for _, topic := range topics {
+		edges = append(edges, Input(topic, c, cb))
+	}
+	return inputStreams(edges)
 }
 
 type loopStream inputStream
