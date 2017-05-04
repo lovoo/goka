@@ -231,7 +231,7 @@ func (km *KafkaMock) ReplaceEmitHandler(emitter EmitHandler) {
 // ExpectEmit ensures a message exists in passed topic and key. The message may be
 // inspected/unmarshalled by a passed expecter function.
 func (km *KafkaMock) ExpectEmit(topic string, key string, expecter func(value []byte)) {
-	for i := len(km.emitted) - 1; i >= 0; i-- {
+	for i := 0; i < len(km.emitted); i++ {
 		msg := km.emitted[i]
 		if msg.Topic != topic || msg.Key != key {
 			continue
@@ -246,6 +246,15 @@ func (km *KafkaMock) ExpectEmit(topic string, key string, expecter func(value []
 	}
 
 	km.t.Errorf("Expected emit for key %s in topic %s was not present.", key, topic)
+}
+
+// ExpectAllEmitted calls passed expected-emit-handler function for all emitted values and clears the
+// emitted values
+func (km *KafkaMock) ExpectAllEmitted(handler func(topic string, key string, value []byte)) {
+	for _, emitted := range km.emitted {
+		handler(emitted.Topic, emitted.Key, emitted.Value)
+	}
+	km.emitted = make([]*kafka.Message, 0)
 }
 
 // Finish marks the kafkamock that there is no emit to be expected.
