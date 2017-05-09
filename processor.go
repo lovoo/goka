@@ -445,6 +445,18 @@ func (g *Processor) Stop() {
 // partition management (rebalance)
 ///////////////////////////////////////////////////////////////////////////////
 
+func (g *Processor) newJoinStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
+	st, err := g.opts.builders.storage(topic, id, codec, reg)
+	if err != nil {
+		return nil, err
+	}
+	return &storageProxy{
+		Storage:   st,
+		partition: id,
+		update:    update,
+	}, nil
+}
+
 func (g *Processor) newStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
 	if g.isStateless() {
 		return &storageProxy{
@@ -480,7 +492,7 @@ func (g *Processor) createPartitionViews(id int32) error {
 		reg := metrics.NewPrefixedChildRegistry(g.opts.gokaRegistry,
 			fmt.Sprintf("%s.%d.", t.Topic(), id))
 
-		st, err := g.newStorage(t.Topic(), id, t.Codec(), DefaultUpdate, reg)
+		st, err := g.newJoinStorage(t.Topic(), id, t.Codec(), DefaultUpdate, reg)
 		if err != nil {
 			return fmt.Errorf("processor: error creating storage: %v", err)
 		}
