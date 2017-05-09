@@ -496,14 +496,14 @@ func (g *Processor) createPartitionViews(id int32) error {
 			defer func() {
 				if err := recover(); err != nil {
 					log.Printf("partition view %s/%d: panic", par.topic, pid)
-					g.errors.collect(fmt.Errorf("panic partition view %s/%d: %v\nstack:%v",
+					g.fail(fmt.Errorf("panic partition view %s/%d: %v\nstack:%v",
 						par.topic, pid, err, string(debug.Stack())))
 				}
 			}()
 
 			err := par.startCatchup()
 			if err != nil {
-				g.errors.collect(fmt.Errorf("error in partition view %s/%d: %v", par.topic, pid, err))
+				g.fail(fmt.Errorf("error in partition view %s/%d: %v", par.topic, pid, err))
 			}
 			log.Printf("partition view %s/%d: exit", par.topic, pid)
 		}(p, id)
