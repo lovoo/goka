@@ -17,32 +17,17 @@ var (
 	group   goka.Group  = "mini-group"
 )
 
-// type clickCodec struct{}
-//
-// func (jc *clickCodec) Encode(value interface{}) ([]byte, error) {
-// 	if _, isClick := value.(*click); !isClick {
-// 		return nil, fmt.Errorf("Codec requires value *click, got %T", value)
-// 	}
-// 	return json.Marshal(value)
-// }
-//
-// func (jc *clickCodec) Decode(data []byte) (interface{}, error) {
-// 	var (
-// 		c   click
-// 		err error
-// 	)
-// 	err = json.Unmarshal(data, &c)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("Error unmarshaling click: %v", err)
-// 	}
-// 	return &c, nil
-// }
-//
-// type click struct {
-// }
+// A user is the object that is stored in the processor's group table
+type user struct {
+	// number of clicks the user has performed.
+	Clicks int
+}
 
+// This codec allows marshalling (encode) and unmarshalling (decode) the user to and from the
+// group table.
 type userCodec struct{}
 
+// Encodes a user into []byte
 func (jc *userCodec) Encode(value interface{}) ([]byte, error) {
 	if _, isUser := value.(*user); !isUser {
 		return nil, fmt.Errorf("Codec requires value *user, got %T", value)
@@ -50,6 +35,7 @@ func (jc *userCodec) Encode(value interface{}) ([]byte, error) {
 	return json.Marshal(value)
 }
 
+// Decodes a user from []byte to it's go representation.
 func (jc *userCodec) Decode(data []byte) (interface{}, error) {
 	var (
 		c   user
@@ -60,10 +46,6 @@ func (jc *userCodec) Decode(data []byte) (interface{}, error) {
 		return nil, fmt.Errorf("Error unmarshaling user: %v", err)
 	}
 	return &c, nil
-}
-
-type user struct {
-	Clicks int
 }
 
 func runEmitter() {
