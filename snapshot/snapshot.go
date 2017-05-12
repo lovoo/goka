@@ -153,6 +153,9 @@ func (s *Snapshot) Flush(flushDone func() error) error {
 }
 
 func (s *Snapshot) swap() error {
+	// acquire lock to isolate snapshotting from concurrent Get() calls
+	s.m.Lock()
+	defer s.m.Unlock()
 	s.stable = s.current
 	s.current = newEntriesSnapshot()
 	for key, elem := range s.stable.entries {
