@@ -176,6 +176,11 @@ func (km *KafkaMock) ConsumeString(topic string, key string, msg string) {
 	km.makeCalls()
 }
 
+func (km *KafkaMock) Consume(topic string, key string, msg []byte) {
+	km.consumeData(topic, key, msg)
+	km.makeCalls()
+}
+
 // Helper function consuming marshalled data. This function is used by ConsumeProto by the test case
 // as well as any emit calls of the processor being tested.
 func (km *KafkaMock) consumeData(topic string, key string, data []byte) {
