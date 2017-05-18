@@ -201,15 +201,15 @@ func TestView_StartStopWithError(t *testing.T) {
 	consumer.EXPECT().Events().Return(ch).Do(func() { wait <- true })
 	st.EXPECT().Open()
 	st.EXPECT().GetOffset(int64(-2)).Return(int64(0), errors.New("some error1"))
+	consumer.EXPECT().Close().Return(errors.New("some error2")).Do(func() { close(ch) })
+	st.EXPECT().Close()
+
 	go func() {
 		viewErrs := v.Start()
 		ensure.StringContains(t, viewErrs.Error(), "error1")
 		ensure.StringContains(t, viewErrs.Error(), "error2")
 		close(final)
 	}()
-
-	consumer.EXPECT().Close().Return(errors.New("some error2")).Do(func() { close(ch) })
-	st.EXPECT().Close()
 
 	err = doTimed(t, func() {
 		<-wait // wait partition goroutine
