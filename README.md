@@ -200,4 +200,4 @@ func main() {
 ```
 
 [Apache Kafka]: https://kafka.apache.org/
-[GoDoc]: https:godoc.org/github.com/lovoo/goka
+[GoDoc]: https://godoc.org/github.com/lovoo/goka
