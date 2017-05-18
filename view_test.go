@@ -10,7 +10,6 @@ import (
 	"github.com/lovoo/goka/mock"
 	"github.com/lovoo/goka/storage"
 
-	"github.com/facebookgo/clock"
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
 	metrics "github.com/rcrowley/go-metrics"
@@ -311,32 +310,4 @@ func ExampleView_simple() {
 	if errs != nil {
 		panic(errs)
 	}
-}
-
-func TestWaitForCondition(t *testing.T) {
-	called := 0
-
-	condition := func() bool {
-		called = called + 1
-		return called == 5
-	}
-
-	c := clock.NewMock()
-
-	go waitForCondition(condition, time.Second, c)
-
-	for i := 0; i < 10; i++ {
-		c.Add(time.Second)
-	}
-
-	ensure.DeepEqual(t, called, 5)
-}
-
-// waitForCondition waits until the given condition function returns true.
-func waitForCondition(condition func() bool, interval time.Duration, clk clock.Clock) {
-	ticker := clk.Ticker(interval)
-	for !condition() {
-		<-ticker.C
-	}
-	ticker.Stop()
 }
