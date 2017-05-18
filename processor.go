@@ -445,6 +445,18 @@ func (g *Processor) Stop() {
 // partition management (rebalance)
 ///////////////////////////////////////////////////////////////////////////////
 
+func (g *Processor) newJoinStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
+	st, err := g.opts.builders.storage(topic, id, codec, reg)
+	if err != nil {
+		return nil, err
+	}
+	return &storageProxy{
+		Storage:   st,
+		partition: id,
+		update:    update,
+	}, nil
+}
+
 func (g *Processor) newStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
 	if g.isStateless() {
 		return &storageProxy{
@@ -480,7 +492,7 @@ func (g *Processor) createPartitionViews(id int32) error {
 		reg := metrics.NewPrefixedChildRegistry(g.opts.gokaRegistry,
 			fmt.Sprintf("%s.%d.", t.Topic(), id))
 
-		st, err := g.newStorage(t.Topic(), id, t.Codec(), DefaultUpdate, reg)
+		st, err := g.newJoinStorage(t.Topic(), id, t.Codec(), DefaultUpdate, reg)
 		if err != nil {
 			return fmt.Errorf("processor: error creating storage: %v", err)
 		}
@@ -496,14 +508,14 @@ func (g *Processor) createPartitionViews(id int32) error {
 			defer func() {
 				if err := recover(); err != nil {
 					log.Printf("partition view %s/%d: panic", par.topic, pid)
-					g.errors.collect(fmt.Errorf("panic partition view %s/%d: %v\nstack:%v",
+					g.fail(fmt.Errorf("panic partition view %s/%d: %v\nstack:%v",
 						par.topic, pid, err, string(debug.Stack())))
 				}
 			}()
 
 			err := par.startCatchup()
 			if err != nil {
-				g.errors.collect(fmt.Errorf("error in partition view %s/%d: %v", par.topic, pid, err))
+				g.fail(fmt.Errorf("error in partition view %s/%d: %v", par.topic, pid, err))
 			}
 			log.Printf("partition view %s/%d: exit", par.topic, pid)
 		}(p, id)
