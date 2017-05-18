@@ -139,6 +139,13 @@ func main() {
 }
 ```
 
+## How to contribute
+
+Contributions are always welcome.
+Please fork the repo, create a pull request against master, and be sure tests pass.
+See the [GitHub Flow] for details.
+
 [Apache Kafka]: https://kafka.apache.org/
 [GoDoc]: https://godoc.org/github.com/lovoo/goka
 [examples]: https://github.com/lovoo/goka/tree/master/examples
+[GitHub Flow]: https://guides.github.com/introduction/flow
