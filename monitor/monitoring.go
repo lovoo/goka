@@ -3,6 +3,7 @@ package monitor
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"sync"
 
@@ -12,8 +13,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rcrowley/go-metrics"
-
-	log "github.com/Sirupsen/logrus"
 )
 
 var baseTemplates = append(templates.BaseTemplates, "templates/monitor/menu.go.html")
@@ -84,7 +83,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := tmpl.Execute(w, params); err != nil {
-		log.Errorf("error rendering index template: %v", err)
+		log.Printf("error rendering index template: %v", err)
 	}
 }
 
@@ -123,7 +122,7 @@ func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = tmpl.Execute(w, params); err != nil {
-		log.Errorf("error rendering processor view: %v", err)
+		log.Printf("error rendering processor view: %v", err)
 	}
 }
 
