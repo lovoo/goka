@@ -1,4 +1,4 @@
-# Goka [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause) [![Build Status](http://drone.lovoo.io/api/badges/lovoo/goka/status.svg)](http://drone.lovoo.io/lovoo/goka) [![GoDoc](https://godoc.org/github.com/lovoo/goka?status.svg)](https://godoc.org/github.com/lovoo/goka)
+# Goka [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause) [![Build Status](https://travis-ci.org/lovoo/goka.svg?branch=master)](https://travis-ci.org/lovoo/goka) [![GoDoc](https://godoc.org/github.com/lovoo/goka?status.svg)](https://godoc.org/github.com/lovoo/goka)
 
 Goka is a compact yet powerful distributed stream processing library for [Apache Kafka] written in Go. Goka aims to reduce the complexity of building highly scalable and highly available microservices.
 
@@ -59,45 +59,45 @@ An example Goka application could look like the following:
 package main
 
 import (
-	"fmt"
-	"log"
-	"time"
+  "fmt"
+  "log"
+  "time"
 
-	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/codec"
+  "github.com/lovoo/goka"
+  "github.com/lovoo/goka/codec"
 )
 
 var (
-	brokers             = []string{"localhost:9092"}
-	topic   goka.Stream = "mini-input"
+  brokers             = []string{"localhost:9092"}
+  topic   goka.Stream = "mini-input"
 )
 
 func main() {
   // create a new emitter which allows you to send
   // messages to Kafka
-	emitter, err := goka.NewEmitter(brokers, topic,
-		new(codec.String))
-	if err != nil {
-		log.Fatalf("error creating emitter: %v", err)
-	}
+  emitter, err := goka.NewEmitter(brokers, topic,
+    new(codec.String))
+  if err != nil {
+    log.Fatalf("error creating emitter: %v", err)
+  }
 
   // emitter Finish should be called always before
   // terminating the application to ensure the emitter
   // has delivered all the pending messages to Kafka
-	defer emitter.Finish()
+  defer emitter.Finish()
 
-	t := time.NewTicker(5 * time.Second)
-	defer t.Stop()
+  t := time.NewTicker(5 * time.Second)
+  defer t.Stop()
 
   // on every timer tick, emit a message to containing
   // the current timestamp to Kafka
-	i := 0
-	for range t.C {
-		key := fmt.Sprintf("%d", i%10)
-		value := fmt.Sprintf("%s", time.Now())
-		emitter.EmitSync(key, value)
-		i++
-	}
+  i := 0
+  for range t.C {
+    key := fmt.Sprintf("%d", i%10)
+    value := fmt.Sprintf("%s", time.Now())
+    emitter.EmitSync(key, value)
+    i++
+  }
 }
 ```
 
@@ -106,49 +106,48 @@ func main() {
 package main
 
 import (
-	"log"
+  "log"
 
-	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/codec"
+  "github.com/lovoo/goka"
+  "github.com/lovoo/goka/codec"
 )
 
 var (
-	brokers             = []string{"localhost:9092"}
-	topic   goka.Stream = "mini-input"
-	group   goka.Group  = "mini-group"
+  brokers             = []string{"localhost:9092"}
+  topic   goka.Stream = "mini-input"
+  group   goka.Group  = "mini-group"
 )
 
 func main() {
   // Define a new processor group. The group defines all
   // the inputs, output, serialization formats and the
   // topics of the processor
-	g := goka.DefineGroup(group,
-		goka.Input(topic, new(codec.String), process),
-		goka.Persist(new(codec.Int64)),
-	)
-	if p, err := goka.NewProcessor(brokers, g); err != nil {
-		log.Fatalf("error creating processor: %v", err)
-	} else if err = p.Start(); err != nil {
-		log.Fatalf("error running processor: %v", err)
-	}
+  g := goka.DefineGroup(group,
+    goka.Input(topic, new(codec.String), process),
+    goka.Persist(new(codec.Int64)),
+  )
+  if p, err := goka.NewProcessor(brokers, g); err != nil {
+    log.Fatalf("error creating processor: %v", err)
+  } else if err = p.Start(); err != nil {
+    log.Fatalf("error running processor: %v", err)
+  }
 }
 
 // process is the callback the processor will call for
 // each message that arrives in the "mini-input" topic.
 func process(ctx goka.Context, msg interface{}) {
-	var counter int64
+  var counter int64
   // ctx.Value gets from the group table the value that
   // is stored for the message's key.
-	if val := ctx.Value(); val != nil {
-		counter = val.(int64)
-	}
-	counter++
+  if val := ctx.Value(); val != nil {
+    counter = val.(int64)
+  }
+  counter++
   // SetValue stores the incremented counter in the
   // group table for in the message's key.
-	ctx.SetValue(counter)
+  ctx.SetValue(counter)
 
-	log.Println("[proc] key:", ctx.Key(),
-		"count:", counter, "msg:", msg)
+  log.Println("[proc] key:", ctx.Key(), "count:", counter, "msg:", msg)
 }
 ```
 
@@ -157,45 +156,45 @@ func process(ctx goka.Context, msg interface{}) {
 package main
 
 import (
-	"fmt"
-	"log"
-	"time"
+  "fmt"
+  "log"
+  "time"
 
-	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/codec"
+  "github.com/lovoo/goka"
+  "github.com/lovoo/goka/codec"
 )
 
 var (
-	brokers            = []string{"localhost:9092"}
-	group   goka.Group = "mini-group"
+  brokers            = []string{"localhost:9092"}
+  group   goka.Group = "mini-group"
 )
 
 func main() {
   // creates a new view which is provides read-only
   // access to the mini-group's group table
-	view, err := goka.NewView(brokers,
-		goka.GroupTable(group),
-		new(codec.Int64),
-	)
-	if err != nil {
-		log.Fatalf("error creating view: %v", err)
-	}
+  view, err := goka.NewView(brokers,
+    goka.GroupTable(group),
+    new(codec.Int64),
+  )
+  if err != nil {
+    log.Fatalf("error creating view: %v", err)
+  }
   // starting the view begins receiving updates
   // from Kafka
-	go view.Start()
-	defer view.Stop()
+  go view.Start()
+  defer view.Stop()
 
-	t := time.NewTicker(10 * time.Second)
-	defer t.Stop()
+  t := time.NewTicker(10 * time.Second)
+  defer t.Stop()
 
   // on every timer tick, print out the values
   // stored in the group table
-	for range t.C {
-		for i := 0; i < 10; i++ {
-			val, _ := view.Get(fmt.Sprintf("%d", i))
-			log.Printf("[view] %d: %v\n", i, val)
-		}
-	}
+  for range t.C {
+    for i := 0; i < 10; i++ {
+      val, _ := view.Get(fmt.Sprintf("%d", i))
+      log.Printf("[view] %d: %v\n", i, val)
+    }
+  }
 }
 ```
 
