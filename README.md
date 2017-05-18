@@ -43,7 +43,7 @@ Goka relies on Kafka for message passing, fault-tolerant state storage and workl
 
 * **Emitters** deliver key-value messages into Kafka. As an example, an emitter could be a database handler emitting the state changes into Kafka for other interested applications to consume.
 
-* **Processor** is a set of callback functions that consume and perform operations on these emitted messages. *Processor groups* are formed of one or more instances of a processor. Goka distributes a topic's partitions across all the processor instances in a processor group. This enables effortless scaling and fault-tolerance. If a processor instance fails, its partitions are reassigned to the remaining healthy members of the processor group. Processors can also emit further messages into Kafka.
+* **Processor** is a set of callback functions that consume and perform state transformations upon delivery of these emitted messages. *Processor groups* are formed of one or more instances of a processor. Goka distributes the partitions of the input topics across all processor instances in a processor group. This enables effortless scaling and fault-tolerance. If a processor instance fails, its partitions and state are reassigned to the remaining healthy members of the processor group. Processors can also emit further messages into Kafka.
 
 * **Group tables** are partitioned key-value tables stored in Kafka that belong to a single processor group. If a processor instance fails, the remaining instances will take over the group table partitions of the failed instance recovering them from Kafka.
 
