@@ -12,7 +12,7 @@ func process(ctx goka.Context, msg interface{}) {
 	}
 	counter++
 	ctx.SetValue(counter)
-
+ 
 	fmt.Println("[proc] key:", ctx.Key(),
 		"count:", counter, "msg:", msg)
 }
