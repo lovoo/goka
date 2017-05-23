@@ -190,10 +190,10 @@ If you need to tolerate codec-errors, you'll have to handle them inside the code
 
 ### Partitioning and Concurrency
 
-Messages are partitioned in Kafka using the message key. Messages within each partition are processed sequentially,
-but in parallel for all partitions. That means for our case, different users can be modified
-in parallel. A single user however is always modified sequentially, because all messages for that user are assigned
-to the same partition which runs sequentially.
+Messages are partitioned in Kafka using the message key. Within a given partition, messages are processed sequentially. However, different partitions process messages concurrently.
+
+In this example, the user ID is used as the message key, i.e., the messages are partitioned by the user ID.
+Therefore, different users are modified concurrently whereas a single user is always modified sequentially.
 
 That's why there is no need to create any locks as long as all modifications are performed using the `context`.
 Everything else needs to be protected by locks as usual.
