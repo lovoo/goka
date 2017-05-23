@@ -1,4 +1,4 @@
-# Example 1 User Clicks
+# User Clicks
 
 This example is a toy application that counts how often users click on some button. Whenever a user clicks on the button, a message is emitted to a topic “user-clicks”. The message’s key is the user ID and, for the sake of the example, the message’s content is a timestamp, which is irrelevant for the example. We have one table storing a counter for each user. A processor updates the table whenever such a message is delivered. A view is exposed using a web interface to display the current counts of users.
 
