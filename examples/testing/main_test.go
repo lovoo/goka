@@ -6,14 +6,13 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/mock"
 )
 
 func Test_ConsumeScalar(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctxMock := mock.NewMockContext(ctrl)
+	ctxMock := NewMockContext(ctrl)
 
 	// test passing a wrong type (simulating wrong codec or unmarshalling errors)
 	ctxMock.EXPECT().Fail(gomock.Any())
