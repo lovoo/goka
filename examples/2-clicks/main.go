@@ -78,7 +78,7 @@ func process(ctx goka.Context, msg interface{}) {
 
 	u.Clicks++
 	ctx.SetValue(u)
-	fmt.Printf("[proc] key: %s clicks: %d, msg: %v", ctx.Key(), u.Clicks, msg)
+	fmt.Printf("[proc] key: %s clicks: %d, msg: %v\n", ctx.Key(), u.Clicks, msg)
 }
 
 func runProcessor() {

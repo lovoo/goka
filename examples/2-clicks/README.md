@@ -8,11 +8,31 @@ This example shows how to:
 * Write an emitter to push data to kafka
 * Writing a view to query the user state
 
+To get an introduction into goka, see this [blog post](http://tech.lovoo.com/2017/05/23/goka).
+
 ## How to get it running
 ```bash
+# kafka and zookeeper must be running, as described the examples Readme by running
+# make restart in the examples-directory
 
 # run the example
-go run 1-clicks/main.go
+go run main.go
+```
+
+This should output something like
+
+```
+2017/05/23 15:09:20 Table mini-group-state has 10 partitions
+2017/05/23 15:09:20 Processor: started
+View opened at http://localhost:9095/
+2017/05/23 15:09:20 View: started
+2017/05/23 15:09:33 Processor: rebalancing: map[]
+2017/05/23 15:09:37 Processor: rebalancing: map[5:-1 6:-1 2:-1 3:-1 4:-1 8:-1 9:-1 0:-1 1:-1 7:-1]
+[proc] key: user-0 clicks: 23, msg: 2017-05-23 15:09:04.265935416 +0200 CEST
+[proc] key: user-5 clicks: 23, msg: 2017-05-23 15:09:03.757817584 +0200 CEST
+[proc] key: user-8 clicks: 23, msg: 2017-05-23 15:09:04.062448921 +0200 CEST
+[proc] key: user-7 clicks: 23, msg: 2017-05-23 15:09:03.960607552 +0200 CEST
+...
 ```
 Now open the browser and get the number of clicks for user-3: <http://localhost:9095/user-3>
 
