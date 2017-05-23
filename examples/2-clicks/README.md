@@ -10,10 +10,6 @@ This example shows how to:
 
 ## How to get it running
 ```bash
-# go to the goka examples directory
-cd $GOPATH/src/github.com/lovoo/goka/examples
-# make sure kafka/zookkeeper are running
-make restart
 
 # run the example
 go run 1-clicks/main.go
