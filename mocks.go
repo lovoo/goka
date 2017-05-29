@@ -67,7 +67,7 @@ func (cm *clientMock) GetOffset(topic string, partitionID int32, time int64) (in
 	case sarama.OffsetOldest:
 		offset, hasOffset = cm.oldestOffsets[fmt.Sprintf("%s/%d", topic, partitionID)]
 	default:
-		log.Fatalln("we don't mock this case")
+		log.Panic("we don't mock this case")
 	}
 
 	if hasOffset {

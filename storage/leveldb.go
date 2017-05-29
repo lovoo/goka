@@ -2,7 +2,8 @@ package storage
 
 import (
 	"fmt"
-	"log"
+
+	"github.com/lovoo/goka/logger"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
@@ -14,7 +15,8 @@ const (
 )
 
 type levelDbStorage struct {
-	db *leveldb.DB
+	log logger.Logger
+	db  *leveldb.DB
 
 	batched bool
 	batch   chan batchEntry
@@ -36,13 +38,14 @@ type batchEntry struct {
 }
 
 // create a new storage object backed by leveldb
-func newLeveldbStorage(fn string, batched bool) (*levelDbStorage, error) {
+func newLeveldbStorage(log logger.Logger, fn string, batched bool) (*levelDbStorage, error) {
 	db, err := leveldb.OpenFile(fn, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	s := &levelDbStorage{
+		log:     log,
 		db:      db,
 		batched: batched,
 		batch:   make(chan batchEntry, defaultStorageMaxBatchSize),
@@ -129,7 +132,7 @@ func (s *levelDbStorage) writer() error {
 					batch.Delete(e.key)
 				default:
 					// TODO (franz): sure we want a panic? Not returning the error?
-					log.Panicf("unknown batch operation in doWrite: %v", e.op)
+					s.log.Panicf("unknown batch operation in doWrite: %v", e.op)
 				}
 
 				if batch.Len() >= cap(s.batch) {
@@ -161,7 +164,7 @@ func (s *levelDbStorage) writer() error {
 				batch.Delete(e.key)
 			default:
 				// TODO (franz): sure we want a panic? Not returning the error?
-				log.Panicf("unknown batch operation in writer: %v", e.op)
+				s.log.Panicf("unknown batch operation in writer: %v", e.op)
 			}
 
 			// if a message is available, put it into the batch. In doWrite we

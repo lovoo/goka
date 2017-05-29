@@ -2,12 +2,12 @@ package goka
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 
 	"github.com/Shopify/sarama"
@@ -42,6 +42,7 @@ const (
 )
 
 type partition struct {
+	log   logger.Logger
 	topic string
 
 	ch         chan kafka.Event
@@ -79,8 +80,9 @@ type kafkaProxy interface {
 
 type processCallback func(msg *message, st storage.Storage, wg *sync.WaitGroup) error
 
-func newPartition(topic string, cb processCallback, st *storageProxy, proxy kafkaProxy, reg metrics.Registry, channelSize int) *partition {
+func newPartition(log logger.Logger, topic string, cb processCallback, st *storageProxy, proxy kafkaProxy, reg metrics.Registry, channelSize int) *partition {
 	return &partition{
+		log:   log,
 		topic: topic,
 
 		ch:    make(chan kafka.Event, channelSize),
@@ -277,7 +279,7 @@ func (p *partition) load(catchup bool) error {
 			case *kafka.EOF:
 				p.mxPartitionLoaderHwm.Update(ev.Hwm)
 				if atomic.LoadInt32(&p.readyFlag) == 0 {
-					log.Println("readyFlag was false when EOF arrived")
+					p.log.Printf("readyFlag was false when EOF arrived")
 					p.mxStatus.Update(partitionRecovered)
 					atomic.StoreInt32(&p.readyFlag, 1)
 				}

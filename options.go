@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
+
 	metrics "github.com/rcrowley/go-metrics"
 )
 
@@ -42,9 +44,13 @@ type topicmgrBuilder func(brokers []string) (kafka.TopicManager, error)
 func defaultConsumerBuilder(brokers []string, group string, registry metrics.Registry) (kafka.Consumer, error) {
 	return kafka.NewSaramaConsumer(brokers, group, registry)
 }
-func defaultProducerBuilder(brokers []string, registry metrics.Registry) (kafka.Producer, error) {
-	return kafka.NewProducer(brokers, registry)
+
+func defaultProducerBuilder(log logger.Logger) producerBuilder {
+	return func(brokers []string, registry metrics.Registry) (kafka.Producer, error) {
+		return kafka.NewProducer(brokers, registry, log)
+	}
 }
+
 func defaultTopicManagerBuilder(brokers []string) (kafka.TopicManager, error) {
 	return kafka.NewSaramaTopicManager(brokers)
 }
@@ -58,6 +64,7 @@ type ProcessorOption func(*poptions)
 
 // processor options
 type poptions struct {
+	log      logger.Logger
 	clientID string
 
 	updateCallback          UpdateCallback
@@ -168,6 +175,14 @@ func WithStorageSnapshotInterval(interval time.Duration) ProcessorOption {
 	}
 }
 
+// WithLogger sets the logger the processor should use. By default, processors
+// use the standard library logger.
+func WithLogger(log logger.Logger) ProcessorOption {
+	return func(o *poptions) {
+		o.log = log
+	}
+}
+
 func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 	opt.clientID = defaultClientID
 
@@ -183,7 +198,7 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 		opt.builders.consumer = defaultConsumerBuilder
 	}
 	if opt.builders.producer == nil {
-		opt.builders.producer = defaultProducerBuilder
+		opt.builders.producer = defaultProducerBuilder(opt.log)
 	}
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = defaultTopicManagerBuilder
@@ -210,7 +225,7 @@ func (opt *poptions) storagePathForPartition(topic string, partitionID int32) st
 }
 
 func (opt *poptions) defaultStorageBuilder(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
-	return storage.New(opt.storagePathForPartition(topic, partition), codec, reg, opt.storageSnapshotInterval)
+	return storage.New(opt.log, opt.storagePathForPartition(topic, partition), codec, reg, opt.storageSnapshotInterval)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -221,6 +236,7 @@ func (opt *poptions) defaultStorageBuilder(topic string, partition int32, codec 
 type ViewOption func(*voptions)
 
 type voptions struct {
+	log                     logger.Logger
 	tableCodec              Codec
 	updateCallback          UpdateCallback
 	storagePath             string
@@ -235,6 +251,14 @@ type voptions struct {
 	}
 	gokaRegistry  metrics.Registry
 	kafkaRegistry metrics.Registry
+}
+
+// WithViewLogger sets the logger the view should use. By default, views
+// use the standard library logger.
+func WithViewLogger(log logger.Logger) ViewOption {
+	return func(o *voptions) {
+		o.log = log
+	}
 }
 
 // WithViewCallback defines the callback called upon recovering a message
@@ -348,7 +372,7 @@ func (opt *voptions) storagePathForPartition(topic string, partitionID int32) st
 }
 
 func (opt *voptions) defaultStorageBuilder(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
-	return storage.New(opt.storagePathForPartition(topic, partition), codec, reg, opt.storageSnapshotInterval)
+	return storage.New(opt.log, opt.storagePathForPartition(topic, partition), codec, reg, opt.storageSnapshotInterval)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -361,6 +385,7 @@ type EmitterOption func(*eoptions)
 
 // emitter options
 type eoptions struct {
+	log      logger.Logger
 	clientID string
 
 	registry metrics.Registry
@@ -371,6 +396,14 @@ type eoptions struct {
 		producer producerBuilder
 	}
 	kafkaRegistry metrics.Registry
+}
+
+// WithEmitterLogger sets the logger the emitter should use. By default,
+// emitters use the standard library logger.
+func WithEmitterLogger(log logger.Logger) EmitterOption {
+	return func(o *eoptions) {
+		o.log = log
+	}
 }
 
 // WithEmitterClientID defines the client ID used to identify with kafka.
@@ -415,6 +448,7 @@ func WithEmitterKafkaMetrics(registry metrics.Registry) EmitterOption {
 
 func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
 	opt.clientID = defaultClientID
+	opt.log = logger.Default()
 
 	for _, o := range opts {
 		o(opt)
@@ -422,7 +456,7 @@ func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
 
 	// config not set, use default one
 	if opt.builders.producer == nil {
-		opt.builders.producer = defaultProducerBuilder
+		opt.builders.producer = defaultProducerBuilder(opt.log)
 	}
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = defaultTopicManagerBuilder

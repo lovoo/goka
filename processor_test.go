@@ -12,12 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/facebookgo/ensure"
-	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/mock"
 	"github.com/lovoo/goka/storage"
+
+	"github.com/facebookgo/ensure"
+	"github.com/golang/mock/gomock"
 	metrics "github.com/rcrowley/go-metrics"
 )
 
@@ -892,7 +894,7 @@ func TestProcessor_HasGetStateless(t *testing.T) {
 	st := mock.NewMockStorage(ctrl)
 	p = &Processor{graph: DefineGroup(group, Persist(c))}
 	p.partitions = map[int32]*partition{
-		0: &partition{st: &storageProxy{Storage: st, partition: 0}},
+		0: &partition{log: logger.Default(), st: &storageProxy{Storage: st, partition: 0}},
 	}
 	p.partitionCount = 1
 

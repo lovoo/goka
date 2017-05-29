@@ -3,13 +3,13 @@ package query
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/lovoo/goka"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/templates"
 
 	"github.com/gorilla/mux"
@@ -44,7 +44,8 @@ func DefaultHumanizer() Humanizer {
 
 // Server is a provides HTTP routes for querying the group table.
 type Server struct {
-	m sync.RWMutex
+	log logger.Logger
+	m   sync.RWMutex
 
 	basePath  string
 	loader    templates.Loader
@@ -55,6 +56,7 @@ type Server struct {
 // NewServer creates a server with the given options.
 func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
 	srv := &Server{
+		log:       logger.Default(),
 		basePath:  basePath,
 		loader:    &templates.BinLoader{},
 		sources:   make(map[string]goka.Getter),
@@ -116,7 +118,7 @@ func (s *Server) executeQueryTemplate(w http.ResponseWriter, params map[string]i
 	params["base_path"] = s.basePath
 
 	if err := tmpl.Execute(w, params); err != nil {
-		log.Printf("error executing query template: %v", err)
+		s.log.Printf("error executing query template: %v", err)
 	}
 }
 

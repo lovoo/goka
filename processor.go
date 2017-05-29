@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"log"
 	"runtime/debug"
 	"sync"
 
 	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 
 	"github.com/rcrowley/go-metrics"
@@ -58,6 +58,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	options = append(
 		// default options comes first
 		[]ProcessorOption{
+			WithLogger(logger.Default()),
 			WithUpdateCallback(DefaultUpdate),
 			WithStoragePath("/tmp/goka"),
 			WithPartitionChannelSize(defaultPartitionChannelSize),
@@ -106,6 +107,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 
 	// combine things together
 	processor := &Processor{
+
 		opts: opts,
 
 		partitions:     make(map[int32]*partition),
@@ -336,8 +338,8 @@ func (g *Processor) pushToPartitionView(topic string, part int32, ev kafka.Event
 }
 
 func (g *Processor) run() {
-	log.Println("Processor: started")
-	defer log.Println("Processor: stopped")
+	g.opts.log.Printf("Processor: started")
+	defer g.opts.log.Printf("Processor: stopped")
 
 	for ev := range g.consumer.Events() {
 		switch ev := ev.(type) {
@@ -397,7 +399,7 @@ func (g *Processor) run() {
 }
 
 func (g *Processor) fail(err error) {
-	log.Printf("failing: %v", err)
+	g.opts.log.Printf("failing: %v", err)
 	g.errors.collect(err)
 	go g.stop()
 }
@@ -407,14 +409,14 @@ func (g *Processor) stop() {
 		close(g.dying) // stops any blocking call
 		err := g.consumer.Close()
 
-		log.Println("Processor: wait for main goroutine")
+		g.opts.log.Printf("Processor: wait for main goroutine")
 		<-g.done
 		if err != nil {
 			g.errors.collect(fmt.Errorf("Failed to close consumer: %v", err))
 		}
 
 		// remove all partitions first
-		log.Println("Processor: removing partitions")
+		g.opts.log.Printf("Processor: removing partitions")
 		for partition := range g.partitions {
 			g.removePartition(partition)
 		}
@@ -436,9 +438,9 @@ func (g *Processor) stop() {
 
 // Stop gracefully stops the consumer
 func (g *Processor) Stop() {
-	log.Println("Processor: stopping")
+	g.opts.log.Printf("Processor: stopping")
 	g.stop()
-	log.Println("Processor: shutdown complete")
+	g.opts.log.Printf("Processor: shutdown complete")
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -497,6 +499,7 @@ func (g *Processor) createPartitionViews(id int32) error {
 			return fmt.Errorf("processor: error creating storage: %v", err)
 		}
 		p := newPartition(
+			g.opts.log,
 			t.Topic(),
 			nil, st, &proxy{id, g.consumer},
 			reg,
@@ -507,7 +510,7 @@ func (g *Processor) createPartitionViews(id int32) error {
 		go func(par *partition, pid int32) {
 			defer func() {
 				if err := recover(); err != nil {
-					log.Printf("partition view %s/%d: panic", par.topic, pid)
+					g.opts.log.Printf("partition view %s/%d: panic", par.topic, pid)
 					g.fail(fmt.Errorf("panic partition view %s/%d: %v\nstack:%v",
 						par.topic, pid, err, string(debug.Stack())))
 				}
@@ -517,7 +520,7 @@ func (g *Processor) createPartitionViews(id int32) error {
 			if err != nil {
 				g.fail(fmt.Errorf("error in partition view %s/%d: %v", par.topic, pid, err))
 			}
-			log.Printf("partition view %s/%d: exit", par.topic, pid)
+			g.opts.log.Printf("partition view %s/%d: exit", par.topic, pid)
 		}(p, id)
 	}
 	return nil
@@ -554,6 +557,7 @@ func (g *Processor) createPartition(id int32) error {
 	}
 
 	g.partitions[id] = newPartition(
+		g.opts.log,
 		groupTable,
 		g.process, st, &delayProxy{partition: id, consumer: g.consumer, wait: wait},
 		reg,
@@ -563,7 +567,7 @@ func (g *Processor) createPartition(id int32) error {
 	go func(par *partition) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("partition %s/%d: panic", par.topic, id)
+				g.opts.log.Printf("partition %s/%d: panic", par.topic, id)
 				g.fail(fmt.Errorf("panic partition %s/%d: %v\nstack:%v",
 					par.topic, id, err, string(debug.Stack())))
 			}
@@ -572,14 +576,14 @@ func (g *Processor) createPartition(id int32) error {
 		if err != nil {
 			g.fail(fmt.Errorf("error in partition %d: %v", id, err))
 		}
-		log.Printf("partition %s/%d: exit", par.topic, id)
+		g.opts.log.Printf("partition %s/%d: exit", par.topic, id)
 	}(g.partitions[id])
 
 	return nil
 }
 
 func (g *Processor) rebalance(partitions kafka.Assignment) error {
-	log.Printf("Processor: rebalancing: %+v", partitions)
+	g.opts.log.Printf("Processor: rebalancing: %+v", partitions)
 
 	for id := range partitions {
 		// create partition views
@@ -601,7 +605,7 @@ func (g *Processor) rebalance(partitions kafka.Assignment) error {
 }
 
 func (g *Processor) removePartition(partition int32) {
-	log.Printf("Removing partition %d", partition)
+	g.opts.log.Printf("Removing partition %d", partition)
 
 	// remove partition processor
 	g.partitions[partition].stop()

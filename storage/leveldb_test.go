@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/facebookgo/ensure"
+	"github.com/lovoo/goka/logger"
 )
 
 var keys []string
@@ -21,7 +22,7 @@ func init() {
 func BenchmarkStateStorage_unbatched(b *testing.B) {
 	tmpdir, err := ioutil.TempDir("", "benchmark_statestorage_unbatched")
 	ensure.Nil(b, err)
-	storage, err := newLeveldbStorage(tmpdir, false)
+	storage, err := newLeveldbStorage(logger.Default(), tmpdir, false)
 	ensure.Nil(b, err)
 	b.ResetTimer()
 	for i := 0; i < b.N*numWrites; i++ {
@@ -33,7 +34,7 @@ func BenchmarkStateStorage_unbatched(b *testing.B) {
 func BenchmarkStateStorage_batched(b *testing.B) {
 	tmpdir, err := ioutil.TempDir("", "benchmark_statestorage_batched")
 	ensure.Nil(b, err)
-	storage, err := newLeveldbStorage(tmpdir, true)
+	storage, err := newLeveldbStorage(logger.Default(), tmpdir, true)
 	ensure.Nil(b, err)
 	b.ResetTimer()
 	for i := 0; i < b.N*numWrites; i++ {

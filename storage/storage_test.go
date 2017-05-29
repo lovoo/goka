@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/logger"
 
 	"github.com/facebookgo/ensure"
 	"github.com/rcrowley/go-metrics"
@@ -140,7 +141,7 @@ func TestSetGet_json(t *testing.T) {
 	)
 	testDbPath := "/tmp/statemanagertest.go"
 	os.RemoveAll(testDbPath)
-	storage, err := New(testDbPath, &codec.String{}, metrics.NewRegistry(), DefaultStorageSnapshotInterval)
+	storage, err := New(logger.Default(), testDbPath, &codec.String{}, metrics.NewRegistry(), DefaultStorageSnapshotInterval)
 	ensure.Nil(t, err)
 
 	hasKey, err = storage.Has("example1")

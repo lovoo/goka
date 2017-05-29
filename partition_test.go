@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/mock"
 	"github.com/lovoo/goka/storage"
 
@@ -39,7 +40,7 @@ func newNullStorageProxy(id int32) *storageProxy {
 func TestNewPartition(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	p := newPartition(topic, nil, nil, nil, metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p := newPartition(logger.Default(), topic, nil, nil, nil, metrics.DefaultRegistry, defaultPartitionChannelSize)
 	ensure.True(t, p != nil)
 }
 
@@ -52,7 +53,7 @@ func TestPartition_startStateless(t *testing.T) {
 		final = make(chan bool)
 	)
 
-	p := newPartition(topic, nil, newNullStorageProxy(0), proxy,
+	p := newPartition(logger.Default(), topic, nil, newNullStorageProxy(0), proxy,
 		metrics.DefaultRegistry, defaultPartitionChannelSize)
 
 	proxy.EXPECT().AddGroup().Do(func() { close(wait) })
@@ -82,9 +83,8 @@ func TestPartition_startStateful(t *testing.T) {
 		wait   = make(chan bool)
 	)
 
-	p := newPartition(topic, nil, newStorageProxy(st, 0, nil), proxy,
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, nil), proxy,
 		metrics.DefaultRegistry, defaultPartitionChannelSize)
-
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(offset, nil),
@@ -130,7 +130,7 @@ func TestPartition_runStateless(t *testing.T) {
 		return nil
 	}
 
-	p := newPartition(topic, consume, newNullStorageProxy(0), proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p := newPartition(logger.Default(), topic, consume, newNullStorageProxy(0), proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
 
 	proxy.EXPECT().AddGroup()
 	proxy.EXPECT().Stop()
@@ -180,7 +180,7 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 		return nil
 	}
 
-	p := newPartition(topic, consume, newNullStorageProxy(0),
+	p := newPartition(logger.Default(), topic, consume, newNullStorageProxy(0),
 		proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
 
 	proxy.EXPECT().AddGroup()
@@ -208,7 +208,7 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 	ensure.Nil(t, err)
 
 	// test sending error into the channel
-	p = newPartition(topic, consume, newNullStorageProxy(0), proxy,
+	p = newPartition(logger.Default(), topic, consume, newNullStorageProxy(0), proxy,
 		metrics.DefaultRegistry, defaultPartitionChannelSize)
 	wait = make(chan bool)
 
@@ -255,7 +255,7 @@ func TestPartition_runStateful(t *testing.T) {
 		return nil
 	}
 
-	p := newPartition(topic, consume, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, 0)
+	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -338,7 +338,7 @@ func TestPartition_runStatefulWithError(t *testing.T) {
 		return nil
 	}
 
-	p := newPartition(topic, consume, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -417,7 +417,7 @@ func TestPartition_loadStateful(t *testing.T) {
 		return nil
 	}
 
-	p := newPartition(topic, consume, newStorageProxy(st, 0, DefaultUpdate), proxy,
+	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, DefaultUpdate), proxy,
 		metrics.DefaultRegistry, defaultPartitionChannelSize)
 
 	gomock.InOrder(
@@ -502,7 +502,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 		return errors.New("some error")
 	}
 
-	p := newPartition(topic, nil, newStorageProxy(st, 0, update), proxy, metrics.DefaultRegistry, 0)
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, metrics.DefaultRegistry, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -536,7 +536,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 
 	// error in SetOffset
 	wait = make(chan bool)
-	p = newPartition(topic, nil, newStorageProxy(st, 0, DefaultUpdate), proxy, metrics.DefaultRegistry, 0)
+	p = newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, DefaultUpdate), proxy, metrics.DefaultRegistry, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -572,7 +572,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 
 	// error in GetOffset
 	wait = make(chan bool)
-	p = newPartition(topic, nil, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, 0)
+	p = newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -617,7 +617,7 @@ func TestPartition_catchupStateful(t *testing.T) {
 		step <- true
 		return DefaultUpdate(st, p, k, v)
 	}
-	p := newPartition(topic, nil, newStorageProxy(st, 0, update), proxy, metrics.DefaultRegistry, 0)
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, metrics.DefaultRegistry, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -737,7 +737,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 		step <- true
 		return DefaultUpdate(st, p, k, v)
 	}
-	p := newPartition(topic, nil, newStorageProxy(st, 0, update), proxy, metrics.DefaultRegistry, 0)
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, metrics.DefaultRegistry, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
