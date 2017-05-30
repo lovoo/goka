@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,29 +15,54 @@ import (
 	"github.com/gorilla/mux"
 )
 
-const jsonIndent = "  "
-
-// Marshaler takes an object in and writes into out it's human readable
+// Humanizer takes an object in and returns out it's human readable
 // representation.
-type Marshaler func(interface{}) (string, error)
+type Humanizer interface {
+	// Humanize returns a human readable representation of the supplied value.
+	Humanize(interface{}) (string, error)
+}
+
+// HumanizerFunc is an adapter to make conforming functions into Humanizers.
+type HumanizerFunc func(interface{}) (string, error)
+
+// Humanize returns the human readable representation of val.
+func (fn HumanizerFunc) Humanize(val interface{}) (string, error) {
+	return fn(val)
+}
+
+// DefaultHumanizer returns the JSON representation of val.
+func DefaultHumanizer() Humanizer {
+	return HumanizerFunc(func(val interface{}) (string, error) {
+		h, err := json.MarshalIndent(val, "", "  ")
+		if err != nil {
+			return "", err
+		}
+
+		return string(h), nil
+	})
+}
 
 // Server is a provides HTTP routes for querying the group table.
 type Server struct {
 	m sync.RWMutex
 
-	basePath string
-	loader   templates.Loader
-	sources  map[string]goka.Getter
-	marshal  Marshaler
+	basePath  string
+	loader    templates.Loader
+	sources   map[string]goka.Getter
+	humanizer Humanizer
 }
 
 // NewServer creates a server with the given options.
-func NewServer(basePath string, router *mux.Router, marshal Marshaler) *Server {
+func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
 	srv := &Server{
-		basePath: basePath,
-		loader:   &templates.BinLoader{},
-		sources:  make(map[string]goka.Getter),
-		marshal:  marshal,
+		basePath:  basePath,
+		loader:    &templates.BinLoader{},
+		sources:   make(map[string]goka.Getter),
+		humanizer: DefaultHumanizer(),
+	}
+
+	for _, opt := range opts {
+		opt(srv)
 	}
 
 	sub := router.PathPrefix(basePath).Subrouter()
@@ -164,7 +190,7 @@ func (s *Server) key(w http.ResponseWriter, r *http.Request) {
 	params["key"] = key
 
 	if value != nil {
-		data, err := s.marshal(value)
+		data, err := s.humanizer.Humanize(value)
 		if err != nil {
 			params["error"] = fmt.Errorf("error marshaling value: %v", err)
 			s.executeQueryTemplate(w, params)
