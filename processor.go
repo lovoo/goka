@@ -345,6 +345,7 @@ func (g *Processor) run() {
 			err := g.rebalance(*ev)
 			if err != nil {
 				g.fail(err)
+				return
 			}
 
 		case *kafka.Message:
@@ -356,6 +357,7 @@ func (g *Processor) run() {
 			}
 			if err != nil {
 				g.fail(fmt.Errorf("error consuming message: %v", err))
+				return
 			}
 
 		case *kafka.BOF:
@@ -367,6 +369,7 @@ func (g *Processor) run() {
 			}
 			if err != nil {
 				g.fail(fmt.Errorf("error consuming BOF: %v", err))
+				return
 			}
 
 		case *kafka.EOF:
@@ -378,6 +381,7 @@ func (g *Processor) run() {
 			}
 			if err != nil {
 				g.fail(fmt.Errorf("error consuming EOF: %v", err))
+				return
 			}
 
 		case *kafka.NOP:
@@ -389,9 +393,10 @@ func (g *Processor) run() {
 
 		case *kafka.Error:
 			g.fail(ev.Err)
-
+			return
 		default:
 			g.fail(fmt.Errorf("processor: cannot handle %T = %v", ev, ev))
+			return
 		}
 	}
 }
