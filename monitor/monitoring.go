@@ -3,10 +3,10 @@ package monitor
 import (
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"sync"
 
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/templates"
 
 	"net/http"
@@ -20,16 +20,22 @@ var baseTemplates = append(templates.BaseTemplates, "templates/monitor/menu.go.h
 // Server is the main type used by client sot interact with the monitoring
 // functionality of goka.
 type Server struct {
-	m sync.RWMutex
+	log logger.Logger
+	m   sync.RWMutex
 
 	basePath string
 	procs    []*processorStats
 }
 
 // NewServer creates a new Server
-func NewServer(basePath string, router *mux.Router) *Server {
+func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
 	srv := &Server{
+		log:      logger.Default(),
 		basePath: basePath,
+	}
+
+	for _, opt := range opts {
+		opt(srv)
 	}
 
 	sub := router.PathPrefix(basePath).Subrouter()
@@ -83,7 +89,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := tmpl.Execute(w, params); err != nil {
-		log.Printf("error rendering index template: %v", err)
+		s.log.Printf("error rendering index template: %v", err)
 	}
 }
 
@@ -122,7 +128,7 @@ func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = tmpl.Execute(w, params); err != nil {
-		log.Printf("error rendering processor view: %v", err)
+		s.log.Printf("error rendering processor view: %v", err)
 	}
 }
 

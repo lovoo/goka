@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"log"
 	"sync"
 
 	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 
 	"github.com/rcrowley/go-metrics"
@@ -39,6 +39,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	options = append(
 		// default options comes first
 		[]ViewOption{
+			WithViewLogger(logger.Default()),
 			WithViewCallback(DefaultUpdate),
 			WithViewStoragePath(defaultReaderStoragePath),
 			WithViewPartitionChannelSize(defaultPartitionChannelSize),
@@ -106,7 +107,7 @@ func (v *View) createPartitions(brokers []string) (err error) {
 		}
 	}
 
-	log.Printf("Table %s has %d partitions", v.topic, len(partitions))
+	v.opts.log.Printf("Table %s has %d partitions", v.topic, len(partitions))
 	for _, p := range partitions {
 		reg := metrics.NewPrefixedChildRegistry(v.opts.gokaRegistry,
 			fmt.Sprintf("%s.%d.", v.topic, p))
@@ -117,7 +118,7 @@ func (v *View) createPartitions(brokers []string) (err error) {
 			return fmt.Errorf("Error creating local storage for partition %d: %v", p, err)
 		}
 
-		po := newPartition(v.topic, nil,
+		po := newPartition(v.opts.log, v.topic, nil,
 			&storageProxy{Storage: st, partition: p, update: v.opts.updateCallback},
 			&proxy{p, v.consumer},
 			reg,
@@ -182,9 +183,9 @@ func (v *View) stop() {
 
 // Stop stops the view, frees any resources + connections to kafka
 func (v *View) Stop() {
-	log.Println("View: stopping")
+	v.opts.log.Printf("View: stopping")
 	v.stop()
-	log.Println("View: shutdown complete")
+	v.opts.log.Printf("View: shutdown complete")
 }
 
 func (v *View) hash(key string) (int32, error) {
@@ -251,8 +252,8 @@ func (v *View) Has(key string) (bool, error) {
 
 func (v *View) run() {
 	defer close(v.done)
-	log.Println("View: started")
-	defer log.Println("View: stopped")
+	v.opts.log.Printf("View: started")
+	defer v.opts.log.Printf("View: stopped")
 
 	for ev := range v.consumer.Events() {
 		switch ev := ev.(type) {

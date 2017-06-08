@@ -2,7 +2,6 @@ package storage
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/snapshot"
 )
 
@@ -53,6 +53,7 @@ type Storage interface {
 const DefaultStorageSnapshotInterval = 1 * time.Minute
 
 type storage struct {
+	log              logger.Logger
 	db               *levelDbStorage
 	codec            Codec
 	offsetCodec      Codec
@@ -85,7 +86,7 @@ func (i *iter) Next() bool {
 	for !i.snapExhausted() {
 		if val, err := i.Value(); err != nil {
 			// TODO (franz): sure we want a panic? Not returning the error?
-			log.Panicf("error getting snapshot value in next: %v", err)
+			i.storage.log.Panicf("error getting snapshot value in next: %v", err)
 		} else if val != nil {
 			return true
 		}
@@ -133,8 +134,8 @@ func (i *iter) Release() {
 }
 
 // New news new
-func New(fn string, c Codec, m metrics.Registry, snapshotInterval time.Duration) (Storage, error) {
-	db, err := newLeveldbStorage(fn, true)
+func New(log logger.Logger, fn string, c Codec, m metrics.Registry, snapshotInterval time.Duration) (Storage, error) {
+	db, err := newLeveldbStorage(log, fn, true)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +152,7 @@ func New(fn string, c Codec, m metrics.Registry, snapshotInterval time.Duration)
 		snapshotFlushsize.Update(int64(numElements))
 	}
 	return &storage{
+		log:              log,
 		db:               db,
 		codec:            c,
 		offsetCodec:      &codec.Int64{},
@@ -282,7 +284,7 @@ func (s *storage) storageSnapshotFlusher() {
 				return s.db.Set(offsetKey, off)
 			})
 			if err != nil {
-				log.Println(err)
+				s.log.Printf("%v", err)
 			}
 		case <-s.flusherCancel:
 			return
@@ -306,19 +308,19 @@ func (s *storage) stateFlush(key string, value interface{}, encoded bool) {
 		encodedValue, err = s.codec.Encode(value)
 	}
 	if err != nil {
-		log.Printf("Error encoding state (key=%s) for writing to local storage: %v", key, err)
+		s.log.Printf("Error encoding state (key=%s) for writing to local storage: %v", key, err)
 		return
 	}
 
 	err = s.db.Set(key, encodedValue)
 	if err != nil {
-		log.Printf("Error writing state (key=%s) to local storage: %v", key, err)
+		s.log.Printf("Error writing state (key=%s) to local storage: %v", key, err)
 	}
 }
 
 func (s *storage) stateDelete(key string, value interface{}, encoded bool) {
 	if err := s.db.Delete(key); err != nil {
-		log.Printf("error deleting from local storage (key %s)", key)
+		s.log.Printf("error deleting from local storage (key %s)", key)
 	}
 }
 

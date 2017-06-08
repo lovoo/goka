@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/facebookgo/ensure"
-
 	"github.com/lovoo/goka/codec"
 )
 

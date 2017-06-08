@@ -7,6 +7,7 @@ import (
 
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/mock"
 	"github.com/lovoo/goka/storage"
 
@@ -22,6 +23,7 @@ var (
 func createTestView(t *testing.T, consumer kafka.Consumer, sb StorageBuilder, tm kafka.TopicManager) *View {
 	recoveredMessages = 0
 	opts := &voptions{
+		log:        logger.Default(),
 		tableCodec: new(codec.String),
 		updateCallback: func(s storage.Storage, partition int32, key string, value []byte) error {
 			if err := DefaultUpdate(s, partition, key, value); err != nil {

@@ -2,9 +2,9 @@ package kafka
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/Shopify/sarama"
+	"github.com/lovoo/goka/logger"
 	metrics "github.com/rcrowley/go-metrics"
 )
 
@@ -18,13 +18,14 @@ type Producer interface {
 }
 
 type producer struct {
+	log      logger.Logger
 	producer sarama.AsyncProducer
 	stop     chan bool
 	done     chan bool
 }
 
 // NewProducer creates new kafka producer for passed brokers.
-func NewProducer(brokers []string, registry metrics.Registry) (Producer, error) {
+func NewProducer(brokers []string, registry metrics.Registry, log logger.Logger) (Producer, error) {
 	config := CreateDefaultKafkaConfig("whatever", sarama.OffsetOldest, registry)
 	aprod, err := sarama.NewAsyncProducer(brokers, &config.Config)
 	if err != nil {
@@ -32,6 +33,7 @@ func NewProducer(brokers []string, registry metrics.Registry) (Producer, error) 
 	}
 
 	p := producer{
+		log:      log,
 		producer: aprod,
 		stop:     make(chan bool),
 		done:     make(chan bool),
@@ -71,14 +73,14 @@ func (p *producer) run() {
 		case err := <-p.producer.Errors():
 			promise, is := err.Msg.Metadata.(*Promise)
 			if !is {
-				log.Fatalf("invalid metadata type. expected *Promise, got %T", err.Msg.Metadata)
+				p.log.Panicf("invalid metadata type. expected *Promise, got %T", err.Msg.Metadata)
 			}
 			promise.Finish(err.Err)
 
 		case msg := <-p.producer.Successes():
 			promise, is := msg.Metadata.(*Promise)
 			if !is {
-				log.Fatalf("invalid metadata type. expected *Promise, got %T", msg.Metadata)
+				p.log.Panicf("invalid metadata type. expected *Promise, got %T", msg.Metadata)
 			}
 			promise.Finish(nil)
 		}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/mock"
 
 	"github.com/facebookgo/ensure"
@@ -355,6 +356,7 @@ func TestContext_Join(t *testing.T) {
 		msg:   &message{Key: key},
 		pviews: map[string]*partition{
 			string(table): &partition{
+				log: logger.Default(),
 				st: &storageProxy{
 					Storage: st,
 				},
