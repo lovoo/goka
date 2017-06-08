@@ -72,6 +72,9 @@ func NewSaramaConsumer(brokers []string, group string, registry metrics.Registry
 }
 
 func (c *saramaConsumer) Close() error {
+	// we want to close the events-channel regardless of any errors closing
+	// the consumers
+	defer close(c.events)
 	err1 := c.simpleConsumer.Close()
 	err2 := c.groupConsumer.Close()
 	if err1 != nil {
@@ -80,7 +83,6 @@ func (c *saramaConsumer) Close() error {
 	if err2 != nil {
 		return err2
 	}
-	close(c.events)
 	return nil
 }
 
