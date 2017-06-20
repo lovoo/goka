@@ -183,6 +183,15 @@ func WithLogger(log logger.Logger) ProcessorOption {
 	}
 }
 
+// WithRegistry sets the metrics registry the processor should use. The registry
+// should not be prefixed, otherwise the monitor web view won't work as it
+// expects metrics of certain name.
+func WithRegistry(r metrics.Registry) ProcessorOption {
+	return func(o *poptions) {
+		o.registry = r
+	}
+}
+
 func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 	opt.clientID = defaultClientID
 
@@ -206,8 +215,6 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 	if opt.storageSnapshotInterval == 0 {
 		opt.storageSnapshotInterval = storage.DefaultStorageSnapshotInterval
 	}
-
-	opt.registry = metrics.NewRegistry()
 
 	// prefix registry
 	opt.gokaRegistry = metrics.NewPrefixedChildRegistry(opt.registry, fmt.Sprintf("goka.processor-%s.", group))
@@ -251,6 +258,15 @@ type voptions struct {
 	}
 	gokaRegistry  metrics.Registry
 	kafkaRegistry metrics.Registry
+}
+
+// WithViewRegistry sets the metrics registry the processor should use. The
+// registry should not be prefixed, otherwise the monitor web view won't work as
+// it expects metrics of certain name.
+func WithViewRegistry(r metrics.Registry) ViewOption {
+	return func(o *voptions) {
+		o.registry = r
+	}
 }
 
 // WithViewLogger sets the logger the view should use. By default, views
@@ -349,8 +365,6 @@ func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = defaultTopicManagerBuilder
 	}
-
-	opt.registry = metrics.NewRegistry()
 
 	// Set a default registry to pass it to the kafka consumer builders.
 	if opt.kafkaRegistry == nil {

@@ -39,6 +39,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	options = append(
 		// default options comes first
 		[]ViewOption{
+			WithViewRegistry(metrics.NewRegistry()),
 			WithViewLogger(logger.Default()),
 			WithViewCallback(DefaultUpdate),
 			WithViewStoragePath(defaultReaderStoragePath),
