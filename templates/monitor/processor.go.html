@@ -72,7 +72,7 @@
             case 1: // recovering
 
               var from = partition.recover_start_offset && partition.recover_start_offset.value >=0 ? partition.recover_start_offset.value : 0;
-              var rate = (partition.recover_rate ? partition.recover_rate['1m.rate'] : 0);
+              var rate = (partition.consumed_messages_rate ? partition.consumed_messages_rate['1m.rate'] : 0);
               var to = partition.recover_hwm ? partition.recover_hwm.value : 0;
               var current = partition.recover_current_offset ? partition.recover_current_offset.value : 0;
 
@@ -94,7 +94,7 @@
             case 2: // recover stalled
               return '<td><span class="label label-default">Recover Stalled</span></td>';
             case 3: // recovered
-            var rate = (partition.recover_rate ? partition.recover_rate['1m.rate'] : 0);
+            var rate = (partition.consumed_messages_rate ? partition.consumed_messages_rate['1m.rate'] : 0);
             var current = partition.recover_current_offset ? partition.recover_current_offset.value : 0;
             var hwm = partition.partition_loader_hwm ? partition.partition_loader_hwm.value : 0;
 

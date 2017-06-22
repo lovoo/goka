@@ -24,7 +24,6 @@ const (
 	mxPartitionLoaderHwm   = "partition_loader_hwm" // current high water mark of the partition loader.
 	mxRecoverStartOffset   = "recover_start_offset"
 	mxRecoverCurrentOffset = "recover_current_offset"
-	mxRecoverRate          = "recover_rate"
 
 	defaultPartitionChannelSize = 10
 	syncInterval                = 30 * time.Second
@@ -65,7 +64,6 @@ type partition struct {
 
 	mxRecoverStartOffset   metrics.Gauge
 	mxRecoverCurrentOffset metrics.Gauge
-	mxRecoverRate          metrics.Meter
 
 	mxRecoverHwm         metrics.Gauge
 	mxPartitionLoaderHwm metrics.Gauge
@@ -103,7 +101,6 @@ func newPartition(log logger.Logger, topic string, cb processCallback, st *stora
 		mxPartitionLoaderHwm:   metrics.GetOrRegisterGauge(mxPartitionLoaderHwm, reg),
 		mxRecoverStartOffset:   metrics.GetOrRegisterGauge(mxRecoverStartOffset, reg),
 		mxRecoverCurrentOffset: metrics.GetOrRegisterGauge(mxRecoverCurrentOffset, reg),
-		mxRecoverRate:          metrics.GetOrRegisterMeter(mxRecoverRate, reg),
 	}
 }
 
@@ -301,7 +298,7 @@ func (p *partition) load(catchup bool) error {
 				}
 				lastMessage = time.Now()
 				// update metrics
-				p.mxRecoverRate.Mark(1)
+				p.mxConsumedRate.Mark(1)
 				p.mxRecoverCurrentOffset.Update(ev.Offset)
 				if ev.Offset < p.initialHwm-1 {
 					p.mxStatus.Update(partitionRecovering)
