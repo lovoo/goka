@@ -56,6 +56,7 @@ type partition struct {
 	process processCallback
 
 	// metrics
+	registry          metrics.Registry
 	mxStatus          metrics.Gauge   // partition status = ?
 	mxConsumed        metrics.Counter // number of processed messages
 	mxConsumedRate    metrics.Meter   // rate of processed messages
@@ -92,6 +93,7 @@ func newPartition(log logger.Logger, topic string, cb processCallback, st *stora
 		process: cb,
 
 		// metrics
+		registry:               reg,
 		mxConsumed:             metrics.GetOrRegisterCounter(mxConsumed, reg),
 		mxConsumedRate:         metrics.GetOrRegisterMeter(mxConsumedRate, reg),
 		mxConsumedPending:      metrics.GetOrRegisterGauge(mxConsumedPending, reg),
@@ -200,6 +202,9 @@ func (p *partition) run() error {
 				p.mxConsumedPending.Update(int64(len(p.ch)))
 				p.mxConsumedRate.Mark(1)
 				p.mxConsumedOffset.Update(msg.Offset)
+				metrics.GetOrRegisterCounter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumed), p.registry).Inc(1)
+				metrics.GetOrRegisterMeter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedRate), p.registry).Mark(1)
+				metrics.GetOrRegisterGauge(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedOffset), p.registry).Update(msg.Offset)
 
 			case *kafka.NOP:
 				// don't do anything but also don't log.
@@ -299,6 +304,7 @@ func (p *partition) load(catchup bool) error {
 				lastMessage = time.Now()
 				// update metrics
 				p.mxConsumedRate.Mark(1)
+				metrics.GetOrRegisterMeter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedRate), p.registry).Mark(1)
 				p.mxRecoverCurrentOffset.Update(ev.Offset)
 				if ev.Offset < p.initialHwm-1 {
 					p.mxStatus.Update(partitionRecovering)

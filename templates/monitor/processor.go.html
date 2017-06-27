@@ -31,10 +31,14 @@
       var renderPartitions = function(partitions){
 
         var partList = _.flatten(_.map(partitions, function(value, index){
-          if(!index.includes("goka")){
+          components = index.split(".").slice(2)
+
+          // if components.length != 3, the metrics is a topic specific metric
+          // rather than a partition total
+          if(!index.includes("goka") || components.length != 3) {
             return [];
           }
-          value['metricname'] = index.split(".").slice(2).join(".");
+          value['metricname'] = components.join(".");
 
           return [value];
         }), true);
