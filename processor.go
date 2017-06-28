@@ -58,6 +58,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	options = append(
 		// default options comes first
 		[]ProcessorOption{
+			WithRegistry(metrics.NewRegistry()),
 			WithLogger(logger.Default()),
 			WithUpdateCallback(DefaultUpdate),
 			WithStoragePath("/tmp/goka"),
