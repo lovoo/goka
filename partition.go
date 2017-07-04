@@ -20,6 +20,7 @@ const (
 	mxConsumedRate         = "consumed_messages_rate"
 	mxConsumedOffset       = "consumed_offset"
 	mxConsumedPending      = "consumed_messages_pending"
+	mxConsumptionDelay     = "consumption_delay"
 	mxRecoverHwm           = "recover_hwm"
 	mxPartitionLoaderHwm   = "partition_loader_hwm" // current high water mark of the partition loader.
 	mxRecoverStartOffset   = "recover_start_offset"
@@ -206,6 +207,9 @@ func (p *partition) run() error {
 				metrics.GetOrRegisterCounter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumed), p.registry).Inc(1)
 				metrics.GetOrRegisterMeter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedRate), p.registry).Mark(1)
 				metrics.GetOrRegisterGauge(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedOffset), p.registry).Update(msg.Offset)
+				if !ev.Timestamp.IsZero() {
+					metrics.GetOrRegisterTimer(fmt.Sprintf("%s.%s", ev.Topic, mxConsumptionDelay), p.registry).UpdateSince(ev.Timestamp)
+				}
 
 			case *kafka.NOP:
 				// don't do anything but also don't log.
@@ -306,6 +310,9 @@ func (p *partition) load(catchup bool) error {
 				// update metrics
 				p.mxConsumedRate.Mark(1)
 				metrics.GetOrRegisterMeter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedRate), p.registry).Mark(1)
+				if !ev.Timestamp.IsZero() {
+					metrics.GetOrRegisterTimer(fmt.Sprintf("%s.%s", ev.Topic, mxConsumptionDelay), p.registry).UpdateSince(ev.Timestamp)
+				}
 				p.mxRecoverCurrentOffset.Update(ev.Offset)
 				if ev.Offset < p.initialHwm-1 {
 					p.mxStatus.Update(partitionRecovering)
