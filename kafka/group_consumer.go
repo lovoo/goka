@@ -189,6 +189,7 @@ func (c *groupConsumer) waitForMessages() bool {
 				Topic:     msg.Topic,
 				Partition: msg.Partition,
 				Offset:    msg.Offset,
+				Timestamp: msg.Timestamp,
 				Key:       string(msg.Key),
 				Value:     msg.Value,
 			}

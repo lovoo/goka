@@ -6,6 +6,7 @@ package main
 import (
 	gomock "github.com/golang/mock/gomock"
 	goka "github.com/lovoo/goka"
+	time "time"
 )
 
 // Mock of Context interface
@@ -89,6 +90,16 @@ func (_m *MockContext) SetValue(_param0 interface{}) {
 
 func (_mr *_MockContextRecorder) SetValue(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetValue", arg0)
+}
+
+func (_m *MockContext) Timestamp() time.Time {
+	ret := _m.ctrl.Call(_m, "Timestamp")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+func (_mr *_MockContextRecorder) Timestamp() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "Timestamp")
 }
 
 func (_m *MockContext) Topic() goka.Stream {

@@ -160,6 +160,7 @@ func newMessage(ev *kafka.Message) *message {
 		Topic:     string(ev.Topic),
 		Partition: int32(ev.Partition),
 		Offset:    int64(ev.Offset),
+		Timestamp: ev.Timestamp,
 		Data:      ev.Value,
 		Key:       string(ev.Key),
 	}

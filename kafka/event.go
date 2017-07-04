@@ -1,6 +1,9 @@
 package kafka
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // Event abstracts different types of events from the kafka consumer like BOF/EOF/Error or an actual message
 type Event interface {
@@ -44,6 +47,7 @@ type Message struct {
 	Topic     string
 	Partition int32
 	Offset    int64
+	Timestamp time.Time
 
 	Key   string
 	Value []byte

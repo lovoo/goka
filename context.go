@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/storage"
@@ -26,6 +27,10 @@ type Context interface {
 
 	// SetValue updates the value of the key in the group table.
 	SetValue(value interface{})
+
+	// Timestamp returns the timestamp of the input message. If the timestamp is
+	// invalid, a zero time will be returned.
+	Timestamp() time.Time
 
 	// Join returns the value of key in the copartitioned table.
 	Join(topic Table) interface{}
@@ -131,6 +136,11 @@ func (ctx *context) SetValue(value interface{}) {
 	if err := ctx.setValueForKey(string(ctx.msg.Key), value); err != nil {
 		ctx.Fail(err)
 	}
+}
+
+// Timestamp returns the timestamp of the input message.
+func (ctx *context) Timestamp() time.Time {
+	return ctx.msg.Timestamp
 }
 
 func (ctx *context) Key() string {

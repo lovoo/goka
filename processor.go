@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"runtime/debug"
 	"sync"
+	"time"
 
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
@@ -45,6 +46,7 @@ type message struct {
 	Topic     string
 	Partition int32
 	Offset    int64
+	Timestamp time.Time
 }
 
 // ProcessCallback function is called for every message received by the
