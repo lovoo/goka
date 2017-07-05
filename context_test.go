@@ -83,6 +83,18 @@ func TestContext_Emit(t *testing.T) {
 	ensure.DeepEqual(t, ack, 1)
 }
 
+func TestContext_Timestamp(t *testing.T) {
+	ts := time.Now()
+
+	ctx := &context{
+		msg: &message{
+			Timestamp: ts,
+		},
+	}
+
+	ensure.DeepEqual(t, ctx.Timestamp(), ts)
+}
+
 func TestContext_EmitError(t *testing.T) {
 	ack := 0
 	emitted := 0
