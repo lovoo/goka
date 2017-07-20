@@ -46,11 +46,12 @@ func TestMemIter(t *testing.T) {
 
 	found := map[string]string{}
 
+	storage.Set(offsetKey, "not-returned")
 	for k, v := range kv {
 		storage.Set(k, v)
 	}
 
-	// released iterator should be immidiately exhausted
+	// released iterator should be immediately exhausted
 	iter := storage.Iterator()
 	iter.Release()
 	ensure.False(t, iter.Next(), "released iterator had a next")
