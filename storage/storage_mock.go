@@ -28,6 +28,9 @@ func (i *memiter) exhausted() bool {
 
 func (i *memiter) Next() bool {
 	i.current++
+	if string(i.Key()) == offsetKey {
+		i.current++
+	}
 	return !i.exhausted()
 }
 

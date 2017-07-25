@@ -84,6 +84,11 @@ func (i *iter) Next() bool {
 
 	// find the next non deleted snapshot value
 	for !i.snapExhausted() {
+		if string(i.Key()) == offsetKey {
+			i.current++
+			continue
+		}
+
 		if val, err := i.Value(); err != nil {
 			// TODO (franz): sure we want a panic? Not returning the error?
 			i.storage.log.Panicf("error getting snapshot value in next: %v", err)
@@ -96,6 +101,10 @@ func (i *iter) Next() bool {
 
 	// find next value in db that was not in snapshot
 	for i.iter.Next() {
+		if string(i.Key()) == offsetKey {
+			continue
+		}
+
 		if !i.snapshot.Has(string(i.Key())) {
 			return true
 		}
@@ -114,7 +123,11 @@ func (i *iter) Key() []byte {
 
 func (i *iter) Value() (interface{}, error) {
 	if i.snapExhausted() {
-		return i.storage.codec.Decode(i.iter.Value())
+		dec, err := i.storage.codec.Decode(i.iter.Value())
+		if err != nil {
+			return nil, fmt.Errorf("error decoding value (key: %s): %v", string(i.Key()), err)
+		}
+		return dec, nil
 	}
 
 	val, enc, err := i.snapshot.Get(string(i.Key()), i.storage.stateCloner(i.storage.codec))
