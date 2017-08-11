@@ -52,9 +52,10 @@ type partition struct {
 	readyFlag  int32
 	initialHwm int64
 
-	st      *storageProxy
-	proxy   kafkaProxy
-	process processCallback
+	st            *storageProxy
+	recoveredOnce sync.Once
+	proxy         kafkaProxy
+	process       processCallback
 
 	// metrics
 	registry          metrics.Registry
@@ -89,9 +90,10 @@ func newPartition(log logger.Logger, topic string, cb processCallback, st *stora
 		dying: make(chan bool),
 		done:  make(chan bool),
 
-		st:      st,
-		proxy:   proxy,
-		process: cb,
+		st:            st,
+		recoveredOnce: sync.Once{},
+		proxy:         proxy,
+		process:       cb,
 
 		// metrics
 		registry:               reg,
@@ -289,6 +291,13 @@ func (p *partition) load(catchup bool) error {
 					p.log.Printf("readyFlag was false when EOF arrived")
 					p.mxStatus.Update(partitionRecovered)
 					atomic.StoreInt32(&p.readyFlag, 1)
+					var err error
+					p.recoveredOnce.Do(func() {
+						err = p.st.MarkRecovered()
+					})
+					if err != nil {
+						return fmt.Errorf("error setting recovered: %v", err)
+					}
 				}
 				if catchup {
 					continue
@@ -318,6 +327,13 @@ func (p *partition) load(catchup bool) error {
 					p.mxStatus.Update(partitionRecovering)
 				} else {
 					p.mxStatus.Update(partitionRecovered)
+					var err error
+					p.recoveredOnce.Do(func() {
+						err = p.st.MarkRecovered()
+					})
+					if err != nil {
+						return fmt.Errorf("error setting recovered: %v", err)
+					}
 				}
 			case *kafka.NOP:
 				// don't do anything

@@ -31,7 +31,7 @@ func newStorageProxy(st storage.Storage, id int32, update UpdateCallback) *stora
 
 func newNullStorageProxy(id int32) *storageProxy {
 	return &storageProxy{
-		Storage:   storage.NewMock(nil),
+		Storage:   storage.NewMemory(nil),
 		partition: id,
 		stateless: true,
 	}
@@ -344,6 +344,7 @@ func TestPartition_runStatefulWithError(t *testing.T) {
 		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset),
+		st.EXPECT().MarkRecovered(),
 		proxy.EXPECT().Remove(topic),
 		proxy.EXPECT().AddGroup(),
 		st.EXPECT().Sync(),
@@ -427,6 +428,7 @@ func TestPartition_loadStateful(t *testing.T) {
 		st.EXPECT().SetEncoded(key, value),
 		st.EXPECT().SetOffset(int64(offset)).Return(nil),
 		st.EXPECT().Sync(),
+		st.EXPECT().MarkRecovered(),
 		proxy.EXPECT().Remove(topic),
 		proxy.EXPECT().AddGroup(),
 		st.EXPECT().Sync(),
@@ -629,6 +631,7 @@ func TestPartition_catchupStateful(t *testing.T) {
 		st.EXPECT().SetEncoded(key, value),
 		st.EXPECT().SetOffset(offset+1).Return(nil),
 		st.EXPECT().Sync(),
+		st.EXPECT().MarkRecovered(),
 		st.EXPECT().SetEncoded(key, value),
 		st.EXPECT().SetOffset(offset+2).Return(nil),
 		st.EXPECT().Sync(),
@@ -749,6 +752,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 		st.EXPECT().SetEncoded(key, value),
 		st.EXPECT().SetOffset(offset+1).Return(nil),
 		st.EXPECT().Sync(),
+		st.EXPECT().MarkRecovered(),
 		proxy.EXPECT().Remove(topic),
 		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),

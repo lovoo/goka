@@ -76,7 +76,7 @@ type Tester interface {
 // NewKafkaMock returns a new testprocessor mocking every external service
 func NewKafkaMock(t Tester, groupName Group) *KafkaMock {
 	kafkaMock := &KafkaMock{
-		storage:        storage.NewMock(new(codec.Bytes)),
+		storage:        storage.NewMemory(new(codec.Bytes)),
 		t:              t,
 		incomingEvents: make(chan kafka.Event),
 		consumerEvents: make(chan kafka.Event),

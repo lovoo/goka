@@ -13,10 +13,6 @@ import (
 	"github.com/rcrowley/go-metrics"
 )
 
-const (
-	defaultReaderStoragePath = "/tmp/goka_view"
-)
-
 // Getter functions return a value for a key or an error. If no value exists for the key, nil is returned without errors.
 type Getter func(string) (interface{}, error)
 
@@ -42,8 +38,8 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 			WithViewRegistry(metrics.NewRegistry()),
 			WithViewLogger(logger.Default()),
 			WithViewCallback(DefaultUpdate),
-			WithViewStoragePath(defaultReaderStoragePath),
 			WithViewPartitionChannelSize(defaultPartitionChannelSize),
+			WithViewStorageBuilder(DefaultStorageBuilder(DefaultViewStoragePath())),
 		},
 
 		// then the user passed options

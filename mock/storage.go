@@ -92,6 +92,16 @@ func (_mr *_MockStorageRecorder) Iterator() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Iterator")
 }
 
+func (_m *MockStorage) MarkRecovered() error {
+	ret := _m.ctrl.Call(_m, "MarkRecovered")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockStorageRecorder) MarkRecovered() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "MarkRecovered")
+}
+
 func (_m *MockStorage) Open() error {
 	ret := _m.ctrl.Call(_m, "Open")
 	ret0, _ := ret[0].(error)

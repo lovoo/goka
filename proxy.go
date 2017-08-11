@@ -100,3 +100,7 @@ func (s storageProxy) Update(k string, v []byte) error {
 func (s storageProxy) Stateless() bool {
 	return s.stateless
 }
+
+func (s storageProxy) MarkRecovered() error {
+	return s.Storage.MarkRecovered()
+}

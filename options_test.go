@@ -2,6 +2,7 @@ package goka
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/facebookgo/ensure"
@@ -10,17 +11,12 @@ import (
 func newMockOptions(t *testing.T) *poptions {
 	opts := new(poptions)
 	err := opts.applyOptions("")
+	ensure.Err(t, err, regexp.MustCompile("StorageBuilder not set$"))
+
+	opts.builders.storage = nullStorageBuilder()
+	err = opts.applyOptions("")
 	ensure.Nil(t, err)
-	opts.storagePath = "/tmp/goka-test"
 
 	fmt.Printf("%+v\n", opts)
 	return opts
-}
-
-func TestOptions_storagePathForPartition(t *testing.T) {
-	topic := "test"
-	var id int32
-	opts := newMockOptions(t)
-	path := opts.storagePathForPartition(topic, id)
-	ensure.DeepEqual(t, path, fmt.Sprintf("/tmp/goka-test/processor/%s.%d", topic, id))
 }
