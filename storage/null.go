@@ -1,0 +1,87 @@
+package storage
+
+// Null storage discards everything that it is given. This can be useful for
+// debugging.
+type Null struct{}
+
+// NewNull returns a new Null storage.
+func NewNull() Storage {
+	return new(Null)
+}
+
+// MarkRecovered does nothing.
+func (n *Null) MarkRecovered() error {
+	return nil
+}
+
+// Has returns false as in key not found.
+func (n *Null) Has(key string) (bool, error) {
+	return false, nil
+}
+
+// Get returns nil values.
+func (n *Null) Get(key string) (interface{}, error) {
+	return nil, nil
+}
+
+// Set will do nothing and doesn't error.
+func (n *Null) Set(key string, val interface{}) error {
+	return nil
+}
+
+// SetEncoded does nothing and doesn't error.
+func (n *Null) SetEncoded(key string, val []byte) error {
+	return nil
+}
+
+// Delete does nothing and doesn't error.
+func (n *Null) Delete(string) error {
+	return nil
+}
+
+// GetOffset returns the default offset given to it.
+func (n *Null) GetOffset(def int64) (int64, error) {
+	return def, nil
+}
+
+// SetOffset does nothing and doesn't error.
+func (n *Null) SetOffset(val int64) error {
+	return nil
+}
+
+// Iterator returns an Iterator that is immediately exhausted.
+func (n *Null) Iterator() Iterator {
+	return new(NullIter)
+}
+
+// Open does nothing and doesn't error.
+func (n *Null) Open() error {
+	return nil
+}
+
+// Close does nothing and doesn't error
+func (n *Null) Close() error {
+	return nil
+}
+
+// Sync does nothing and doesn't error
+func (n *Null) Sync() {}
+
+type NullIter struct{}
+
+// Next returns always false.
+func (ni *NullIter) Next() bool {
+	return false
+}
+
+// Key returns always nil.
+func (ni *NullIter) Key() []byte {
+	return nil
+}
+
+// Value returns always a nil value and no errors.
+func (ni *NullIter) Value() (interface{}, error) {
+	return nil, nil
+}
+
+func (ni *NullIter) Release() {}

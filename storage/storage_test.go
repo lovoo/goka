@@ -1,20 +1,18 @@
 package storage
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"testing"
 
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/logger"
+	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/facebookgo/ensure"
-	"github.com/rcrowley/go-metrics"
 )
 
 func TestMemStorageDelete(t *testing.T) {
-	storage := NewMock(&codec.String{})
+	storage := NewMemory(&codec.String{})
 
 	has, err := storage.Has("key-1")
 	ensure.Nil(t, err)
@@ -36,7 +34,7 @@ func TestMemStorageDelete(t *testing.T) {
 }
 
 func TestMemIter(t *testing.T) {
-	storage := NewMock(&codec.String{})
+	storage := NewMemory(&codec.String{})
 
 	kv := map[string]string{
 		"key-1": "val-1",
@@ -82,7 +80,7 @@ func TestMemIter(t *testing.T) {
 }
 
 func TestGetHas(t *testing.T) {
-	storage := NewMock(&codec.String{})
+	storage := NewMemory(&codec.String{})
 
 	var (
 		err    error
@@ -116,33 +114,19 @@ func TestGetHas(t *testing.T) {
 	ensure.NotNil(t, err)
 }
 
-type myMessage struct {
-	User  string `json:"user"`
-	Value bool   `json:"value"`
-}
-
-type myCodec struct{}
-
-func (m *myCodec) Encode(key string, value interface{}) ([]byte, error) {
-	msg := value.(*myMessage)
-	data, unmarshalErr := json.Marshal(msg)
-	return data, unmarshalErr
-}
-
-func (m *myCodec) Decode(key string, data []byte) (interface{}, error) {
-	msg := &myMessage{}
-	unmarshalErr := json.Unmarshal(data, msg)
-	return msg, unmarshalErr
-}
-
-func TestSetGet_json(t *testing.T) {
+func TestSetGet(t *testing.T) {
 	var (
 		err    error
 		hasKey bool
 	)
-	testDbPath := "/tmp/statemanagertest.go"
-	os.RemoveAll(testDbPath)
-	storage, err := New(logger.Default(), testDbPath, &codec.String{}, metrics.NewRegistry(), DefaultStorageSnapshotInterval)
+
+	tmpdir, err := ioutil.TempDir("", "goka_storage_TestSetGet")
+	ensure.Nil(t, err)
+
+	db, err := leveldb.OpenFile(tmpdir, nil)
+	ensure.Nil(t, err)
+
+	storage, err := New(db, &codec.String{})
 	ensure.Nil(t, err)
 
 	hasKey, err = storage.Has("example1")
@@ -153,12 +137,7 @@ func TestSetGet_json(t *testing.T) {
 	ensure.True(t, value == nil)
 	ensure.Nil(t, err)
 
-	exampleMessage := &myMessage{
-		User:  "someuser",
-		Value: true,
-	}
-
-	err = storage.Set("example1", exampleMessage)
+	err = storage.Set("example1", "example-message")
 	ensure.Nil(t, err)
 
 	hasKey, err = storage.Has("example1")
@@ -189,7 +168,7 @@ func TestSetGet_json(t *testing.T) {
 	ensure.DeepEqual(t, messages["encoded"], "encoded-value")
 	ensure.DeepEqual(t, messages["decoded"], "decoded-value")
 
-	recoveredValue, is := value.(*myMessage)
+	recoveredValue, is := value.(string)
 	ensure.True(t, is)
-	ensure.DeepEqual(t, recoveredValue, exampleMessage)
+	ensure.DeepEqual(t, recoveredValue, "example-message")
 }

@@ -63,8 +63,8 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 			WithRegistry(metrics.NewRegistry()),
 			WithLogger(logger.Default()),
 			WithUpdateCallback(DefaultUpdate),
-			WithStoragePath("/tmp/goka"),
 			WithPartitionChannelSize(defaultPartitionChannelSize),
+			WithStorageBuilder(DefaultStorageBuilder(DefaultProcessorStoragePath(gg.Group()))),
 		},
 
 		// user-defined options (may overwrite default ones)
@@ -470,7 +470,7 @@ func (g *Processor) newJoinStorage(topic string, id int32, codec Codec, update U
 func (g *Processor) newStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
 	if g.isStateless() {
 		return &storageProxy{
-			Storage:   storage.NewMock(codec),
+			Storage:   storage.NewMemory(codec),
 			partition: id,
 			stateless: true,
 		}, nil

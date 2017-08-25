@@ -27,6 +27,12 @@ var (
 	rawCodec = new(codec.Bytes)
 )
 
+func nullStorageBuilder() StorageBuilder {
+	return func(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
+		return &storage.Null{}, nil
+	}
+}
+
 func syncWith(t *testing.T, ch chan kafka.Event, p ...int32) error {
 	return doTimed(t, func() {
 		for _, par := range p {
@@ -67,7 +73,7 @@ func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, 
 	return p
 }
 
-func createProcessor(ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb StorageBuilder) *Processor {
+func createProcessor(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb StorageBuilder) *Processor {
 	tm := mock.NewMockTopicManager(ctrl)
 	producer := mock.NewMockProducer(ctrl)
 
@@ -85,7 +91,7 @@ func createProcessor(ctrl *gomock.Controller, consumer kafka.Consumer, npar int,
 	tm.EXPECT().EnsureStreamExists(loopName(group), len(partitions)).Return(nil)
 	tm.EXPECT().EnsureTableExists(tableName(group), len(partitions)).Return(nil)
 	tm.EXPECT().Close().Return(nil)
-	p, _ := NewProcessor(nil,
+	p, err := NewProcessor(nil,
 		DefineGroup(group,
 			Input(topic, rawCodec, cb),
 			Input(topic2, rawCodec, cb),
@@ -98,6 +104,7 @@ func createProcessor(ctrl *gomock.Controller, consumer kafka.Consumer, npar int,
 		WithStorageBuilder(sb),
 		WithPartitionChannelSize(0),
 	)
+	ensure.Nil(t, err)
 	return p
 }
 
@@ -295,7 +302,7 @@ func TestProcessor_StartFails(t *testing.T) {
 	defer ctrl.Finish()
 	consumer := mock.NewMockConsumer(ctrl)
 
-	p := createProcessor(ctrl, consumer, 2, nil)
+	p := createProcessor(t, ctrl, consumer, 2, nullStorageBuilder())
 
 	// group consumer start fails
 	consumer.EXPECT().Subscribe(topOff).Return(errSome)
@@ -314,7 +321,7 @@ func TestProcessor_StartStopEmpty(t *testing.T) {
 		consumer = mock.NewMockConsumer(ctrl)
 		wait     = make(chan bool)
 		ch       = make(chan kafka.Event)
-		p        = createProcessor(ctrl, consumer, 2, nil)
+		p        = createProcessor(t, ctrl, consumer, 2, nullStorageBuilder())
 	)
 
 	consumer.EXPECT().Subscribe(topOff).Return(nil)
@@ -341,7 +348,7 @@ func TestProcessor_StartStopEmptyError(t *testing.T) {
 		consumer = mock.NewMockConsumer(ctrl)
 		wait     = make(chan bool)
 		ch       = make(chan kafka.Event)
-		p        = createProcessor(ctrl, consumer, 2, nil)
+		p        = createProcessor(t, ctrl, consumer, 2, nullStorageBuilder())
 	)
 
 	consumer.EXPECT().Subscribe(topOff).Return(nil)
@@ -388,7 +395,7 @@ func TestProcessor_StartWithErrorBeforeRebalance(t *testing.T) {
 				}
 				final = make(chan bool)
 				ch    = make(chan kafka.Event)
-				p     = createProcessor(ctrl, consumer, 3, sb)
+				p     = createProcessor(t, ctrl, consumer, 3, sb)
 			)
 
 			gomock.InOrder(
@@ -428,7 +435,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 		}
 		final = make(chan bool)
 		ch    = make(chan kafka.Event)
-		p     = createProcessor(ctrl, consumer, 3, sb)
+		p     = createProcessor(t, ctrl, consumer, 3, sb)
 	)
 
 	// -- expectations --
@@ -447,6 +454,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 	gomock.InOrder(
 		st.EXPECT().SetEncoded("key", nil).Return(nil),
 		st.EXPECT().SetOffset(int64(1)),
+		st.EXPECT().MarkRecovered(),
 		st.EXPECT().Sync(),
 	)
 
@@ -507,7 +515,7 @@ func TestProcessor_Start(t *testing.T) {
 		}
 		final = make(chan bool)
 		ch    = make(chan kafka.Event)
-		p     = createProcessor(ctrl, consumer, 3, sb)
+		p     = createProcessor(t, ctrl, consumer, 3, sb)
 	)
 
 	// -- expectations --
@@ -524,6 +532,7 @@ func TestProcessor_Start(t *testing.T) {
 	st.EXPECT().SetEncoded("key", nil).Return(nil)
 	st.EXPECT().SetOffset(int64(1))
 	st.EXPECT().Sync()
+	st.EXPECT().MarkRecovered()
 	// 4. end of recovery partition 1
 	gomock.InOrder(
 		consumer.EXPECT().RemovePartition(tableName(group), int32(1)),
@@ -677,6 +686,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	// 3. message to group table
 	st.EXPECT().SetEncoded("key", nil).Return(nil)
 	st.EXPECT().SetOffset(int64(1))
+	st.EXPECT().MarkRecovered()
 	st.EXPECT().Sync()
 	// 4. finish recovery of partition 1
 	gomock.InOrder(
@@ -698,6 +708,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	consumer.EXPECT().Close().Do(func() { close(ch) })
 	consumer.EXPECT().RemovePartition(table, int32(0))
 	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
+	st.EXPECT().MarkRecovered()
 	st.EXPECT().Sync().Times(2)  // final sync
 	st.EXPECT().Close().Times(2) // close group table and other table
 	producer.EXPECT().Close().Return(nil)
@@ -774,7 +785,7 @@ func TestProcessor_rebalanceError(t *testing.T) {
 		consumer = mock.NewMockConsumer(ctrl)
 		wait     = make(chan bool)
 		ch       = make(chan kafka.Event)
-		p        = createProcessor(ctrl, consumer, 1,
+		p        = createProcessor(t, ctrl, consumer, 1,
 			func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
 				return nil, errors.New("some error")
 			})
@@ -815,7 +826,7 @@ func TestProcessor_HasGet(t *testing.T) {
 		consumer = mock.NewMockConsumer(ctrl)
 		ch       = make(chan kafka.Event)
 		wait     = make(chan bool)
-		p        = createProcessor(ctrl, consumer, 1, sb)
+		p        = createProcessor(t, ctrl, consumer, 1, sb)
 	)
 
 	ensure.True(t, p.partitionCount == 1)

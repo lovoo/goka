@@ -2,20 +2,17 @@ package storage
 
 import (
 	"fmt"
-	"sync"
-	"time"
-
-	"github.com/rcrowley/go-metrics"
-	"github.com/syndtr/goleveldb/leveldb/iterator"
 
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/logger"
-	"github.com/lovoo/goka/snapshot"
+
+	"github.com/syndtr/goleveldb/leveldb"
+	ldbiter "github.com/syndtr/goleveldb/leveldb/iterator"
+	"github.com/syndtr/goleveldb/leveldb/opt"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 const (
-	mxSnapshotRatio     = "snapshot_updateratio"
-	mxSnapshotFlushsize = "snapshot_flushsize"
+	offsetKey = "__offset"
 )
 
 // Iterator provides iteration access to the stored values.
@@ -43,141 +40,79 @@ type Storage interface {
 	SetOffset(value int64) error
 	GetOffset(defValue int64) (int64, error)
 	Iterator() Iterator
+	MarkRecovered() error
 	Open() error
 	Close() error
 	Sync()
 }
 
-// DefaultStorageSnapshotInterval is the default interval, in which snapshots are being stored to
-// disks in the storage.
-const DefaultStorageSnapshotInterval = 1 * time.Minute
+// store is the common interface between a transaction and db instance
+type store interface {
+	Has([]byte, *opt.ReadOptions) (bool, error)
+	Get([]byte, *opt.ReadOptions) ([]byte, error)
+	Put([]byte, []byte, *opt.WriteOptions) error
+	Delete([]byte, *opt.WriteOptions) error
+	NewIterator(*util.Range, *opt.ReadOptions) ldbiter.Iterator
+}
 
 type storage struct {
-	log              logger.Logger
-	db               *levelDbStorage
-	codec            Codec
-	offsetCodec      Codec
-	snap             *snapshot.Snapshot
-	snapshotInterval time.Duration
-	flusherDone      chan bool
-	flusherCancel    chan bool
+	// store is the active store, either db or tx
+	store store
+	db    *leveldb.DB
+	// tx is the transaction used for recovery
+	tx *leveldb.Transaction
 
-	mOffset       sync.Mutex
+	codec         Codec
+	offsetCodec   Codec
 	currentOffset int64
 }
 
-type iter struct {
-	current  int
-	keys     []string
-	snapshot *snapshot.Snapshot
-
-	iter    iterator.Iterator
-	storage *storage
-}
-
-func (i *iter) snapExhausted() bool {
-	return len(i.keys) <= i.current
-}
-
-func (i *iter) Next() bool {
-	i.current++
-
-	// find the next non deleted snapshot value
-	for !i.snapExhausted() {
-		if string(i.Key()) == offsetKey {
-			i.current++
-			continue
-		}
-
-		if val, err := i.Value(); err != nil {
-			// TODO (franz): sure we want a panic? Not returning the error?
-			i.storage.log.Panicf("error getting snapshot value in next: %v", err)
-		} else if val != nil {
-			return true
-		}
-
-		i.current++
-	}
-
-	// find next value in db that was not in snapshot
-	for i.iter.Next() {
-		if string(i.Key()) == offsetKey {
-			continue
-		}
-
-		if !i.snapshot.Has(string(i.Key())) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (i *iter) Key() []byte {
-	if i.snapExhausted() {
-		return i.iter.Key()
-	}
-
-	return []byte(i.keys[i.current])
-}
-
-func (i *iter) Value() (interface{}, error) {
-	if i.snapExhausted() {
-		dec, err := i.storage.codec.Decode(i.iter.Value())
-		if err != nil {
-			return nil, fmt.Errorf("error decoding value (key: %s): %v", string(i.Key()), err)
-		}
-		return dec, nil
-	}
-
-	val, enc, err := i.snapshot.Get(string(i.Key()), i.storage.stateCloner(i.storage.codec))
+// New creates a new Storage backed by LevelDB.
+func New(db *leveldb.DB, c Codec) (Storage, error) {
+	tx, err := db.OpenTransaction()
 	if err != nil {
-		return nil, fmt.Errorf("error getting value in iterator: %v", err)
+		return nil, fmt.Errorf("error opening leveldb transaction: %v", err)
 	}
 
-	if enc {
-		return i.storage.codec.Decode(val.([]byte))
-	}
-
-	return val, nil
-}
-
-func (i *iter) Release() {
-	i.iter.Release()
-}
-
-// New news new
-func New(log logger.Logger, fn string, c Codec, m metrics.Registry, snapshotInterval time.Duration) (Storage, error) {
-	db, err := newLeveldbStorage(log, fn, true)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshotRatio := metrics.GetOrRegisterGaugeFloat64(mxSnapshotRatio, m)
-	snapshotFlushsize := metrics.GetOrRegisterGauge(mxSnapshotFlushsize, m)
-	snap := snapshot.New(1)
-	snap.MetricsHook = func(numUpdates int64, numElements int) {
-		if numElements == 0 {
-			snapshotRatio.Update(0)
-		} else {
-			snapshotRatio.Update(float64(numUpdates) / float64(numElements))
-		}
-		snapshotFlushsize.Update(int64(numElements))
-	}
 	return &storage{
-		log:              log,
-		db:               db,
-		codec:            c,
-		offsetCodec:      &codec.Int64{},
-		snap:             snap,
-		snapshotInterval: snapshotInterval,
-		flusherDone:      make(chan bool),
-		flusherCancel:    make(chan bool),
+		store: tx,
+		db:    db,
+		tx:    tx,
+
+		codec:       c,
+		offsetCodec: &codec.Int64{},
 	}, nil
 }
 
 func (s *storage) Iterator() Iterator {
-	return &iter{-1, s.snap.Keys(), s.snap, s.db.Iterator(), s}
+	return &iterator{
+		iter:  s.store.NewIterator(nil, nil),
+		codec: s.codec,
+	}
+}
+
+func (s *storage) Has(key string) (bool, error) {
+	return s.store.Has([]byte(key), nil)
+}
+
+func (s *storage) get(key string, codec Codec) (interface{}, error) {
+	if has, err := s.store.Has([]byte(key), nil); err != nil {
+		return nil, fmt.Errorf("error checking for existence in leveldb (key %s): %v", key, err)
+	} else if !has {
+		return nil, nil
+	}
+
+	data, err := s.store.Get([]byte(key), nil)
+	if err != nil {
+		return nil, fmt.Errorf("error getting from leveldb (key %s): %v", key, err)
+	}
+
+	value, err := codec.Decode(data)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding (key %s): %v", key, err)
+	}
+
+	return value, nil
 }
 
 func (s *storage) Get(key string) (interface{}, error) {
@@ -195,175 +130,64 @@ func (s *storage) GetOffset(defValue int64) (int64, error) {
 	return val.(int64), nil
 }
 
-func (s *storage) get(key string, codec Codec) (interface{}, error) {
-	// is entry in snapshot?
-	value, encoded, err := s.snap.Get(key, s.stateCloner(codec))
+func (s *storage) set(key string, value interface{}, codec Codec) error {
+	data, err := codec.Encode(value)
 	if err != nil {
-		return nil, fmt.Errorf("Error retrieving value from local snapshot: %v", err)
-	}
-	if value != nil {
-		if !encoded {
-			return value, nil
-		}
-		return codec.Decode(value.([]byte))
+		return fmt.Errorf("error encoding (key %s): %v", key, err)
 	}
 
-	storedValue, err := s.db.Get(key)
-	if err != nil {
-		return nil, fmt.Errorf("Error retrieving value for %s from local storage: %v", key, err)
-	}
-	if storedValue == nil {
-		return nil, nil
-	}
-
-	decodedValue, err := codec.Decode(storedValue)
-	if err != nil {
-		return nil, fmt.Errorf("Error decoding value from storage for key %s: %v", key, err)
-	}
-	return decodedValue, nil
-}
-
-func (s *storage) Has(key string) (bool, error) {
-	value, _, err := s.snap.Get(key, s.stateCloner(s.codec))
-	if err != nil {
-		return false, fmt.Errorf("Error getting value from snapshot: %v", err)
-	}
-	if value != nil {
-		return true, nil
-	}
-
-	localStoreHas, err := s.db.Has(key)
-	if err != nil {
-		return false, fmt.Errorf("Error checking whether the local storage has value %s: %v", key, err)
-	}
-	return localStoreHas, nil
-}
-
-func (s *storage) SetEncoded(key string, data []byte) error {
-	s.snap.Set(key, data, true, s.stateFlush, nil)
-	return nil
+	return s.SetEncoded(key, data)
 }
 
 func (s *storage) Set(key string, value interface{}) error {
-	// store the raw value in the snapshot
-	s.snap.Set(key, value, false, s.stateFlush, nil)
+	return s.set(key, value, s.codec)
+}
+
+func (s *storage) SetOffset(offset int64) error {
+	if offset > s.currentOffset {
+		s.currentOffset = offset
+	}
+
+	return s.set(offsetKey, offset, s.offsetCodec)
+}
+
+func (s *storage) SetEncoded(key string, data []byte) error {
+	if err := s.store.Put([]byte(key), data, nil); err != nil {
+		return fmt.Errorf("error setting to leveldb (key %s): %v", key, err)
+	}
+
 	return nil
 }
 
 func (s *storage) Delete(key string) error {
-	s.snap.Set(key, nil, false, s.stateDelete, nil)
+	if err := s.store.Delete([]byte(key), nil); err != nil {
+		return fmt.Errorf("error deleting from leveldb (key %s): %v", key, err)
+	}
+
 	return nil
 }
 
-func (s *storage) SetOffset(offset int64) error {
-	s.mOffset.Lock()
-	defer s.mOffset.Unlock()
-	if offset > s.currentOffset {
-		s.currentOffset = offset
+func (s *storage) MarkRecovered() error {
+	if s.store == s.db {
+		return nil
 	}
-	return nil
+
+	s.store = s.db
+	return s.tx.Commit()
 }
 
 func (s *storage) Open() error {
-	go func() {
-		s.storageSnapshotFlusher()
-		close(s.flusherDone)
-	}()
 	return nil
 }
 
 func (s *storage) Close() error {
-	s.snap.Cancel()
-	close(s.flusherCancel)
-	<-s.flusherDone
+	if s.store == s.tx {
+		if err := s.tx.Commit(); err != nil {
+			return fmt.Errorf("error closing transaction: %v", err)
+		}
+	}
+
 	return s.db.Close()
 }
 
-func (s *storage) storageSnapshotFlusher() {
-	ticker := time.NewTicker(s.snapshotInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			s.mOffset.Lock()
-			offset := s.currentOffset
-			s.mOffset.Unlock()
-
-			err := s.snap.Flush(func() error {
-				off, err := s.offsetCodec.Encode(offset)
-				if err != nil {
-					return fmt.Errorf("Error encoding offset after flush: %v", err)
-				}
-				return s.db.Set(offsetKey, off)
-			})
-			if err != nil {
-				s.log.Printf("%v", err)
-			}
-		case <-s.flusherCancel:
-			return
-		}
-	}
-
-}
-
-func (s *storage) stateFlush(key string, value interface{}, encoded bool) {
-	var (
-		err          error
-		encodedValue []byte
-	)
-	if encoded {
-		var isByte bool
-		encodedValue, isByte = value.([]byte)
-		if !isByte {
-			err = fmt.Errorf("Encoded value is not of type []byte but %T", value)
-		}
-	} else {
-		encodedValue, err = s.codec.Encode(value)
-	}
-	if err != nil {
-		s.log.Printf("Error encoding state (key=%s) for writing to local storage: %v", key, err)
-		return
-	}
-
-	err = s.db.Set(key, encodedValue)
-	if err != nil {
-		s.log.Printf("Error writing state (key=%s) to local storage: %v", key, err)
-	}
-}
-
-func (s *storage) stateDelete(key string, value interface{}, encoded bool) {
-	if err := s.db.Delete(key); err != nil {
-		s.log.Printf("error deleting from local storage (key %s)", key)
-	}
-}
-
-func (s *storage) stateCloner(c Codec) func(key string, value interface{}, encoded bool) (interface{}, error) {
-	return func(key string, value interface{}, encoded bool) (interface{}, error) {
-
-		// if encoded, just copy the byte-slice and return the copy.
-		if encoded {
-			encodedData, isByte := value.([]byte)
-			if !isByte {
-				return nil, fmt.Errorf("Encoded value is not of type []byte but %T", value)
-			}
-			dst := make([]byte, len(encodedData))
-			copy(dst, encodedData)
-			return dst, nil
-		}
-
-		// if not encoded, we need to re-encode to get a proper copy
-		encodedValue, err := c.Encode(value)
-		if err != nil {
-			return nil, fmt.Errorf("Error encoding value for clone: %v", err)
-		}
-		decoded, err := c.Decode(encodedValue)
-		if err != nil {
-			return nil, fmt.Errorf("Error decoding value for clone: %v", err)
-		}
-		return decoded, nil
-	}
-}
-
-func (s *storage) Sync() {
-	s.snap.Check()
-}
+func (s *storage) Sync() {}

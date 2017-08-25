@@ -3,13 +3,13 @@ package goka
 import (
 	"fmt"
 	"path/filepath"
-	"time"
 
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 
 	metrics "github.com/rcrowley/go-metrics"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 // UpdateCallback is invoked upon arrival of a message for a table partition.
@@ -25,8 +25,21 @@ type StorageBuilder func(topic string, partition int32, codec Codec, reg metrics
 ///////////////////////////////////////////////////////////////////////////////
 
 const (
+	defaultBaseStoragePath = "/tmp/goka"
+
 	defaultClientID = "goka"
 )
+
+// DefaultProcessorStoragePath is the default path where processor state
+// will be stored.
+func DefaultProcessorStoragePath(group Group) string {
+	return filepath.Join(defaultBaseStoragePath, "processor", string(group))
+}
+
+// DefaultViewStoragePath returns the default path where view state will be stored.
+func DefaultViewStoragePath() string {
+	return filepath.Join(defaultBaseStoragePath, "view")
+}
 
 // DefaultUpdate is the default callback used to update the local storage with
 // from the table topic in Kafka. It is called for every message received
@@ -35,6 +48,20 @@ const (
 // WithViewCallback.
 func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte) error {
 	return s.SetEncoded(key, value)
+}
+
+// DefaultStorageBuilder builds a LevelDB storage with default configuration.
+// The database will be stored in the given path.
+func DefaultStorageBuilder(path string) StorageBuilder {
+	return func(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
+		fp := filepath.Join(path, fmt.Sprintf("%s.%d", topic, partition))
+		db, err := leveldb.OpenFile(fp, nil)
+		if err != nil {
+			return nil, fmt.Errorf("error opening leveldb: %v", err)
+		}
+
+		return storage.New(db, codec)
+	}
 }
 
 type consumerBuilder func(brokers []string, group string, registry metrics.Registry) (kafka.Consumer, error)
@@ -67,11 +94,9 @@ type poptions struct {
 	log      logger.Logger
 	clientID string
 
-	updateCallback          UpdateCallback
-	storagePath             string
-	storageSnapshotInterval time.Duration
-	registry                metrics.Registry
-	partitionChannelSize    int
+	updateCallback       UpdateCallback
+	registry             metrics.Registry
+	partitionChannelSize int
 
 	builders struct {
 		storage  StorageBuilder
@@ -141,13 +166,6 @@ func WithProducer(p kafka.Producer) ProcessorOption {
 	}
 }
 
-// WithStoragePath defines the base path for the local storage on disk
-func WithStoragePath(storagePath string) ProcessorOption {
-	return func(o *poptions) {
-		o.storagePath = storagePath
-	}
-}
-
 // WithKafkaMetrics sets a go-metrics registry to collect
 // kafka metrics.
 // The metric-points are https://godoc.org/github.com/Shopify/sarama
@@ -163,15 +181,6 @@ func WithKafkaMetrics(registry metrics.Registry) ProcessorOption {
 func WithPartitionChannelSize(size int) ProcessorOption {
 	return func(o *poptions) {
 		o.partitionChannelSize = size
-	}
-}
-
-// WithStorageSnapshotInterval sets the interval in which the storage will snapshot to disk (if it is supported by the storage at all)
-// Greater interval -> less writes to disk, more memory usage
-// Smaller interval -> more writes to disk, less memory usage
-func WithStorageSnapshotInterval(interval time.Duration) ProcessorOption {
-	return func(o *poptions) {
-		o.storageSnapshotInterval = interval
 	}
 }
 
@@ -199,9 +208,9 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 		o(opt)
 	}
 
-	// config not set, use default one
+	// StorageBuilder should always be set as a default option in NewProcessor
 	if opt.builders.storage == nil {
-		opt.builders.storage = opt.defaultStorageBuilder
+		return fmt.Errorf("StorageBuilder not set")
 	}
 	if opt.builders.consumer == nil {
 		opt.builders.consumer = defaultConsumerBuilder
@@ -211,9 +220,6 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 	}
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = defaultTopicManagerBuilder
-	}
-	if opt.storageSnapshotInterval == 0 {
-		opt.storageSnapshotInterval = storage.DefaultStorageSnapshotInterval
 	}
 
 	// prefix registry
@@ -227,14 +233,6 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 	return nil
 }
 
-func (opt *poptions) storagePathForPartition(topic string, partitionID int32) string {
-	return filepath.Join(opt.storagePath, "processor", fmt.Sprintf("%s.%d", topic, partitionID))
-}
-
-func (opt *poptions) defaultStorageBuilder(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
-	return storage.New(opt.log, opt.storagePathForPartition(topic, partition), codec, reg, opt.storageSnapshotInterval)
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // view options
 ///////////////////////////////////////////////////////////////////////////////
@@ -243,13 +241,11 @@ func (opt *poptions) defaultStorageBuilder(topic string, partition int32, codec 
 type ViewOption func(*voptions)
 
 type voptions struct {
-	log                     logger.Logger
-	tableCodec              Codec
-	updateCallback          UpdateCallback
-	storagePath             string
-	storageSnapshotInterval time.Duration
-	registry                metrics.Registry
-	partitionChannelSize    int
+	log                  logger.Logger
+	tableCodec           Codec
+	updateCallback       UpdateCallback
+	registry             metrics.Registry
+	partitionChannelSize int
 
 	builders struct {
 		storage  StorageBuilder
@@ -316,22 +312,6 @@ func WithViewTopicManager(tm kafka.TopicManager) ViewOption {
 	}
 }
 
-// WithViewStoragePath defines the base path for the local storage on disk
-func WithViewStoragePath(storagePath string) ViewOption {
-	return func(o *voptions) {
-		o.storagePath = storagePath
-	}
-}
-
-// WithViewStorageSnapshotInterval sets the interval in which the storage will snapshot to disk (if it is supported by the storage at all)
-// Greater interval -> less writes to disk, more memory usage
-// Smaller interval -> more writes to disk, less memory usage
-func WithViewStorageSnapshotInterval(interval time.Duration) ViewOption {
-	return func(o *voptions) {
-		o.storageSnapshotInterval = interval
-	}
-}
-
 // WithViewKafkaMetrics sets a go-metrics registry to collect
 // kafka metrics.
 // The metric-points are https://godoc.org/github.com/Shopify/sarama
@@ -355,9 +335,9 @@ func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 		o(opt)
 	}
 
-	// config not set, use default one
+	// StorageBuilder should always be set as a default option in NewView
 	if opt.builders.storage == nil {
-		opt.builders.storage = opt.defaultStorageBuilder
+		return fmt.Errorf("StorageBuilder not set")
 	}
 	if opt.builders.consumer == nil {
 		opt.builders.consumer = defaultConsumerBuilder
@@ -374,19 +354,7 @@ func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 	// prefix registry
 	opt.gokaRegistry = metrics.NewPrefixedChildRegistry(opt.registry, fmt.Sprintf("goka.view-%s.", topic))
 
-	if opt.storageSnapshotInterval == 0 {
-		opt.storageSnapshotInterval = storage.DefaultStorageSnapshotInterval
-	}
-
 	return nil
-}
-
-func (opt *voptions) storagePathForPartition(topic string, partitionID int32) string {
-	return filepath.Join(opt.storagePath, "view", fmt.Sprintf("%s.%d", topic, partitionID))
-}
-
-func (opt *voptions) defaultStorageBuilder(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
-	return storage.New(opt.log, opt.storagePathForPartition(topic, partition), codec, reg, opt.storageSnapshotInterval)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
