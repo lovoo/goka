@@ -31,7 +31,6 @@ type View struct {
 
 // NewView creates a new View object from a group.
 func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) (*View, error) {
-
 	options = append(
 		// default options comes first
 		[]ViewOption{
@@ -245,6 +244,26 @@ func (v *View) Has(key string) (bool, error) {
 	}
 
 	return s.Has(key)
+}
+
+// Iterator returns an iterator that iterates over the state of the View.
+func (v *View) Iterator() (storage.Iterator, error) {
+	iters := make([]storage.Iterator, 0, len(v.partitions))
+	for i := range v.partitions {
+		iter, err := v.partitions[i].st.Iterator()
+		if err != nil {
+			// release already opened iterators
+			for i := range iters {
+				iters[i].Release()
+			}
+
+			return nil, fmt.Errorf("error opening partition iterator: %v", err)
+		}
+
+		iters = append(iters, iter)
+	}
+
+	return storage.NewMultiIterator(iters), nil
 }
 
 func (v *View) run() {

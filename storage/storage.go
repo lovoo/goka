@@ -39,8 +39,9 @@ type Storage interface {
 	Delete(string) error
 	SetOffset(value int64) error
 	GetOffset(defValue int64) (int64, error)
-	Iterator() Iterator
+	Iterator() (Iterator, error)
 	MarkRecovered() error
+	Recovered() bool
 	Open() error
 	Close() error
 	Sync()
@@ -84,11 +85,18 @@ func New(db *leveldb.DB, c Codec) (Storage, error) {
 	}, nil
 }
 
-func (s *storage) Iterator() Iterator {
+// Iterator returns an iterator that traverses over a snapshot of the storage.
+func (s *storage) Iterator() (Iterator, error) {
+	snap, err := s.db.GetSnapshot()
+	if err != nil {
+		return nil, err
+	}
+
 	return &iterator{
 		iter:  s.store.NewIterator(nil, nil),
 		codec: s.codec,
-	}
+		snap:  snap,
+	}, nil
 }
 
 func (s *storage) Has(key string) (bool, error) {
@@ -174,6 +182,10 @@ func (s *storage) MarkRecovered() error {
 
 	s.store = s.db
 	return s.tx.Commit()
+}
+
+func (s *storage) Recovered() bool {
+	return s.store == s.db
 }
 
 func (s *storage) Open() error {

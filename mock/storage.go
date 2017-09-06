@@ -82,10 +82,11 @@ func (_mr *_MockStorageRecorder) Has(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Has", arg0)
 }
 
-func (_m *MockStorage) Iterator() storage.Iterator {
+func (_m *MockStorage) Iterator() (storage.Iterator, error) {
 	ret := _m.ctrl.Call(_m, "Iterator")
 	ret0, _ := ret[0].(storage.Iterator)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 func (_mr *_MockStorageRecorder) Iterator() *gomock.Call {
@@ -110,6 +111,16 @@ func (_m *MockStorage) Open() error {
 
 func (_mr *_MockStorageRecorder) Open() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Open")
+}
+
+func (_m *MockStorage) Recovered() bool {
+	ret := _m.ctrl.Call(_m, "Recovered")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+func (_mr *_MockStorageRecorder) Recovered() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "Recovered")
 }
 
 func (_m *MockStorage) Set(_param0 string, _param1 interface{}) error {
