@@ -2,7 +2,9 @@ package storage
 
 // Null storage discards everything that it is given. This can be useful for
 // debugging.
-type Null struct{}
+type Null struct {
+	recovered bool
+}
 
 // NewNull returns a new Null storage.
 func NewNull() Storage {
@@ -12,6 +14,11 @@ func NewNull() Storage {
 // MarkRecovered does nothing.
 func (n *Null) MarkRecovered() error {
 	return nil
+}
+
+// Recovered returns whether the storage has recovered.
+func (n *Null) Recovered() bool {
+	return n.recovered
 }
 
 // Has returns false as in key not found.
@@ -50,8 +57,8 @@ func (n *Null) SetOffset(val int64) error {
 }
 
 // Iterator returns an Iterator that is immediately exhausted.
-func (n *Null) Iterator() Iterator {
-	return new(NullIter)
+func (n *Null) Iterator() (Iterator, error) {
+	return new(NullIter), nil
 }
 
 // Open does nothing and doesn't error.
@@ -67,6 +74,7 @@ func (n *Null) Close() error {
 // Sync does nothing and doesn't error
 func (n *Null) Sync() {}
 
+// NullIter is an iterator which is immediately exhausted.
 type NullIter struct{}
 
 // Next returns always false.
@@ -84,4 +92,5 @@ func (ni *NullIter) Value() (interface{}, error) {
 	return nil, nil
 }
 
+// Release does nothing.
 func (ni *NullIter) Release() {}

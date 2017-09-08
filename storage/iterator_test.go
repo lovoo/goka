@@ -33,7 +33,8 @@ func TestIterator(t *testing.T) {
 
 	ensure.Nil(t, st.SetOffset(777))
 
-	iter := st.Iterator()
+	iter, err := st.Iterator()
+	ensure.Nil(t, err)
 	defer iter.Release()
 	count := 0
 
@@ -79,7 +80,8 @@ func TestIterator_DecodingError(t *testing.T) {
 
 	ensure.Nil(t, st.Set("key-1", "val-1"))
 
-	iter := st.Iterator()
+	iter, err := st.Iterator()
+	ensure.Nil(t, err)
 	defer iter.Release()
 
 	count := 0

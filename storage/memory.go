@@ -41,26 +41,28 @@ func (i *memiter) Release() {
 	i.current = len(i.keys)
 }
 
-func (m *memory) Iterator() Iterator {
+func (m *memory) Iterator() (Iterator, error) {
 	keys := make([]string, 0, len(m.storage))
 	for k := range m.storage {
 		keys = append(keys, k)
 	}
 
-	return &memiter{-1, keys, m.storage}
+	return &memiter{-1, keys, m.storage}, nil
 }
 
 type memory struct {
-	storage map[string]interface{}
-	offset  *int64
-	c       Codec
+	storage   map[string]interface{}
+	offset    *int64
+	c         Codec
+	recovered bool
 }
 
 // NewMemory returns a new in-memory storage.
 func NewMemory(c Codec) Storage {
 	return &memory{
-		storage: make(map[string]interface{}),
-		c:       c,
+		storage:   make(map[string]interface{}),
+		c:         c,
+		recovered: false,
 	}
 }
 
@@ -98,6 +100,10 @@ func (m *memory) Delete(key string) error {
 
 func (m *memory) MarkRecovered() error {
 	return nil
+}
+
+func (m *memory) Recovered() bool {
+	return m.recovered
 }
 
 func (m *memory) SetOffset(offset int64) error {

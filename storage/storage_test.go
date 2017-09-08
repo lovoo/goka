@@ -50,11 +50,13 @@ func TestMemIter(t *testing.T) {
 	}
 
 	// released iterator should be immediately exhausted
-	iter := storage.Iterator()
+	iter, err := storage.Iterator()
+	ensure.Nil(t, err)
 	iter.Release()
 	ensure.False(t, iter.Next(), "released iterator had a next")
 
-	iter = storage.Iterator()
+	iter, err = storage.Iterator()
+	ensure.Nil(t, err)
 	for iter.Next() {
 		raw, err := iter.Value()
 		ensure.Nil(t, err)
@@ -155,7 +157,8 @@ func TestSetGet(t *testing.T) {
 	// test iteration
 	ensure.Nil(t, storage.SetEncoded("encoded", []byte("encoded-value")))
 	ensure.Nil(t, storage.Set("decoded", "decoded-value"))
-	iter := storage.Iterator()
+	iter, err := storage.Iterator()
+	ensure.Nil(t, err)
 	defer iter.Release()
 	messages := map[string]interface{}{}
 	for iter.Next() {
