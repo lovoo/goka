@@ -172,9 +172,9 @@ func (p *partition) run() error {
 			case *kafka.NOP:
 				// don't do anything but also don't log.
 			case *kafka.EOF:
-				if ev.Topic != p.topic {
-					return fmt.Errorf("received EOF of topic that is not ours. This should not happend (ours=%s, received=%s)", p.topic, ev.Topic)
-				}
+			//	if ev.Topic != p.topic {
+			//		return fmt.Errorf("received EOF of topic that is not ours. This should not happend (ours=%s, received=%s)", p.topic, ev.Topic)
+			//	}
 			default:
 				return fmt.Errorf("load: cannot handle %T = %v", ev, ev)
 			}
