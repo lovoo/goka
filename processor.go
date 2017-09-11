@@ -662,15 +662,16 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 			if offset, err := ctx.storage.GetOffset(0); err != nil {
 				ctx.failer(fmt.Errorf("error getting storage offset for %s/%d: %v",
 					g.graph.GroupTable().Topic(), msg.Partition, err))
+				return
 			} else if err = ctx.storage.SetOffset(offset + 1); err != nil {
 				ctx.failer(fmt.Errorf("error writing storage offset for %s/%d: %v",
 					g.graph.GroupTable().Topic(), msg.Partition, err))
+				return
 			}
 		}
 
 		// mark upstream offset
-		err := g.consumer.Commit(msg.Topic, msg.Partition, msg.Offset)
-		if err != nil {
+		if err := g.consumer.Commit(msg.Topic, msg.Partition, msg.Offset); err != nil {
 			g.fail(fmt.Errorf("error committing offsets of %s/%d: %v",
 				g.graph.GroupTable().Topic(), msg.Partition, err))
 		}
