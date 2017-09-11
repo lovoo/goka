@@ -65,13 +65,14 @@ type context struct {
 
 	msg      *message
 	done     bool
-	ackSent  bool
 	counters struct {
-		calls     int32
-		callsDone int32
+		calls     int
+		callsDone int
+		stores    int
 	}
-	m  sync.Mutex
-	wg *sync.WaitGroup
+	errors Errors
+	m      sync.Mutex
+	wg     *sync.WaitGroup
 }
 
 // Emit sends a message asynchronously to a topic.
@@ -113,12 +114,12 @@ func (ctx *context) Loopback(key string, value interface{}) {
 }
 
 func (ctx *context) emit(topic string, key string, value []byte) {
-	ctx.incCalls()
-
+	ctx.emitStarted()
 	ctx.emitter(topic, key, value).Then(func(err error) {
-		// first notify our callback-counters so the consumer can
-		// acknowledge the message consumption
-		ctx.notifyCallDone()
+		if err != nil {
+			err = fmt.Errorf("error emitting to %s: %v", topic, err)
+		}
+		ctx.emitDone(err)
 	})
 }
 
@@ -213,6 +214,7 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 		return fmt.Errorf("Cannot set nil as value.")
 	}
 
+	ctx.counters.stores++
 	err := ctx.storage.Set(key, value)
 	if err != nil {
 		return fmt.Errorf("Error storing value: %v", err)
@@ -224,72 +226,61 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 	}
 
 	// increment wait counter
-	ctx.incCalls()
+	ctx.emitStarted()
 	// write it to the log.
 	ctx.emitter(ctx.graph.GroupTable().Topic(), key, encodedValue).Then(func(err error) {
-		if err != nil {
-			return
-		}
-
-		// log the new offset if the write call was successful
-		if err = ctx.storage.SetOffset(ctx.msg.Offset); err != nil {
-			ctx.failer(fmt.Errorf("Error writing the log-offset to local storage for recovery: %v", err))
-		}
-
-	}).Then(func(err error) {
-		ctx.notifyCallDone()
+		ctx.emitDone(err)
 	})
 	return nil
 }
 
-func (ctx *context) incCalls() {
+func (ctx *context) emitStarted() {
 	ctx.m.Lock()
 	defer ctx.m.Unlock()
 	ctx.counters.calls++
 }
 
-// mark the context as done and check if calls are done to
-// send the ack upstream
-func (ctx *context) markDone() bool {
+func (ctx *context) emitDone(err error) {
 	ctx.m.Lock()
 	defer ctx.m.Unlock()
-
-	ctx.done = true
-	return ctx.sendAckIfDone()
-}
-
-func (ctx *context) notifyCallDone() {
-	ctx.m.Lock()
-	defer ctx.m.Unlock()
-
 	ctx.counters.callsDone++
-	ctx.sendAckIfDone()
+	ctx.tryCommit(err)
 }
 
-// sends an ACK to the upstream consumer when all calls have been successful and the
-// consumer-handler was finished.
-// the caller is responsible for locking the object!
-func (ctx *context) sendAckIfDone() bool {
-	if !ctx.done {
-		return false
+// called after all emits
+func (ctx *context) finish() {
+	ctx.m.Lock()
+	defer ctx.m.Unlock()
+	ctx.done = true
+	ctx.tryCommit(nil)
+}
+
+// called before any emit
+func (ctx *context) start() {
+	ctx.wg.Add(1)
+}
+
+// calls ctx.commit once all emits have successfully finished, or fails context
+// if some emit failed.
+func (ctx *context) tryCommit(err error) {
+	if err != nil {
+		ctx.errors.collect(err)
 	}
+
 	// not all calls are done yet, do not send the ack upstream.
-	if ctx.counters.calls > ctx.counters.callsDone {
-		return false
+	if !ctx.done || ctx.counters.calls > ctx.counters.callsDone {
+		return
 	}
 
-	if ctx.ackSent {
-		return false
+	// commit if no errors, otherwise fail context
+	if ctx.errors.hasErrors() {
+		ctx.failer(fmt.Errorf("error emitting to %s: %v", ctx.graph.GroupTable().Topic(), ctx.errors.Error()))
+	} else {
+		ctx.commit()
 	}
-	ctx.ackSent = true
-
-	// finally, if all calls are done we'll send the message-ack back to kafka.
-	ctx.commit()
 
 	// no further callback will be called from this context
 	ctx.wg.Done()
-
-	return true
 }
 
 // Fail stops execution and shuts down the processor
