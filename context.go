@@ -66,9 +66,9 @@ type context struct {
 	msg      *message
 	done     bool
 	counters struct {
-		calls     int
-		callsDone int
-		stores    int
+		emits  int
+		dones  int
+		stores int
 	}
 	errors Errors
 	m      sync.Mutex
@@ -114,7 +114,7 @@ func (ctx *context) Loopback(key string, value interface{}) {
 }
 
 func (ctx *context) emit(topic string, key string, value []byte) {
-	ctx.emitStarted()
+	ctx.counters.emits++
 	ctx.emitter(topic, key, value).Then(func(err error) {
 		if err != nil {
 			err = fmt.Errorf("error emitting to %s: %v", topic, err)
@@ -225,25 +225,17 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 		return fmt.Errorf("Error encoding value: %v", err)
 	}
 
-	// increment wait counter
-	ctx.emitStarted()
-	// write it to the log.
+	ctx.counters.emits++
 	ctx.emitter(ctx.graph.GroupTable().Topic(), key, encodedValue).Then(func(err error) {
 		ctx.emitDone(err)
 	})
 	return nil
 }
 
-func (ctx *context) emitStarted() {
-	ctx.m.Lock()
-	defer ctx.m.Unlock()
-	ctx.counters.calls++
-}
-
 func (ctx *context) emitDone(err error) {
 	ctx.m.Lock()
 	defer ctx.m.Unlock()
-	ctx.counters.callsDone++
+	ctx.counters.dones++
 	ctx.tryCommit(err)
 }
 
@@ -268,7 +260,7 @@ func (ctx *context) tryCommit(err error) {
 	}
 
 	// not all calls are done yet, do not send the ack upstream.
-	if !ctx.done || ctx.counters.calls > ctx.counters.callsDone {
+	if !ctx.done || ctx.counters.emits > ctx.counters.dones {
 		return
 	}
 

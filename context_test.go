@@ -202,9 +202,9 @@ func TestContext_Set(t *testing.T) {
 	ctx.wg.Wait()
 
 	ensure.DeepEqual(t, ctx.counters, struct {
-		calls     int
-		callsDone int
-		stores    int
+		emits  int
+		dones  int
+		stores int
 	}{1, 1, 1})
 	ensure.DeepEqual(t, ack, 1)
 }
