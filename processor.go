@@ -636,8 +636,6 @@ func (g *Processor) removePartition(partition int32) {
 ///////////////////////////////////////////////////////////////////////////////
 
 func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
-	wg.Add(1) // for context markDone
-
 	g.m.RLock()
 	views := g.partitionViews[msg.Partition]
 	g.m.RUnlock()
@@ -657,12 +655,26 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 				}
 			})
 		},
-		commit: func() {
-			err := g.consumer.Commit(msg.Topic, msg.Partition, msg.Offset)
-			if err != nil {
-				g.fail(fmt.Errorf("error committing offsets in partition %d: %v", msg.Partition, err))
+	}
+	ctx.commit = func() {
+		// write group table offset to local storage
+		if ctx.counters.stores > 0 {
+			if offset, err := ctx.storage.GetOffset(0); err != nil {
+				ctx.failer(fmt.Errorf("error getting storage offset for %s/%d: %v",
+					g.graph.GroupTable().Topic(), msg.Partition, err))
+				return
+			} else if err = ctx.storage.SetOffset(offset + 1); err != nil {
+				ctx.failer(fmt.Errorf("error writing storage offset for %s/%d: %v",
+					g.graph.GroupTable().Topic(), msg.Partition, err))
+				return
 			}
-		},
+		}
+
+		// mark upstream offset
+		if err := g.consumer.Commit(msg.Topic, msg.Partition, msg.Offset); err != nil {
+			g.fail(fmt.Errorf("error committing offsets of %s/%d: %v",
+				g.graph.GroupTable().Topic(), msg.Partition, err))
+		}
 	}
 
 	// use the storage if the processor is not stateless. Ignore otherwise
@@ -683,7 +695,8 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 		return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
 	}
 
-	defer ctx.markDone() // execute even in case of panic
+	ctx.start()
+	defer ctx.finish() // execute even in case of panic
 	cb := g.graph.callback(msg.Topic)
 	if cb == nil {
 		wg.Done()

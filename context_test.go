@@ -60,19 +60,15 @@ func TestContext_Emit(t *testing.T) {
 		wg:     &sync.WaitGroup{},
 	}
 
-	// for each context the goroutine of the partition adds 1 to wg
-	ctx.wg.Add(1)
-
 	// after that the message is processed
 	ctx.emitter = newEmitter(nil, func(err error) {
 		emitted++
 		ensure.Nil(t, err)
 	})
 
+	ctx.start()
 	ctx.emit("emit-topic", "key", []byte("value"))
-
-	// and the partition-goroutine marks the context as done
-	ctx.markDone()
+	ctx.finish()
 
 	// we can now for all callbacks -- it should also guarantee a memory fence
 	// to the emitted variable (which is not being locked)
@@ -102,22 +98,22 @@ func TestContext_EmitError(t *testing.T) {
 
 	// test error case
 	ctx := &context{
-		graph:  DefineGroup(group),
+		graph:  DefineGroup(group, Persist(new(codec.String))),
 		commit: func() { ack++ },
 		wg:     &sync.WaitGroup{},
+		failer: func(err error) {
+			ensure.StringContains(t, err.Error(), errToEmit.Error())
+		},
 	}
-	// for each context the goroutine of the partition adds 1 to wg
-	ctx.wg.Add(1)
-
 	ctx.emitter = newEmitter(errToEmit, func(err error) {
 		emitted++
 		ensure.NotNil(t, err)
 		ensure.DeepEqual(t, err, errToEmit)
 	})
-	ctx.emit("emit-topic", "key", []byte("value"))
 
-	// and the partition-goroutine marks the context as done
-	ctx.markDone()
+	ctx.start()
+	ctx.emit("emit-topic", "key", []byte("value"))
+	ctx.finish()
 
 	// we can now for all callbacks -- it should also guarantee a memory fence
 	// to the emitted variable (which is not being locked)
@@ -125,7 +121,9 @@ func TestContext_EmitError(t *testing.T) {
 
 	// check everything is done
 	ensure.DeepEqual(t, emitted, 1)
-	ensure.DeepEqual(t, ack, 1)
+
+	// nothing should be committed here
+	ensure.DeepEqual(t, ack, 0)
 
 }
 
@@ -190,23 +188,24 @@ func TestContext_Set(t *testing.T) {
 		commit:  func() { ack++ },
 		msg:     &message{Offset: offset},
 	}
-	ctx.wg.Add(1)
 
 	gomock.InOrder(
 		storage.EXPECT().Set(key, value).Return(nil),
-		storage.EXPECT().SetOffset(offset).Return(nil),
 	)
 	ctx.emitter = newEmitter(nil, nil)
+
+	ctx.start()
 	err := ctx.setValueForKey(key, value)
 	ensure.Nil(t, err)
-	ctx.markDone()
+	ctx.finish()
 
 	ctx.wg.Wait()
 
 	ensure.DeepEqual(t, ctx.counters, struct {
-		calls     int32
-		callsDone int32
-	}{1, 1})
+		emits  int
+		dones  int
+		stores int
+	}{1, 1, 1})
 	ensure.DeepEqual(t, ack, 1)
 }
 
@@ -242,7 +241,6 @@ func TestContext_GetSetStateful(t *testing.T) {
 	ensure.True(t, val == nil)
 
 	storage.EXPECT().Set(key, value).Return(nil)
-	storage.EXPECT().SetOffset(offset).Return(nil)
 	ctx.SetValue(value)
 
 	storage.EXPECT().Has(key).Return(true, nil)
@@ -299,20 +297,6 @@ func TestContext_SetErrors(t *testing.T) {
 	)
 	err = ctx.setValueForKey(key, value)
 	ensure.Nil(t, err)
-	// SetOffset is not called because we finish with error
-
-	// fail to write offset to local storage
-	ctx.emitter = newEmitterW(wg, nil, nil)
-	ctx.failer = func(err error) {
-		ensure.NotNil(t, err)
-	}
-	gomock.InOrder(
-		storage.EXPECT().Set(key, value).Return(nil),
-		storage.EXPECT().SetOffset(offset).Return(fmt.Errorf("some error")),
-	)
-	err = ctx.setValueForKey(key, value)
-	ensure.Nil(t, err)
-
 }
 
 func TestContext_LoopbackNoLoop(t *testing.T) {

@@ -172,16 +172,151 @@ func TestProcessor_process(t *testing.T) {
 			Persist(new(codec.String)),
 			Loop(c, cb),
 			Input("sometopic", rawCodec, cb),
+			Output("anothertopic", new(codec.String)),
 		),
 
 		consumer: consumer,
 		producer: producer,
 	}
 
+	// no emits
 	consumer.EXPECT().Commit("sometopic", int32(1), int64(123))
 	msg := &message{Topic: "sometopic", Partition: 1, Offset: 123}
 	err := p.process(msg, st, &wg)
 	ensure.Nil(t, err)
+
+	// emit something
+	promise := new(kafka.Promise)
+	gomock.InOrder(
+		producer.EXPECT().Emit("anothertopic", "key", []byte("message")).Return(promise),
+		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
+	)
+	msg = &message{Topic: "sometopic", Partition: 1, Offset: 123}
+	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
+		ctx.Emit("anothertopic", "key", "message")
+	}
+	err = p.process(msg, st, &wg)
+	ensure.Nil(t, err)
+	promise.Finish(nil)
+
+	// store something
+	promise = new(kafka.Promise)
+	gomock.InOrder(
+		st.EXPECT().Set("key", "message"),
+		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
+		st.EXPECT().SetOffset(int64(322)),
+		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
+	)
+	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123}
+	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
+		ctx.SetValue("message")
+	}
+	err = p.process(msg, st, &wg)
+	ensure.Nil(t, err)
+	promise.Finish(nil)
+}
+
+func TestProcessor_processFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var (
+		wg       sync.WaitGroup
+		st       = mock.NewMockStorage(ctrl)
+		consumer = mock.NewMockConsumer(ctrl)
+		producer = mock.NewMockProducer(ctrl)
+	)
+
+	newProcessor := func() *Processor {
+		p := &Processor{
+			graph: DefineGroup(group,
+				Persist(new(codec.String)),
+				Loop(c, cb),
+				Input("sometopic", rawCodec, cb),
+				Output("anothertopic", new(codec.String)),
+			),
+
+			consumer: consumer,
+			producer: producer,
+			opts:     new(poptions),
+			dying:    make(chan bool),
+			done:     make(chan bool),
+			dead:     make(chan bool),
+		}
+
+		p.opts.log = logger.Default()
+		return p
+	}
+	// fail get offset
+	p := newProcessor()
+	promise := new(kafka.Promise)
+	gomock.InOrder(
+		st.EXPECT().Set("key", "message"),
+		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		st.EXPECT().GetOffset(int64(0)).Return(int64(321), errors.New("getOffset failed")),
+		consumer.EXPECT().Close().Do(func() { close(p.done) }),
+		producer.EXPECT().Close(),
+	)
+	msg := &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123}
+	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
+		ctx.SetValue("message")
+	}
+	err := p.process(msg, st, &wg)
+	ensure.Nil(t, err)
+	promise.Finish(nil)
+	err = doTimed(t, func() {
+		<-p.dead
+	})
+	ensure.Nil(t, err)
+
+	// fail set offset
+	promise = new(kafka.Promise)
+	p = newProcessor()
+	gomock.InOrder(
+		st.EXPECT().Set("key", "message"),
+		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
+		st.EXPECT().SetOffset(int64(322)).Return(errors.New("setOffset failed")),
+		consumer.EXPECT().Close().Do(func() { close(p.done) }),
+		producer.EXPECT().Close(),
+	)
+	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123}
+	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
+		ctx.SetValue("message")
+	}
+	err = p.process(msg, st, &wg)
+	ensure.Nil(t, err)
+	promise.Finish(nil)
+	err = doTimed(t, func() {
+		<-p.dead
+	})
+	ensure.Nil(t, err)
+
+	// fail commit
+	promise = new(kafka.Promise)
+	p = newProcessor()
+	gomock.InOrder(
+		st.EXPECT().Set("key", "message"),
+		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
+		st.EXPECT().SetOffset(int64(322)),
+		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)).Return(errors.New("commit error")),
+		consumer.EXPECT().Close().Do(func() { close(p.done) }),
+		producer.EXPECT().Close(),
+	)
+	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123}
+	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
+		ctx.SetValue("message")
+	}
+	err = p.process(msg, st, &wg)
+	ensure.Nil(t, err)
+	promise.Finish(nil)
+	err = doTimed(t, func() {
+		<-p.dead
+	})
+	ensure.Nil(t, err)
+
 }
 
 func TestNewProcessor(t *testing.T) {
@@ -294,7 +429,6 @@ func TestNewProcessor(t *testing.T) {
 	ensure.True(t, p.partitionCount == 2)
 	ensure.True(t, len(p.graph.inputs()) == 2)
 	ensure.True(t, p.isStateless())
-
 }
 
 func TestProcessor_StartFails(t *testing.T) {
