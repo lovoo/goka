@@ -27,17 +27,12 @@ func (n *Null) Has(key string) (bool, error) {
 }
 
 // Get returns nil values.
-func (n *Null) Get(key string) (interface{}, error) {
+func (n *Null) Get(key string) ([]byte, error) {
 	return nil, nil
 }
 
 // Set will do nothing and doesn't error.
-func (n *Null) Set(key string, val interface{}) error {
-	return nil
-}
-
-// SetEncoded does nothing and doesn't error.
-func (n *Null) SetEncoded(key string, val []byte) error {
+func (n *Null) Set(key string, val []byte) error {
 	return nil
 }
 
@@ -71,9 +66,6 @@ func (n *Null) Close() error {
 	return nil
 }
 
-// Sync does nothing and doesn't error
-func (n *Null) Sync() {}
-
 // NullIter is an iterator which is immediately exhausted.
 type NullIter struct{}
 
@@ -88,7 +80,7 @@ func (ni *NullIter) Key() []byte {
 }
 
 // Value returns always a nil value and no errors.
-func (ni *NullIter) Value() (interface{}, error) {
+func (ni *NullIter) Value() ([]byte, error) {
 	return nil, nil
 }
 

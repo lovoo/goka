@@ -9,13 +9,12 @@ import (
 
 type file struct {
 	file      io.WriteCloser
-	codec     Codec
 	recovered bool
 
 	bytesWritten int64
 }
 
-func NewFile(path string, part int32, codec Codec) (Storage, error) {
+func NewFile(path string, part int32) (Storage, error) {
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("error creating storage directory: %v", err)
 	}
@@ -41,20 +40,11 @@ func (f *file) Has(key string) (bool, error) {
 	return false, nil
 }
 
-func (f *file) Get(key string) (interface{}, error) {
+func (f *file) Get(key string) ([]byte, error) {
 	return nil, nil
 }
 
-func (f *file) Set(key string, val interface{}) error {
-	data, err := f.codec.Encode(val)
-	if err != nil {
-		return err
-	}
-
-	return f.SetEncoded(key, data)
-}
-
-func (f *file) SetEncoded(key string, val []byte) error {
+func (f *file) Set(key string, val []byte) error {
 	num, err := f.file.Write(val)
 	if err != nil {
 		return err
@@ -92,5 +82,3 @@ func (f *file) Open() error {
 func (f *file) Close() error {
 	return f.file.Close()
 }
-
-func (f *file) Sync() {}

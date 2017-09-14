@@ -54,7 +54,7 @@ func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte)
 		return s.Delete(key)
 	}
 
-	return s.SetEncoded(key, value)
+	return s.Set(key, value)
 }
 
 // DefaultStorageBuilder builds a LevelDB storage with default configuration.
@@ -67,7 +67,7 @@ func DefaultStorageBuilder(path string) StorageBuilder {
 			return nil, fmt.Errorf("error opening leveldb: %v", err)
 		}
 
-		return storage.New(db, codec)
+		return storage.New(db)
 	}
 }
 

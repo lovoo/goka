@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/facebookgo/ensure"
-	"github.com/lovoo/goka/codec"
 )
 
 func TestMultiIterator(t *testing.T) {
@@ -16,12 +15,12 @@ func TestMultiIterator(t *testing.T) {
 	expected := map[string]string{}
 
 	for i := 0; i < numStorages; i++ {
-		storages[i] = NewMemory(&codec.String{})
+		storages[i] = NewMemory()
 		for j := 0; j < numValues; j++ {
 			key := fmt.Sprintf("storage-%d", i)
 			val := fmt.Sprintf("value-%d", j)
 			expected[key] = val
-			storages[i].Set(key, val)
+			storages[i].Set(key, []byte(val))
 		}
 	}
 
@@ -37,7 +36,7 @@ func TestMultiIterator(t *testing.T) {
 	for iter.Next() {
 		val, err := iter.Value()
 		ensure.Nil(t, err)
-		ensure.DeepEqual(t, expected[string(iter.Key())], val.(string))
+		ensure.DeepEqual(t, expected[string(iter.Key())], string(val))
 		count++
 	}
 

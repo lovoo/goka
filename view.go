@@ -137,7 +137,6 @@ func (v *View) Start() error {
 			err := p.startCatchup()
 			if err != nil {
 				v.fail(fmt.Errorf("view: error opening partition %d: %v", id, err))
-				return
 			}
 		}(int32(id), p)
 	}
@@ -151,6 +150,7 @@ func (v *View) Start() error {
 }
 
 func (v *View) fail(err error) {
+	v.opts.log.Printf("failing view: %v", err)
 	v.errors.collect(err)
 	go v.stop()
 }
@@ -225,13 +225,21 @@ func (v *View) Get(key string) (interface{}, error) {
 	}
 
 	// get key and return
-	val, err := s.Get(key)
+	data, err := s.Get(key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting value (key %s): err", key, err)
+	} else if data == nil {
+		return nil, nil
+	}
+
+	// decode value
+	value, err := v.opts.tableCodec.Decode(data)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding value (key %s): err", key, err)
 	}
 
 	// if the key does not exist the return value is nil
-	return val, nil
+	return value, nil
 }
 
 // Has checks whether a value for passed key exists in the view.

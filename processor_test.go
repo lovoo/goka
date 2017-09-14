@@ -203,7 +203,7 @@ func TestProcessor_process(t *testing.T) {
 	// store something
 	promise = new(kafka.Promise)
 	gomock.InOrder(
-		st.EXPECT().Set("key", "message"),
+		st.EXPECT().Set("key", []byte("message")),
 		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
 		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
 		st.EXPECT().SetOffset(int64(322)),
@@ -253,7 +253,7 @@ func TestProcessor_processFail(t *testing.T) {
 	p := newProcessor()
 	promise := new(kafka.Promise)
 	gomock.InOrder(
-		st.EXPECT().Set("key", "message"),
+		st.EXPECT().Set("key", []byte("message")),
 		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
 		st.EXPECT().GetOffset(int64(0)).Return(int64(321), errors.New("getOffset failed")),
 		consumer.EXPECT().Close().Do(func() { close(p.done) }),
@@ -275,7 +275,7 @@ func TestProcessor_processFail(t *testing.T) {
 	promise = new(kafka.Promise)
 	p = newProcessor()
 	gomock.InOrder(
-		st.EXPECT().Set("key", "message"),
+		st.EXPECT().Set("key", []byte("message")),
 		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
 		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
 		st.EXPECT().SetOffset(int64(322)).Return(errors.New("setOffset failed")),
@@ -298,7 +298,7 @@ func TestProcessor_processFail(t *testing.T) {
 	promise = new(kafka.Promise)
 	p = newProcessor()
 	gomock.InOrder(
-		st.EXPECT().Set("key", "message"),
+		st.EXPECT().Set("key", []byte("message")),
 		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
 		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
 		st.EXPECT().SetOffset(int64(322)),
@@ -317,7 +317,6 @@ func TestProcessor_processFail(t *testing.T) {
 		<-p.dead
 	})
 	ensure.Nil(t, err)
-
 }
 
 func TestNewProcessor(t *testing.T) {
@@ -587,10 +586,9 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
 	// 3. message
 	gomock.InOrder(
-		st.EXPECT().SetEncoded("key", value).Return(nil),
+		st.EXPECT().Set("key", value).Return(nil),
 		st.EXPECT().SetOffset(int64(1)),
 		st.EXPECT().MarkRecovered(),
-		st.EXPECT().Sync(),
 	)
 
 	// 4. error
@@ -598,7 +596,6 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
 	consumer.EXPECT().RemovePartition(tableName(group), int32(1))
 	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
-	st.EXPECT().Sync().Times(3)
 	st.EXPECT().Close().Times(3)
 
 	// -- test --
@@ -684,9 +681,6 @@ func TestProcessor_StartWithTableWithErrorAfterRebalance(t *testing.T) {
 	st.EXPECT().MarkRecovered().Times(3)
 	// 4. messages
 	consumer.EXPECT().Commit(topic, int32(1), int64(2))
-	//	st.EXPECT().SetEncoded("key", value).Return(nil)
-	//	st.EXPECT().SetOffset(int64(1))
-	st.EXPECT().Sync()
 	// 5. error
 	consumer.EXPECT().Close().Do(func() { close(ch) })
 	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
@@ -695,7 +689,6 @@ func TestProcessor_StartWithTableWithErrorAfterRebalance(t *testing.T) {
 	consumer.EXPECT().RemovePartition(table, int32(0))
 	consumer.EXPECT().RemovePartition(table, int32(1))
 	consumer.EXPECT().RemovePartition(table, int32(2))
-	st.EXPECT().Sync().Times(6)
 	st.EXPECT().Close().Times(6)
 	p.producer.(*mock.MockProducer).EXPECT().Close()
 
@@ -792,9 +785,8 @@ func TestProcessor_Start(t *testing.T) {
 	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
 	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
 	// 3. load message partition 1
-	st.EXPECT().SetEncoded("key", value).Return(nil)
+	st.EXPECT().Set("key", value).Return(nil)
 	st.EXPECT().SetOffset(int64(1))
-	st.EXPECT().Sync()
 	st.EXPECT().MarkRecovered()
 	// 4. end of recovery partition 1
 	gomock.InOrder(
@@ -803,17 +795,13 @@ func TestProcessor_Start(t *testing.T) {
 	)
 	// 5. process message partition 1
 	consumer.EXPECT().Commit(topic, int32(1), int64(1))
-	st.EXPECT().Sync() // run loop
 	// 6. new assignment remove partition 1 and 2
-	st.EXPECT().Sync()  // partition 1 final sync
 	st.EXPECT().Close() // partition 1 close
 	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
-	st.EXPECT().Sync()  // partition 2 final sync
 	st.EXPECT().Close() // partition 2 close
 	// 7. stop processor
 	consumer.EXPECT().Close().Do(func() { close(ch) })
 	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
-	st.EXPECT().Sync()
 	st.EXPECT().Close()
 
 	// -- test --
@@ -950,10 +938,9 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	consumer.EXPECT().AddPartition(table, int32(1), int64(123))
 	consumer.EXPECT().AddPartition(table, int32(2), int64(123))
 	// 3. message to group table
-	st.EXPECT().SetEncoded("key", value).Return(nil)
+	st.EXPECT().Set("key", value).Return(nil)
 	st.EXPECT().SetOffset(int64(1))
 	st.EXPECT().MarkRecovered()
-	st.EXPECT().Sync()
 	// 4. finish recovery of partition 1
 	gomock.InOrder(
 		consumer.EXPECT().RemovePartition(tableName(group), int32(1)),
@@ -962,10 +949,8 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	// 5. process messages in partition 1
 	gomock.InOrder(
 		consumer.EXPECT().Commit(topic, int32(1), int64(1)),
-		st.EXPECT().Sync(), // run loop
 	)
 	// 6. rebalance (only keep partition 0)
-	st.EXPECT().Sync().Times(4)  // final sync
 	st.EXPECT().Close().Times(4) // close group and other table partitions
 	consumer.EXPECT().RemovePartition(table, int32(1))
 	consumer.EXPECT().RemovePartition(table, int32(2))
@@ -975,7 +960,6 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	consumer.EXPECT().RemovePartition(table, int32(0))
 	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
 	st.EXPECT().MarkRecovered()
-	st.EXPECT().Sync().Times(2)  // final sync
 	st.EXPECT().Close().Times(2) // close group table and other table
 	producer.EXPECT().Close().Return(nil)
 
@@ -1121,7 +1105,7 @@ func TestProcessor_HasGet(t *testing.T) {
 	ensure.True(t, len(p.partitions) == 1)
 
 	gomock.InOrder(
-		st.EXPECT().Get("item1").Return("item1-value", nil),
+		st.EXPECT().Get("item1").Return([]byte("item1-value"), nil),
 	)
 
 	value, err := p.Get("item1")
@@ -1131,7 +1115,6 @@ func TestProcessor_HasGet(t *testing.T) {
 	// stop processor
 	gomock.InOrder(
 		consumer.EXPECT().Close().Do(func() { close(ch) }),
-		st.EXPECT().Sync(),
 		consumer.EXPECT().RemovePartition(tableName(group), int32(0)),
 		st.EXPECT().Close(),
 	)

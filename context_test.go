@@ -269,7 +269,7 @@ func TestContext_Set(t *testing.T) {
 	}
 
 	gomock.InOrder(
-		storage.EXPECT().Set(key, value).Return(nil),
+		storage.EXPECT().Set(key, []byte(value)).Return(nil),
 	)
 	ctx.emitter = newEmitter(nil, nil)
 
@@ -289,7 +289,6 @@ func TestContext_Set(t *testing.T) {
 }
 
 func TestContext_GetSetStateful(t *testing.T) {
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -319,14 +318,14 @@ func TestContext_GetSetStateful(t *testing.T) {
 	val := ctx.Value()
 	ensure.True(t, val == nil)
 
-	storage.EXPECT().Set(key, value).Return(nil)
+	storage.EXPECT().Set(key, []byte(value)).Return(nil)
 	ctx.SetValue(value)
 
 	storage.EXPECT().Has(key).Return(true, nil)
 	ok := ctx.Has(key)
 	ensure.True(t, ok)
 
-	storage.EXPECT().Get(key).Return(value, nil)
+	storage.EXPECT().Get(key).Return([]byte(value), nil)
 	val = ctx.Value()
 	ensure.DeepEqual(t, val, value)
 }
@@ -356,24 +355,21 @@ func TestContext_SetErrors(t *testing.T) {
 	ensure.NotNil(t, err)
 	ensure.StringContains(t, err.Error(), "Cannot set nil")
 
-	storage.EXPECT().Set(key, 123).Return(nil)
 	err = ctx.setValueForKey(key, 123) // cannot encode 123 as string
 	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "Error encoding")
+	ensure.StringContains(t, err.Error(), "error encoding")
 
-	storage.EXPECT().Set(key, value).Return(fmt.Errorf("some error"))
+	storage.EXPECT().Set(key, []byte(value)).Return(fmt.Errorf("some error"))
 	err = ctx.setValueForKey(key, value)
 	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "Error storing")
+	ensure.StringContains(t, err.Error(), "error storing")
 
 	// finish with error
 	ctx.emitter = newEmitterW(wg, fmt.Errorf("some error X"), func(err error) {
 		ensure.NotNil(t, err)
 		ensure.StringContains(t, err.Error(), "error X")
 	})
-	gomock.InOrder(
-		storage.EXPECT().Set(key, value).Return(nil),
-	)
+	storage.EXPECT().Set(key, []byte(value)).Return(nil)
 	err = ctx.setValueForKey(key, value)
 	ensure.Nil(t, err)
 }
@@ -427,7 +423,7 @@ func TestContext_Join(t *testing.T) {
 	)
 
 	ctx := &context{
-		graph: DefineGroup("group", Persist(c), Loop(c, cb)),
+		graph: DefineGroup("group", Persist(c), Loop(c, cb), Join(table, c)),
 		msg:   &message{Key: key},
 		pviews: map[string]*partition{
 			string(table): &partition{
@@ -439,7 +435,7 @@ func TestContext_Join(t *testing.T) {
 		},
 	}
 
-	st.EXPECT().Get(key).Return(value, nil)
+	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Join(table)
 	ensure.DeepEqual(t, v, value)
 
@@ -477,6 +473,10 @@ func TestContext_Lookup(t *testing.T) {
 		msg:   &message{Key: key},
 		views: map[string]*View{
 			string(table): &View{
+				opts: &voptions{
+					tableCodec: c,
+					hasher:     DefaultHasher(),
+				},
 				partitions: []*partition{
 					&partition{
 						st: &storageProxy{
@@ -484,14 +484,11 @@ func TestContext_Lookup(t *testing.T) {
 						},
 					},
 				},
-				opts: &voptions{
-					hasher: DefaultHasher(),
-				},
 			},
 		},
 	}
 
-	st.EXPECT().Get(key).Return(value, nil)
+	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Lookup(table, key)
 	ensure.DeepEqual(t, v, value)
 

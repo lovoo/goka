@@ -231,12 +231,14 @@ func (g *Processor) Get(key string) (interface{}, error) {
 		return nil, nil
 	}
 
-	// make a deep copy of the object to make it read only.
-	data, err := g.graph.GroupTable().Codec().Encode(val)
+	// since we don't know what the codec does, make copy of the object
+	data := make([]byte, len(val))
+	copy(data, val)
+	value, err := g.graph.GroupTable().Codec().Decode(data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error decoding %s: %v", key, err)
 	}
-	return g.graph.GroupTable().Codec().Decode(data)
+	return value, nil
 }
 
 func (g *Processor) find(key string) (storage.Storage, error) {
@@ -470,7 +472,7 @@ func (g *Processor) newJoinStorage(topic string, id int32, codec Codec, update U
 func (g *Processor) newStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
 	if g.isStateless() {
 		return &storageProxy{
-			Storage:   storage.NewMemory(codec),
+			Storage:   storage.NewMemory(),
 			partition: id,
 			stateless: true,
 		}, nil

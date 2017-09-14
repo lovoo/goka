@@ -63,6 +63,7 @@ type KafkaMock struct {
 	producerMock *producerMock
 	emitHandler  EmitHandler
 	topicMgrMock *topicMgrMock
+	codec        Codec
 }
 
 // Tester abstracts the interface we assume from the test case.
@@ -76,12 +77,13 @@ type Tester interface {
 // NewKafkaMock returns a new testprocessor mocking every external service
 func NewKafkaMock(t Tester, groupName Group) *KafkaMock {
 	kafkaMock := &KafkaMock{
-		storage:        storage.NewMemory(new(codec.Bytes)),
+		storage:        storage.NewMemory(),
 		t:              t,
 		incomingEvents: make(chan kafka.Event),
 		consumerEvents: make(chan kafka.Event),
 		handledTopics:  make(map[string]bool),
 		groupTopic:     tableName(groupName),
+		codec:          new(codec.Bytes),
 	}
 	kafkaMock.consumerMock = newConsumerMock(kafkaMock)
 	kafkaMock.producerMock = newProducerMock(kafkaMock.handleEmit)
@@ -225,7 +227,9 @@ func (km *KafkaMock) ValueForKey(key string) interface{} {
 
 // SetValue sets a value in the storage.
 func (km *KafkaMock) SetValue(key string, value interface{}) {
-	err := km.storage.Set(key, value)
+	data, err := km.codec.Encode(value)
+	ensure.Nil(km.t, err)
+	err = km.storage.Set(key, data)
 	ensure.Nil(km.t, err)
 }
 

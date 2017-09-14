@@ -5,7 +5,7 @@ import "fmt"
 type memiter struct {
 	current int
 	keys    []string
-	storage map[string]interface{}
+	storage map[string][]byte
 }
 
 func (i *memiter) exhausted() bool {
@@ -28,7 +28,7 @@ func (i *memiter) Key() []byte {
 	return []byte(i.keys[i.current])
 }
 
-func (i *memiter) Value() (interface{}, error) {
+func (i *memiter) Value() ([]byte, error) {
 	if i.exhausted() {
 		return nil, nil
 	}
@@ -51,17 +51,15 @@ func (m *memory) Iterator() (Iterator, error) {
 }
 
 type memory struct {
-	storage   map[string]interface{}
+	storage   map[string][]byte
 	offset    *int64
-	c         Codec
 	recovered bool
 }
 
 // NewMemory returns a new in-memory storage.
-func NewMemory(c Codec) Storage {
+func NewMemory() Storage {
 	return &memory{
-		storage:   make(map[string]interface{}),
-		c:         c,
+		storage:   make(map[string][]byte),
 		recovered: false,
 	}
 }
@@ -71,21 +69,12 @@ func (m *memory) Has(key string) (bool, error) {
 	return has, nil
 }
 
-func (m *memory) Get(key string) (interface{}, error) {
+func (m *memory) Get(key string) ([]byte, error) {
 	value, _ := m.storage[key]
 	return value, nil
 }
 
-func (m *memory) SetEncoded(key string, data []byte) error {
-	decoded, err := m.c.Decode(data)
-	if err != nil {
-		return fmt.Errorf("Error decoding data: %v", err)
-	}
-	m.storage[key] = decoded
-	return nil
-}
-
-func (m *memory) Set(key string, value interface{}) error {
+func (m *memory) Set(key string, value []byte) error {
 	if value == nil {
 		return fmt.Errorf("cannot write nil value")
 	}
@@ -118,10 +107,9 @@ func (m *memory) GetOffset(defValue int64) (int64, error) {
 
 	return *m.offset, nil
 }
+
 func (m *memory) Open() error {
 	return nil
-}
-func (m *memory) Sync() {
 }
 
 func (m *memory) Close() error {

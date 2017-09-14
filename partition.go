@@ -175,7 +175,6 @@ func (p *partition) run() error {
 	syncTicker := time.NewTicker(syncInterval)
 
 	defer func() {
-		p.st.Sync()
 		wg.Wait()
 		syncTicker.Stop()
 	}()
@@ -198,8 +197,6 @@ func (p *partition) run() error {
 				if err != nil {
 					return fmt.Errorf("error processing message: %v", err)
 				}
-
-				p.st.Sync()
 
 				// metrics
 				p.mxConsumed.Inc(1)
@@ -224,7 +221,6 @@ func (p *partition) run() error {
 			}
 
 		case <-syncTicker.C:
-			p.st.Sync()
 
 		case <-p.dying:
 			return nil
@@ -347,8 +343,6 @@ func (p *partition) load(catchup bool) error {
 			}
 
 		case now := <-syncTicker.C:
-			p.st.Sync()
-
 			// only set to stalled, if the last message was earlier
 			// than the stalled timeout
 			if now.Sub(lastMessage) > stalledTimeout {
@@ -356,7 +350,6 @@ func (p *partition) load(catchup bool) error {
 			}
 
 		case <-p.dying:
-			p.st.Sync()
 			return nil
 		}
 	}
@@ -374,6 +367,5 @@ func (p *partition) storeEvent(msg *kafka.Message) error {
 		return fmt.Errorf("Error updating offset in local storage while recovering from the log: %v", err)
 	}
 
-	p.st.Sync()
 	return nil
 }

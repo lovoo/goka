@@ -4,10 +4,9 @@
 package main
 
 import (
-	time "time"
-
 	gomock "github.com/golang/mock/gomock"
 	goka "github.com/lovoo/goka"
+	time "time"
 )
 
 // Mock of Context interface
