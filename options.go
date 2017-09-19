@@ -357,6 +357,13 @@ func WithViewPartitionChannelSize(size int) ViewOption {
 	}
 }
 
+// WithViewHasher sets the hash function that assigns keys to partitions.
+func WithViewHasher(hasher func() hash.Hash32) ViewOption {
+	return func(o *voptions) {
+		o.hasher = hasher
+	}
+}
+
 func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 	for _, o := range opts {
 		o(opt)
