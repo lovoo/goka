@@ -405,6 +405,9 @@ func TestContext_Lookup(t *testing.T) {
 						},
 					},
 				},
+				opts: &voptions{
+					hasher: DefaultHasher(),
+				},
 			},
 		},
 	}

@@ -3,7 +3,7 @@ package kafka
 import (
 	"time"
 
-	"github.com/Shopify/sarama"
+	cluster "github.com/bsm/sarama-cluster"
 	metrics "github.com/rcrowley/go-metrics"
 )
 
@@ -51,9 +51,8 @@ type saramaConsumer struct {
 }
 
 // NewSaramaConsumer creates a new Consumer using sarama
-func NewSaramaConsumer(brokers []string, group string, registry metrics.Registry) (Consumer, error) {
+func NewSaramaConsumer(brokers []string, group string, config *cluster.Config, registry metrics.Registry) (Consumer, error) {
 	events := make(chan Event, defaultChannelBufferSize)
-	config := CreateDefaultKafkaConfig("whatever", sarama.OffsetOldest, registry)
 
 	g, err := newGroupConsumer(brokers, group, events, config)
 	if err != nil {

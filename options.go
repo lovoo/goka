@@ -2,8 +2,11 @@ package goka
 
 import (
 	"fmt"
+	"hash"
+	"hash/fnv"
 	"path/filepath"
 
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
@@ -64,17 +67,28 @@ func DefaultStorageBuilder(path string) StorageBuilder {
 	}
 }
 
+// DefaultHasher returns an FNV hasher builder to assign keys to partitions.
+func DefaultHasher() func() hash.Hash32 {
+	return func() hash.Hash32 {
+		return fnv.New32a()
+	}
+
+}
+
 type consumerBuilder func(brokers []string, group string, registry metrics.Registry) (kafka.Consumer, error)
 type producerBuilder func(brokers []string, registry metrics.Registry) (kafka.Producer, error)
 type topicmgrBuilder func(brokers []string) (kafka.TopicManager, error)
 
 func defaultConsumerBuilder(brokers []string, group string, registry metrics.Registry) (kafka.Consumer, error) {
-	return kafka.NewSaramaConsumer(brokers, group, registry)
+	config := kafka.CreateDefaultSaramaConfig("goka", nil, registry)
+	return kafka.NewSaramaConsumer(brokers, group, config, registry)
 }
 
-func defaultProducerBuilder(log logger.Logger) producerBuilder {
+func defaultProducerBuilder(hasher func() hash.Hash32, log logger.Logger) producerBuilder {
 	return func(brokers []string, registry metrics.Registry) (kafka.Producer, error) {
-		return kafka.NewProducer(brokers, registry, log)
+		partitioner := sarama.NewCustomHashPartitioner(hasher)
+		config := kafka.CreateDefaultSaramaConfig("goka", partitioner, registry)
+		return kafka.NewProducer(brokers, &config.Config, registry, log)
 	}
 }
 
@@ -97,6 +111,7 @@ type poptions struct {
 	updateCallback       UpdateCallback
 	registry             metrics.Registry
 	partitionChannelSize int
+	hasher               func() hash.Hash32
 
 	builders struct {
 		storage  StorageBuilder
@@ -142,7 +157,7 @@ func WithTopicManager(tm kafka.TopicManager) ProcessorOption {
 	}
 }
 
-// WithConsumer replaces goka's default consumer. Mainly for testing.
+// WithConsumer replaces goka's default consumer.
 func WithConsumer(c kafka.Consumer) ProcessorOption {
 	return func(o *poptions) {
 		o.builders.consumer = func(brokers []string, group string, registry metrics.Registry) (kafka.Consumer, error) {
@@ -154,7 +169,7 @@ func WithConsumer(c kafka.Consumer) ProcessorOption {
 	}
 }
 
-// WithProducer replaces goka'S default producer. Mainly for testing.
+// WithProducer replaces goka's default producer.
 func WithProducer(p kafka.Producer) ProcessorOption {
 	return func(o *poptions) {
 		o.builders.producer = func(brokers []string, registry metrics.Registry) (kafka.Producer, error) {
@@ -201,11 +216,22 @@ func WithRegistry(r metrics.Registry) ProcessorOption {
 	}
 }
 
+// WithHasher sets the hash function that assigns keys to partitions.
+func WithHasher(hasher func() hash.Hash32) ProcessorOption {
+	return func(o *poptions) {
+		o.hasher = hasher
+	}
+}
+
 func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 	opt.clientID = defaultClientID
 
 	for _, o := range opts {
 		o(opt)
+	}
+
+	if opt.hasher == nil {
+		opt.hasher = DefaultHasher()
 	}
 
 	// StorageBuilder should always be set as a default option in NewProcessor
@@ -216,7 +242,7 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 		opt.builders.consumer = defaultConsumerBuilder
 	}
 	if opt.builders.producer == nil {
-		opt.builders.producer = defaultProducerBuilder(opt.log)
+		opt.builders.producer = defaultProducerBuilder(opt.hasher, opt.log)
 	}
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = defaultTopicManagerBuilder
@@ -246,6 +272,7 @@ type voptions struct {
 	updateCallback       UpdateCallback
 	registry             metrics.Registry
 	partitionChannelSize int
+	hasher               func() hash.Hash32
 
 	builders struct {
 		storage  StorageBuilder
@@ -335,6 +362,10 @@ func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 		o(opt)
 	}
 
+	if opt.hasher == nil {
+		opt.hasher = DefaultHasher()
+	}
+
 	// StorageBuilder should always be set as a default option in NewView
 	if opt.builders.storage == nil {
 		return fmt.Errorf("StorageBuilder not set")
@@ -372,6 +403,7 @@ type eoptions struct {
 
 	registry metrics.Registry
 	codec    Codec
+	hasher   func() hash.Hash32
 
 	builders struct {
 		topicmgr topicmgrBuilder
@@ -428,6 +460,13 @@ func WithEmitterKafkaMetrics(registry metrics.Registry) EmitterOption {
 	}
 }
 
+// WithEmitterHasher sets the hash function that assigns keys to partitions.
+func WithEmitterHasher(hasher func() hash.Hash32) EmitterOption {
+	return func(o *eoptions) {
+		o.hasher = hasher
+	}
+}
+
 func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
@@ -436,9 +475,13 @@ func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
 		o(opt)
 	}
 
+	if opt.hasher == nil {
+		opt.hasher = DefaultHasher()
+	}
+
 	// config not set, use default one
 	if opt.builders.producer == nil {
-		opt.builders.producer = defaultProducerBuilder(opt.log)
+		opt.builders.producer = defaultProducerBuilder(opt.hasher, opt.log)
 	}
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = defaultTopicManagerBuilder

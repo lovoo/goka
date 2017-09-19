@@ -1010,12 +1010,12 @@ func TestProcessor_HasGet(t *testing.T) {
 }
 
 func TestProcessor_HasGetStateless(t *testing.T) {
-	p := &Processor{graph: DefineGroup(group)}
+	p := &Processor{graph: DefineGroup(group), opts: &poptions{hasher: DefaultHasher()}}
 	_, err := p.Get("item1")
 	ensure.NotNil(t, err)
 	ensure.StringContains(t, err.Error(), "stateless processor")
 
-	p = &Processor{graph: DefineGroup(group, Persist(c))}
+	p = &Processor{graph: DefineGroup(group, Persist(c)), opts: &poptions{hasher: DefaultHasher()}}
 	p.partitions = map[int32]*partition{
 		0: new(partition),
 	}
@@ -1024,7 +1024,7 @@ func TestProcessor_HasGetStateless(t *testing.T) {
 	ensure.NotNil(t, err)
 	ensure.StringContains(t, err.Error(), "0 partitions")
 
-	p = &Processor{graph: DefineGroup(group, Persist(c))}
+	p = &Processor{graph: DefineGroup(group, Persist(c)), opts: &poptions{hasher: DefaultHasher()}}
 	p.partitions = map[int32]*partition{
 		0: new(partition),
 	}
@@ -1037,7 +1037,7 @@ func TestProcessor_HasGetStateless(t *testing.T) {
 	defer ctrl.Finish()
 
 	st := mock.NewMockStorage(ctrl)
-	p = &Processor{graph: DefineGroup(group, Persist(c))}
+	p = &Processor{graph: DefineGroup(group, Persist(c)), opts: &poptions{hasher: DefaultHasher()}}
 	p.partitions = map[int32]*partition{
 		0: &partition{log: logger.Default(), st: &storageProxy{Storage: st, partition: 0}},
 	}
