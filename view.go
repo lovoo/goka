@@ -53,7 +53,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 
 	opts.tableCodec = codec
 
-	consumer, err := opts.builders.consumer(brokers, "goka-view", opts.kafkaRegistry)
+	consumer, err := opts.builders.consumer(brokers, "goka-view", opts.clientID, opts.kafkaRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("view: cannot create Kafka consumer: %v", err)
 	}
