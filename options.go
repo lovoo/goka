@@ -75,19 +75,19 @@ func DefaultHasher() func() hash.Hash32 {
 
 }
 
-type consumerBuilder func(brokers []string, group string, registry metrics.Registry) (kafka.Consumer, error)
+type consumerBuilder func(brokers []string, group string, clientID string, registry metrics.Registry) (kafka.Consumer, error)
 type producerBuilder func(brokers []string, registry metrics.Registry) (kafka.Producer, error)
 type topicmgrBuilder func(brokers []string) (kafka.TopicManager, error)
 
-func defaultConsumerBuilder(brokers []string, group string, registry metrics.Registry) (kafka.Consumer, error) {
-	config := kafka.CreateDefaultSaramaConfig("goka", nil, registry)
+func defaultConsumerBuilder(brokers []string, group string, clientID string, registry metrics.Registry) (kafka.Consumer, error) {
+	config := kafka.CreateDefaultSaramaConfig(clientID, nil, registry)
 	return kafka.NewSaramaConsumer(brokers, group, config, registry)
 }
 
-func defaultProducerBuilder(hasher func() hash.Hash32, log logger.Logger) producerBuilder {
+func defaultProducerBuilder(clientID string, hasher func() hash.Hash32, log logger.Logger) producerBuilder {
 	return func(brokers []string, registry metrics.Registry) (kafka.Producer, error) {
 		partitioner := sarama.NewCustomHashPartitioner(hasher)
-		config := kafka.CreateDefaultSaramaConfig("goka", partitioner, registry)
+		config := kafka.CreateDefaultSaramaConfig(clientID, partitioner, registry)
 		return kafka.NewProducer(brokers, &config.Config, registry, log)
 	}
 }
@@ -131,7 +131,7 @@ func WithUpdateCallback(cb UpdateCallback) ProcessorOption {
 	}
 }
 
-// WithClientID defines the client ID used to identify with kafka.
+// WithClientID defines the client ID used to identify with Kafka.
 func WithClientID(clientID string) ProcessorOption {
 	return func(o *poptions) {
 		o.clientID = clientID
@@ -160,7 +160,7 @@ func WithTopicManager(tm kafka.TopicManager) ProcessorOption {
 // WithConsumer replaces goka's default consumer.
 func WithConsumer(c kafka.Consumer) ProcessorOption {
 	return func(o *poptions) {
-		o.builders.consumer = func(brokers []string, group string, registry metrics.Registry) (kafka.Consumer, error) {
+		o.builders.consumer = func(brokers []string, group string, clientID string, registry metrics.Registry) (kafka.Consumer, error) {
 			if c == nil {
 				return nil, fmt.Errorf("consumer cannot be nil")
 			}
@@ -181,8 +181,7 @@ func WithProducer(p kafka.Producer) ProcessorOption {
 	}
 }
 
-// WithKafkaMetrics sets a go-metrics registry to collect
-// kafka metrics.
+// WithKafkaMetrics sets a go-metrics registry to collect Kafka metrics.
 // The metric-points are https://godoc.org/github.com/Shopify/sarama
 func WithKafkaMetrics(registry metrics.Registry) ProcessorOption {
 	return func(o *poptions) {
@@ -225,13 +224,11 @@ func WithHasher(hasher func() hash.Hash32) ProcessorOption {
 
 func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 	opt.clientID = defaultClientID
+	opt.log = logger.Default()
+	opt.hasher = DefaultHasher()
 
 	for _, o := range opts {
 		o(opt)
-	}
-
-	if opt.hasher == nil {
-		opt.hasher = DefaultHasher()
 	}
 
 	// StorageBuilder should always be set as a default option in NewProcessor
@@ -242,7 +239,7 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 		opt.builders.consumer = defaultConsumerBuilder
 	}
 	if opt.builders.producer == nil {
-		opt.builders.producer = defaultProducerBuilder(opt.hasher, opt.log)
+		opt.builders.producer = defaultProducerBuilder(opt.clientID, opt.hasher, opt.log)
 	}
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = defaultTopicManagerBuilder
@@ -268,6 +265,7 @@ type ViewOption func(*voptions)
 
 type voptions struct {
 	log                  logger.Logger
+	clientID             string
 	tableCodec           Codec
 	updateCallback       UpdateCallback
 	registry             metrics.Registry
@@ -318,7 +316,7 @@ func WithViewStorageBuilder(sb StorageBuilder) ViewOption {
 // WithViewConsumer replaces goka's default view consumer. Mainly for testing.
 func WithViewConsumer(c kafka.Consumer) ViewOption {
 	return func(o *voptions) {
-		o.builders.consumer = func(brokers []string, group string, registry metrics.Registry) (kafka.Consumer, error) {
+		o.builders.consumer = func(brokers []string, group string, clientID string, registry metrics.Registry) (kafka.Consumer, error) {
 			if c == nil {
 				return nil, fmt.Errorf("consumer cannot be nil")
 			}
@@ -339,8 +337,7 @@ func WithViewTopicManager(tm kafka.TopicManager) ViewOption {
 	}
 }
 
-// WithViewKafkaMetrics sets a go-metrics registry to collect
-// kafka metrics.
+// WithViewKafkaMetrics sets a go-metrics registry to collect Kafka metrics.
 // The metric-points are https://godoc.org/github.com/Shopify/sarama
 func WithViewKafkaMetrics(registry metrics.Registry) ViewOption {
 	return func(o *voptions) {
@@ -364,13 +361,20 @@ func WithViewHasher(hasher func() hash.Hash32) ViewOption {
 	}
 }
 
+// WithViewClientID defines the client ID used to identify with Kafka.
+func WithViewClientID(clientID string) ViewOption {
+	return func(o *voptions) {
+		o.clientID = clientID
+	}
+}
+
 func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
+	opt.clientID = defaultClientID
+	opt.log = logger.Default()
+	opt.hasher = DefaultHasher()
+
 	for _, o := range opts {
 		o(opt)
-	}
-
-	if opt.hasher == nil {
-		opt.hasher = DefaultHasher()
 	}
 
 	// StorageBuilder should always be set as a default option in NewView
@@ -477,18 +481,15 @@ func WithEmitterHasher(hasher func() hash.Hash32) EmitterOption {
 func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
+	opt.hasher = DefaultHasher()
 
 	for _, o := range opts {
 		o(opt)
 	}
 
-	if opt.hasher == nil {
-		opt.hasher = DefaultHasher()
-	}
-
 	// config not set, use default one
 	if opt.builders.producer == nil {
-		opt.builders.producer = defaultProducerBuilder(opt.hasher, opt.log)
+		opt.builders.producer = defaultProducerBuilder(opt.clientID, opt.hasher, opt.log)
 	}
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = defaultTopicManagerBuilder

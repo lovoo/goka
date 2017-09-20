@@ -86,7 +86,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	}
 
 	// create kafka consumer
-	consumer, err := opts.builders.consumer(brokers, string(gg.Group()), opts.kafkaRegistry)
+	consumer, err := opts.builders.consumer(brokers, string(gg.Group()), opts.clientID, opts.kafkaRegistry)
 	if err != nil {
 		return nil, fmt.Errorf(errBuildConsumer, err)
 	}
