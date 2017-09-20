@@ -3,7 +3,6 @@ package goka
 import (
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"sync"
 
 	"github.com/lovoo/goka/kafka"
@@ -188,7 +187,7 @@ func (v *View) hash(key string) (int32, error) {
 	// create a new hasher every time. Alternative would be to store the hash in
 	// view and every time reset the hasher (ie, hasher.Reset()). But that would
 	// also require us to protect the access of the hasher with a mutex.
-	hasher := fnv.New32a()
+	hasher := v.opts.hasher()
 
 	_, err := hasher.Write([]byte(key))
 	if err != nil {

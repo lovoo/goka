@@ -11,8 +11,6 @@ import (
 // Producer abstracts the kafka producer
 type Producer interface {
 	// Emit sends a message to topic.
-	// TODO (franz): this method should return a promise, instead of getting one.
-	// Otherwise a callback is sufficient
 	Emit(topic string, key string, value []byte) *Promise
 	Close() error
 }
@@ -25,9 +23,8 @@ type producer struct {
 }
 
 // NewProducer creates new kafka producer for passed brokers.
-func NewProducer(brokers []string, registry metrics.Registry, log logger.Logger) (Producer, error) {
-	config := CreateDefaultKafkaConfig("whatever", sarama.OffsetOldest, registry)
-	aprod, err := sarama.NewAsyncProducer(brokers, &config.Config)
+func NewProducer(brokers []string, config *sarama.Config, registry metrics.Registry, log logger.Logger) (Producer, error) {
+	aprod, err := sarama.NewAsyncProducer(brokers, config)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to start Sarama producer: %v", err)
 	}

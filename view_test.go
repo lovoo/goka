@@ -34,6 +34,7 @@ func createTestView(t *testing.T, consumer kafka.Consumer, sb StorageBuilder, tm
 		},
 		registry:     metrics.DefaultRegistry,
 		gokaRegistry: metrics.DefaultRegistry,
+		hasher:       DefaultHasher(),
 	}
 	opts.builders.storage = sb
 	opts.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
@@ -222,7 +223,7 @@ func TestView_StartStopWithError(t *testing.T) {
 }
 
 func TestView_GetErrors(t *testing.T) {
-	v := &View{}
+	v := &View{opts: &voptions{hasher: DefaultHasher()}}
 	_, err := v.Get("hey")
 	ensure.NotNil(t, err)
 
