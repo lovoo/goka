@@ -570,6 +570,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 		final = make(chan bool)
 		ch    = make(chan kafka.Event)
 		p     = createProcessor(t, ctrl, consumer, 3, sb)
+		value = []byte("value")
 	)
 
 	// -- expectations --
@@ -586,7 +587,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
 	// 3. message
 	gomock.InOrder(
-		st.EXPECT().SetEncoded("key", nil).Return(nil),
+		st.EXPECT().SetEncoded("key", value).Return(nil),
 		st.EXPECT().SetOffset(int64(1)),
 		st.EXPECT().MarkRecovered(),
 		st.EXPECT().Sync(),
@@ -621,6 +622,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
+		Value:     value,
 	}
 	err = syncWith(t, ch, 1) // with partition
 	ensure.Nil(t, err)
@@ -650,6 +652,7 @@ func TestProcessor_Start(t *testing.T) {
 		final = make(chan bool)
 		ch    = make(chan kafka.Event)
 		p     = createProcessor(t, ctrl, consumer, 3, sb)
+		value = []byte("value")
 	)
 
 	// -- expectations --
@@ -663,7 +666,7 @@ func TestProcessor_Start(t *testing.T) {
 	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
 	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
 	// 3. load message partition 1
-	st.EXPECT().SetEncoded("key", nil).Return(nil)
+	st.EXPECT().SetEncoded("key", value).Return(nil)
 	st.EXPECT().SetOffset(int64(1))
 	st.EXPECT().Sync()
 	st.EXPECT().MarkRecovered()
@@ -708,6 +711,7 @@ func TestProcessor_Start(t *testing.T) {
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
+		Value:     value,
 	}
 	err = syncWith(t, ch, 1) // with partition 1
 	ensure.Nil(t, err)
@@ -802,6 +806,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 		ch       = make(chan kafka.Event)
 		p        = createProcessorWithTable(ctrl, consumer, 3, sb)
 		producer = p.producer.(*mock.MockProducer)
+		value    = []byte("value")
 	)
 
 	// -- expectations --
@@ -818,7 +823,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	consumer.EXPECT().AddPartition(table, int32(1), int64(123))
 	consumer.EXPECT().AddPartition(table, int32(2), int64(123))
 	// 3. message to group table
-	st.EXPECT().SetEncoded("key", nil).Return(nil)
+	st.EXPECT().SetEncoded("key", value).Return(nil)
 	st.EXPECT().SetOffset(int64(1))
 	st.EXPECT().MarkRecovered()
 	st.EXPECT().Sync()
@@ -867,6 +872,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
+		Value:     value,
 	}
 	err = syncWith(t, ch, 1)
 	ensure.Nil(t, err)
