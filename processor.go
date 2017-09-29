@@ -3,6 +3,7 @@ package goka
 import (
 	"errors"
 	"fmt"
+	"log"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -686,6 +687,13 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	if codec == nil {
 		return fmt.Errorf("cannot handle topic %s", msg.Topic)
 	}
+
+	// drop nil messages
+	if msg.Data == nil {
+		log.Printf("dropping nil message for key %s from %s/%d", msg.Key, msg.Topic, msg.Partition)
+		return nil
+	}
+
 	// decode message
 	m, err := codec.Decode(msg.Data)
 	if err != nil {
