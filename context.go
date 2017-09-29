@@ -28,6 +28,11 @@ type Context interface {
 	// SetValue updates the value of the key in the group table.
 	SetValue(value interface{})
 
+	// Delete deletes a value from the group table. IMPORTANT: this deletes the
+	// value associated with the key from both the local cache and the persisted
+	// table in Kafka.
+	Delete()
+
 	// Timestamp returns the timestamp of the input message. If the timestamp is
 	// invalid, a zero time will be returned.
 	Timestamp() time.Time
@@ -90,9 +95,14 @@ func (ctx *context) Emit(topic Stream, key string, value interface{}) {
 	if c == nil {
 		ctx.Fail(fmt.Errorf("no codec for topic %s", topic))
 	}
-	data, err := c.Encode(value)
-	if err != nil {
-		ctx.Fail(fmt.Errorf("error encoding message for topic %s: %v", topic, err))
+
+	var data []byte
+	if value != nil {
+		var err error
+		data, err = c.Encode(value)
+		if err != nil {
+			ctx.Fail(fmt.Errorf("error encoding message for topic %s: %v", topic, err))
+		}
 	}
 
 	ctx.emit(string(topic), key, data)
@@ -121,6 +131,12 @@ func (ctx *context) emit(topic string, key string, value []byte) {
 		}
 		ctx.emitDone(err)
 	})
+}
+
+func (ctx *context) Delete() {
+	if err := ctx.deleteKey(ctx.Key()); err != nil {
+		ctx.Fail(err)
+	}
 }
 
 // Value returns the value of the key in the group table.
@@ -202,6 +218,24 @@ func (ctx *context) valueForKey(key string) (interface{}, error) {
 	}
 
 	return ctx.storage.Get(key)
+}
+
+func (ctx *context) deleteKey(key string) error {
+	if ctx.graph.GroupTable() == nil {
+		return fmt.Errorf("Cannot access state in stateless processor")
+	}
+
+	ctx.counters.stores++
+	if err := ctx.storage.Delete(key); err != nil {
+		return fmt.Errorf("error deleting key (%s) from storage: %v", key, err)
+	}
+
+	ctx.counters.emits++
+	ctx.emitter(ctx.graph.GroupTable().Topic(), key, nil).Then(func(err error) {
+		ctx.emitDone(err)
+	})
+
+	return nil
 }
 
 // setValueForKey sets a value for a key in the processor state.

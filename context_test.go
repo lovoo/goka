@@ -3,6 +3,7 @@ package goka
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -169,6 +170,84 @@ func TestContext_GetSetStateless(t *testing.T) {
 		defer PanicStringContains(t, "stateless")
 		_ = ctx.Has("something")
 	}()
+}
+
+func TestContext_Delete(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	storage := mock.NewMockStorage(ctrl)
+
+	offset := int64(123)
+	ack := 0
+	key := "key"
+
+	ctx := &context{
+		graph:   DefineGroup(group, Persist(new(codec.String))),
+		storage: storage,
+		wg:      new(sync.WaitGroup),
+		commit:  func() { ack++ },
+		msg:     &message{Offset: offset},
+	}
+
+	gomock.InOrder(
+		storage.EXPECT().Delete(key),
+	)
+	ctx.emitter = newEmitter(nil, nil)
+
+	ctx.start()
+	err := ctx.deleteKey(key)
+	ensure.Nil(t, err)
+	ctx.finish()
+
+	ctx.wg.Wait()
+
+	ensure.DeepEqual(t, ctx.counters, struct {
+		emits  int
+		dones  int
+		stores int
+	}{1, 1, 1})
+}
+
+func TestContext_DeleteStateless(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	offset := int64(123)
+	key := "key"
+
+	ctx := &context{
+		graph: DefineGroup(group),
+		wg:    new(sync.WaitGroup),
+		msg:   &message{Offset: offset},
+	}
+	ctx.emitter = newEmitter(nil, nil)
+
+	err := ctx.deleteKey(key)
+	ensure.Err(t, err, regexp.MustCompile("^Cannot access state in stateless processor$"))
+}
+
+func TestContext_DeleteStorageError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	storage := mock.NewMockStorage(ctrl)
+
+	offset := int64(123)
+	key := "key"
+
+	ctx := &context{
+		graph:   DefineGroup(group, Persist(new(codec.String))),
+		storage: storage,
+		wg:      new(sync.WaitGroup),
+		msg:     &message{Offset: offset},
+	}
+
+	gomock.InOrder(
+		storage.EXPECT().Delete(key).Return(fmt.Errorf("storage error")),
+	)
+	ctx.emitter = newEmitter(nil, nil)
+
+	err := ctx.deleteKey(key)
+	ensure.Err(t, err, regexp.MustCompile("^error deleting key \\(key\\) from storage: storage error$"))
 }
 
 func TestContext_Set(t *testing.T) {

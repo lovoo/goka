@@ -4,9 +4,10 @@
 package main
 
 import (
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	goka "github.com/lovoo/goka"
-	time "time"
 )
 
 // Mock of Context interface
@@ -28,6 +29,14 @@ func NewMockContext(ctrl *gomock.Controller) *MockContext {
 
 func (_m *MockContext) EXPECT() *_MockContextRecorder {
 	return _m.recorder
+}
+
+func (_m *MockContext) Delete() {
+	_m.ctrl.Call(_m, "Delete")
+}
+
+func (_mr *_MockContextRecorder) Delete() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "Delete")
 }
 
 func (_m *MockContext) Emit(_param0 goka.Stream, _param1 string, _param2 interface{}) {
