@@ -181,7 +181,7 @@ func TestProcessor_process(t *testing.T) {
 
 	// no emits
 	consumer.EXPECT().Commit("sometopic", int32(1), int64(123))
-	msg := &message{Topic: "sometopic", Partition: 1, Offset: 123}
+	msg := &message{Topic: "sometopic", Partition: 1, Offset: 123, Data: []byte("something")}
 	err := p.process(msg, st, &wg)
 	ensure.Nil(t, err)
 
@@ -191,7 +191,7 @@ func TestProcessor_process(t *testing.T) {
 		producer.EXPECT().Emit("anothertopic", "key", []byte("message")).Return(promise),
 		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
 	)
-	msg = &message{Topic: "sometopic", Partition: 1, Offset: 123}
+	msg = &message{Topic: "sometopic", Partition: 1, Offset: 123, Data: []byte("something")}
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.Emit("anothertopic", "key", "message")
 	}
@@ -208,7 +208,7 @@ func TestProcessor_process(t *testing.T) {
 		st.EXPECT().SetOffset(int64(322)),
 		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
 	)
-	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123}
+	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
@@ -258,7 +258,7 @@ func TestProcessor_processFail(t *testing.T) {
 		consumer.EXPECT().Close().Do(func() { close(p.done) }),
 		producer.EXPECT().Close(),
 	)
-	msg := &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123}
+	msg := &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
@@ -281,7 +281,7 @@ func TestProcessor_processFail(t *testing.T) {
 		consumer.EXPECT().Close().Do(func() { close(p.done) }),
 		producer.EXPECT().Close(),
 	)
-	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123}
+	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
@@ -305,7 +305,7 @@ func TestProcessor_processFail(t *testing.T) {
 		consumer.EXPECT().Close().Do(func() { close(p.done) }),
 		producer.EXPECT().Close(),
 	)
-	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123}
+	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
@@ -727,6 +727,7 @@ func TestProcessor_Start(t *testing.T) {
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
+		Value:     value,
 	}
 	err = syncWith(t, ch, 1) // with partition 1
 	ensure.Nil(t, err)
@@ -899,6 +900,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 		Partition: 1,
 		Offset:    1,
 		Key:       "key",
+		Value:     value,
 	}
 	err = syncWith(t, ch, 1)
 	ensure.Nil(t, err)

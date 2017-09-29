@@ -3,6 +3,7 @@ package goka
 import (
 	"errors"
 	"fmt"
+	"log"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -684,13 +685,18 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	// get stream subcription
 	codec := g.graph.codec(msg.Topic)
 	if codec == nil {
-		wg.Done()
 		return fmt.Errorf("cannot handle topic %s", msg.Topic)
 	}
+
+	// drop nil messages
+	if msg.Data == nil {
+		log.Printf("dropping nil message for key %s from %s/%d", msg.Key, msg.Topic, msg.Partition)
+		return nil
+	}
+
 	// decode message
 	m, err := codec.Decode(msg.Data)
 	if err != nil {
-		wg.Done()
 		return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
 	}
 
@@ -698,7 +704,6 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	defer ctx.finish() // execute even in case of panic
 	cb := g.graph.callback(msg.Topic)
 	if cb == nil {
-		wg.Done()
 		return fmt.Errorf("error processing message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
 	}
 	cb(ctx, m)
