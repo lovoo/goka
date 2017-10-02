@@ -51,7 +51,7 @@ func DefaultViewStoragePath() string {
 // WithViewCallback.
 func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte) error {
 	if value == nil {
-		s.Delete(key)
+		return s.Delete(key)
 	}
 
 	return s.SetEncoded(key, value)
