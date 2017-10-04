@@ -265,6 +265,17 @@ func (v *View) Iterator() (storage.Iterator, error) {
 	return storage.NewMultiIterator(iters), nil
 }
 
+// Evict removes the given key only from the local cache. In order to delete a
+// key from Kafka and other Views, context.Delete should be used on a Processor.
+func (v *View) Evict(key string) error {
+	s, err := v.find(key)
+	if err != nil {
+		return err
+	}
+
+	return s.Delete(key)
+}
+
 func (v *View) run() {
 	defer close(v.done)
 	v.opts.log.Printf("View: started")

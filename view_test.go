@@ -2,6 +2,7 @@ package goka
 
 import (
 	"errors"
+	"hash"
 	"testing"
 	"time"
 
@@ -281,6 +282,37 @@ func TestNewView(t *testing.T) {
 	ensure.DeepEqual(t, v.topic, tableName(group))
 	ensure.DeepEqual(t, v.consumer, consumer)
 	ensure.True(t, len(v.partitions) == 3)
+}
+
+func TestView_Evict(t *testing.T) {
+	key := "some-key"
+	val := "some-val"
+
+	st := storage.NewMemory(new(codec.String))
+	err := st.Set(key, val)
+	ensure.Nil(t, err)
+
+	v := &View{
+		partitions: []*partition{
+			{st: &storageProxy{partition: 0, Storage: st}},
+		},
+		opts: &voptions{
+			hasher: func() hash.Hash32 {
+				return NewConstHasher(0)
+			},
+		},
+	}
+
+	vinf, err := v.Get(key)
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, vinf, val)
+
+	err = v.Evict(key)
+	ensure.Nil(t, err)
+
+	vinf, err = v.Get(key)
+	ensure.Nil(t, err)
+	ensure.Nil(t, vinf)
 }
 
 func doTimed(t *testing.T, do func()) error {
