@@ -2,10 +2,42 @@ package goka
 
 import (
 	"fmt"
+	"hash"
 	"log"
 
 	"github.com/Shopify/sarama"
 )
+
+// constHasher implements a hasher that will always return the specified
+// partition. Doesn't properly implement the Hash32 interface, use only in
+// tests.
+type constHasher struct {
+	partition uint32
+}
+
+func (ch *constHasher) Sum(b []byte) []byte {
+	return nil
+}
+
+func (ch *constHasher) Sum32() uint32 {
+	return ch.partition
+}
+
+func (ch *constHasher) BlockSize() int {
+	return 0
+}
+
+func (ch *constHasher) Reset() {}
+
+func (ch *constHasher) Size() int { return 4 }
+
+func (ch *constHasher) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+func NewConstHasher(part uint32) hash.Hash32 {
+	return &constHasher{partition: part}
+}
 
 type clientMock struct {
 	topics        []string
