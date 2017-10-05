@@ -134,21 +134,25 @@ func TestSimpleConsumer_AddPartition(t *testing.T) {
 	doTimed(t, func() {
 		close(messages)
 		pc.EXPECT().Close().Return(errors.New("some error"))
+		c.dying = make(chan bool)
 		err := c.Close()
 		ensure.NotNil(t, err)
 
 		pc.EXPECT().Close().Return(nil)
 		consumer.EXPECT().Close().Return(errors.New("some error"))
+		c.dying = make(chan bool)
 		err = c.Close()
 		ensure.NotNil(t, err)
 
 		consumer.EXPECT().Close().Return(nil)
 		client.EXPECT().Close().Return(errors.New("some error"))
+		c.dying = make(chan bool)
 		err = c.Close()
 		ensure.NotNil(t, err)
 
 		consumer.EXPECT().Close().Return(nil)
 		client.EXPECT().Close().Return(nil)
+		c.dying = make(chan bool)
 		err = c.Close()
 		ensure.Nil(t, err)
 	})
@@ -209,7 +213,85 @@ func TestSimpleConsumer_RemovePartition(t *testing.T) {
 		close(messages)
 		consumer.EXPECT().Close().Return(nil)
 		client.EXPECT().Close().Return(nil)
+		c.dying = make(chan bool)
 		err = c.Close()
 		ensure.Nil(t, err)
 	})
+}
+
+func TestSimpleConsumer_ErrorBlocked(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var (
+		client          = mock.NewMockClient(ctrl)
+		consumer        = mock.NewMockConsumer(ctrl)
+		pc              = mock.NewMockPartitionConsumer(ctrl)
+		topic           = "topic"
+		partition int32 = 123
+		offset    int64 = 1234
+		oldest    int64 = 1233
+		hwm       int64 = 1237
+		messages        = make(chan *sarama.ConsumerMessage)
+		ch              = make(chan Event)
+	)
+
+	c := &simpleConsumer{
+		client:     client,
+		consumer:   consumer,
+		partitions: make(map[topicPartition]sarama.PartitionConsumer),
+		events:     ch,
+		dying:      make(chan bool),
+	}
+
+	client.EXPECT().GetOffset(topic, partition, sarama.OffsetOldest).Return(oldest, errors.New("some error"))
+	err := c.AddPartition(topic, partition, offset)
+	ensure.NotNil(t, err)
+
+	client.EXPECT().GetOffset(topic, partition, sarama.OffsetOldest).Return(oldest, nil)
+	client.EXPECT().GetOffset(topic, partition, sarama.OffsetNewest).Return(hwm, nil)
+	consumer.EXPECT().ConsumePartition(topic, partition, offset).Return(nil, errors.New("some error"))
+	err = c.AddPartition(topic, partition, offset)
+	ensure.NotNil(t, err)
+
+	client.EXPECT().GetOffset(topic, partition, sarama.OffsetOldest).Return(oldest, nil)
+	client.EXPECT().GetOffset(topic, partition, sarama.OffsetNewest).Return(hwm, nil)
+	consumer.EXPECT().ConsumePartition(topic, partition, offset).Return(pc, nil)
+	pc.EXPECT().Messages().Return(messages)
+	err = c.AddPartition(topic, partition, offset)
+	ensure.Nil(t, err)
+	m, ok := (<-ch).(*BOF)
+	ensure.True(t, ok)
+	ensure.DeepEqual(t, m, &BOF{Topic: topic, Partition: partition, Offset: offset, Hwm: hwm})
+
+	err = c.AddPartition(topic, partition, offset)
+	ensure.NotNil(t, err)
+
+	messages <- &sarama.ConsumerMessage{
+		Key:       []byte("somekey"),
+		Value:     []byte("somevalue"),
+		Topic:     "sometopic",
+		Partition: 123,
+	}
+	pc.EXPECT().HighWaterMarkOffset().Return(int64(0))
+	mo, ok := (<-ch).(*Message)
+	ensure.True(t, ok)
+	ensure.DeepEqual(t, mo, &Message{Topic: "sometopic", Partition: 123, Key: "somekey", Value: []byte("somevalue")})
+
+	// we now write, but don't read events
+	messages <- &sarama.ConsumerMessage{
+		Key:       []byte("somekey"),
+		Value:     []byte("somevalue"),
+		Topic:     "sometopic",
+		Partition: 123,
+	}
+
+	err = doTimed(t, func() {
+		pc.EXPECT().Close().Return(nil)
+		consumer.EXPECT().Close().Return(nil)
+		client.EXPECT().Close().Return(nil)
+		err := c.Close()
+		ensure.Nil(t, err)
+	})
+	ensure.Nil(t, err)
 }

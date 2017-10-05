@@ -19,6 +19,7 @@ type simpleConsumer struct {
 	m          sync.Mutex
 
 	events chan Event
+	dying  chan bool
 
 	wg sync.WaitGroup
 }
@@ -38,11 +39,15 @@ func newSimpleConsumer(brokers []string, events chan Event, config *sarama.Confi
 		client:     client,
 		consumer:   consumer,
 		events:     events,
+		dying:      make(chan bool),
 		partitions: make(map[topicPartition]sarama.PartitionConsumer),
 	}, nil
 }
 
 func (c *simpleConsumer) Close() error {
+	// stop any blocking writes to channels
+	close(c.dying)
+
 	c.m.Lock()
 	defer c.m.Unlock()
 	for tp, pc := range c.partitions {
@@ -94,51 +99,73 @@ func (c *simpleConsumer) AddPartition(topic string, partition int32, offset int6
 
 func (c *simpleConsumer) run(pc sarama.PartitionConsumer, topic string, partition int32, start, hwm int64) {
 	// mark beginning of partition consumption
-	c.events <- &BOF{
+	select {
+	case c.events <- &BOF{
 		Topic:     topic,
 		Partition: partition,
 		Offset:    start,
 		Hwm:       hwm,
+	}:
+	case <-c.dying:
+		return
 	}
 
 	// generate EOF if nothing to consume
 	if start == hwm {
-		c.events <- &EOF{
+		select {
+		case c.events <- &EOF{
 			Topic:     topic,
 			Partition: partition,
 			Hwm:       hwm,
+		}:
+		case <-c.dying:
+			return
 		}
 	}
 
 	count := 0
 	// wait for messages to arrive
 	for m := range pc.Messages() {
-		c.events <- &Message{
+		select {
+		case c.events <- &Message{
 			Topic:     m.Topic,
 			Partition: m.Partition,
 			Offset:    m.Offset,
 			Key:       string(m.Key),
 			Value:     m.Value,
+		}:
+		case <-c.dying:
+			return
 		}
 
 		// is this EOF?
 		// TODO (franz): check how fast the topic has to be until we don't get an EOF for
 		// *every* message.
 		if m.Offset == pc.HighWaterMarkOffset()-1 {
-			c.events <- &EOF{
+			select {
+			case c.events <- &EOF{
 				Topic:     m.Topic,
 				Partition: m.Partition,
 				Hwm:       m.Offset + 1,
+			}:
+			case <-c.dying:
+				return
 			}
+
 		}
 
 		count++
 		if count%1000 == 0 && m.Offset >= hwm { // was this EOF?
-			c.events <- &EOF{
+			select {
+			case c.events <- &EOF{
 				Topic:     m.Topic,
 				Partition: m.Partition,
 				Hwm:       pc.HighWaterMarkOffset(),
+			}:
+			case <-c.dying:
+				return
 			}
+
 		}
 	}
 }
