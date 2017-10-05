@@ -663,7 +663,7 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 				ctx.failer(fmt.Errorf("error getting storage offset for %s/%d: %v",
 					g.graph.GroupTable().Topic(), msg.Partition, err))
 				return
-			} else if err = ctx.storage.SetOffset(offset + 1); err != nil {
+			} else if err = ctx.storage.SetOffset(offset + int64(ctx.counters.stores)); err != nil {
 				ctx.failer(fmt.Errorf("error writing storage offset for %s/%d: %v",
 					g.graph.GroupTable().Topic(), msg.Partition, err))
 				return
