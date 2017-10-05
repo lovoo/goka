@@ -108,6 +108,67 @@ func TestGroupConsumer_Group(t *testing.T) {
 	})
 }
 
+func TestGroupConsumer_CloseOnNotifications(t *testing.T) {
+	events := make(chan Event)
+	c, err := newGroupConsumer(brokers, group, events, nil)
+	ensure.Nil(t, err)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	consumer := mock.NewMockclusterConsumer(ctrl)
+	c.consumer = consumer
+
+	notifications := make(chan *cluster.Notification)
+	errs := make(chan error)
+	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Errors().Return(errs)
+
+	wait := make(chan bool)
+	go func() {
+		c.run()
+		close(wait)
+	}()
+
+	// close on error
+	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Errors().Return(errs)
+
+	err = errors.New("some error")
+	errs <- err
+
+	consumer.EXPECT().Close().Return(nil)
+	err = doTimed(t, func() {
+		err = c.Close()
+		ensure.Nil(t, err)
+		<-wait
+	})
+	ensure.Nil(t, err)
+
+	// close on notification
+	c, err = newGroupConsumer(brokers, group, events, nil)
+	ensure.Nil(t, err)
+	c.consumer = consumer
+
+	wait = make(chan bool)
+	go func() {
+		c.run()
+		close(wait)
+	}()
+
+	notifications <- &cluster.Notification{
+		Current: map[string][]int32{
+			topic1: []int32{0, 1},
+		}}
+
+	consumer.EXPECT().Close().Return(nil)
+	err = doTimed(t, func() {
+		err = c.Close()
+		ensure.Nil(t, err)
+		<-wait
+	})
+	ensure.Nil(t, err)
+
+}
+
 func TestGroupConsumer_GroupConsumeMessages(t *testing.T) {
 	events := make(chan Event)
 	c, err := newGroupConsumer(brokers, group, events, nil)
@@ -196,6 +257,122 @@ func TestGroupConsumer_GroupConsumeMessages(t *testing.T) {
 	})
 	ensure.Nil(t, err)
 
+}
+
+func TestGroupConsumer_CloseOnMessages(t *testing.T) {
+	events := make(chan Event)
+	c, err := newGroupConsumer(brokers, group, events, nil)
+	ensure.Nil(t, err)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	consumer := mock.NewMockclusterConsumer(ctrl)
+	c.consumer = consumer
+
+	notifications := make(chan *cluster.Notification)
+	errs := make(chan error)
+	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Errors().Return(errs)
+
+	wait := make(chan bool)
+	go func() {
+		c.run()
+		close(wait)
+	}()
+
+	notifications <- &cluster.Notification{
+		Current: map[string][]int32{
+			topic1: []int32{0, 1},
+		}}
+	n := <-events
+	ensure.DeepEqual(t, n, &Assignment{
+		0: -1,
+		1: -1,
+	})
+	ensure.DeepEqual(t, c.partitionMap, map[int32]bool{
+		0: false, 1: false,
+	})
+
+	// add partitions (it will start consuming messages channel)
+	messages := make(chan *sarama.ConsumerMessage)
+	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Messages().Return(messages)
+	consumer.EXPECT().Errors().Return(errs)
+	c.AddGroupPartition(0)
+	c.AddGroupPartition(1)
+
+	// process a message
+	var (
+		key   = []byte("key")
+		value = []byte("value")
+	)
+	messages <- &sarama.ConsumerMessage{
+		Topic:     topic1,
+		Partition: 0,
+		Offset:    0,
+		Key:       key,
+		Value:     value,
+	}
+
+	consumer.EXPECT().Close().Return(nil)
+	err = doTimed(t, func() {
+		err = c.Close()
+		ensure.Nil(t, err)
+		<-wait
+	})
+	ensure.Nil(t, err)
+}
+
+func TestGroupConsumer_CloseOnMessageErrors(t *testing.T) {
+	events := make(chan Event)
+	c, err := newGroupConsumer(brokers, group, events, nil)
+	ensure.Nil(t, err)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	consumer := mock.NewMockclusterConsumer(ctrl)
+	c.consumer = consumer
+
+	notifications := make(chan *cluster.Notification)
+	errs := make(chan error)
+	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Errors().Return(errs)
+
+	wait := make(chan bool)
+	go func() {
+		c.run()
+		close(wait)
+	}()
+
+	notifications <- &cluster.Notification{
+		Current: map[string][]int32{
+			topic1: []int32{0, 1},
+		}}
+	n := <-events
+	ensure.DeepEqual(t, n, &Assignment{
+		0: -1,
+		1: -1,
+	})
+	ensure.DeepEqual(t, c.partitionMap, map[int32]bool{
+		0: false, 1: false,
+	})
+
+	// add partitions (it will start consuming messages channel)
+	messages := make(chan *sarama.ConsumerMessage)
+	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Messages().Return(messages)
+	consumer.EXPECT().Errors().Return(errs)
+	c.AddGroupPartition(0)
+	c.AddGroupPartition(1)
+
+	err = errors.New("some error")
+	errs <- err
+
+	consumer.EXPECT().Close().Return(nil)
+	err = doTimed(t, func() {
+		err = c.Close()
+		ensure.Nil(t, err)
+		<-wait
+	})
+	ensure.Nil(t, err)
 }
 
 func TestGroupConsumer_GroupNotificationsAfterMessages(t *testing.T) {

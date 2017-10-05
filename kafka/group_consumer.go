@@ -63,11 +63,14 @@ func (c *groupConsumer) waitForNotification() bool {
 	for {
 		select {
 		case n := <-c.consumer.Notifications():
-			c.handleNotification(n)
-			return true
+			return c.handleNotification(n)
 
 		case err := <-c.consumer.Errors():
-			c.events <- &Error{err}
+			select {
+			case c.events <- &Error{err}:
+			case <-c.stop:
+				return false
+			}
 
 		case <-c.stop:
 			return false
@@ -75,7 +78,7 @@ func (c *groupConsumer) waitForNotification() bool {
 	}
 }
 
-func (c *groupConsumer) handleNotification(n *cluster.Notification) {
+func (c *groupConsumer) handleNotification(n *cluster.Notification) bool {
 	// save partition map
 	m := c.partitionMap
 	c.partitionMap = make(map[int32]bool)
@@ -94,7 +97,12 @@ func (c *groupConsumer) handleNotification(n *cluster.Notification) {
 	}
 
 	// send assignment
-	c.events <- &a
+	select {
+	case c.events <- &a:
+		return true
+	case <-c.stop:
+		return false
+	}
 }
 
 // returns true if all partitions are registered. otherwise false
@@ -108,7 +116,10 @@ func (c *groupConsumer) partitionsRegistered() bool {
 }
 
 func (c *groupConsumer) AddGroupPartition(partition int32) {
-	c.addPartition <- partition
+	select {
+	case c.addPartition <- partition:
+	case <-c.stop:
+	}
 }
 
 func (c *groupConsumer) waitForPartitions() bool {
@@ -149,21 +160,28 @@ func (c *groupConsumer) waitForMessages() bool {
 	for {
 		select {
 		case n := <-c.consumer.Notifications():
-			c.handleNotification(n)
-			return true
+			return c.handleNotification(n)
 
 		case msg := <-c.consumer.Messages():
-			c.events <- &Message{
+			select {
+			case c.events <- &Message{
 				Topic:     msg.Topic,
 				Partition: msg.Partition,
 				Offset:    msg.Offset,
 				Timestamp: msg.Timestamp,
 				Key:       string(msg.Key),
 				Value:     msg.Value,
+			}:
+			case <-c.stop:
+				return false
 			}
 
 		case err := <-c.consumer.Errors():
-			c.events <- &Error{err}
+			select {
+			case c.events <- &Error{err}:
+			case <-c.stop:
+				return false
+			}
 
 		case <-c.stop:
 			return false
