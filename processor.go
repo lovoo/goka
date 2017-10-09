@@ -561,7 +561,7 @@ func (g *Processor) createPartition(id int32) error {
 		}
 	}
 	for _, v := range g.views {
-		wait = append(wait, v.Ready)
+		wait = append(wait, v.Recovered)
 	}
 
 	g.partitions[id] = newPartition(
@@ -709,4 +709,29 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	cb(ctx, m)
 
 	return nil
+}
+
+// Recovered returns true when the processor has caught up with events from kafka.
+func (g *Processor) Recovered() bool {
+	for _, v := range g.views {
+		if !v.Recovered() {
+			return false
+		}
+	}
+
+	for _, part := range g.partitionViews {
+		for _, topicPart := range part {
+			if !topicPart.ready() {
+				return false
+			}
+		}
+	}
+
+	for _, p := range g.partitions {
+		if !p.ready() {
+			return false
+		}
+	}
+
+	return true
 }

@@ -302,8 +302,8 @@ func (v *View) run() {
 	}
 }
 
-// Ready returns true when the view has caught up with events from kafka.
-func (v *View) Ready() bool {
+// Recovered returns true when the view has caught up with events from kafka.
+func (v *View) Recovered() bool {
 	for _, p := range v.partitions {
 		if !p.ready() {
 			return false
