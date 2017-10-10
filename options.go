@@ -116,6 +116,7 @@ type poptions struct {
 	registry             metrics.Registry
 	partitionChannelSize int
 	hasher               func() hash.Hash32
+	nilHandling          NilHandling
 
 	builders struct {
 		storage  StorageBuilder
@@ -223,6 +224,25 @@ func WithRegistry(r metrics.Registry) ProcessorOption {
 func WithHasher(hasher func() hash.Hash32) ProcessorOption {
 	return func(o *poptions) {
 		o.hasher = hasher
+	}
+}
+
+type NilHandling int
+
+const (
+	// NilIgnore drops any message with nil value.
+	NilIgnore NilHandling = 0 + iota
+	// NilProcess passes the nil value to ProcessCallback.
+	NilProcess
+	// NilDecode passes the nil value to decoder before calling ProcessCallback.
+	NilDecode
+)
+
+// WithNilHandling configures how the processor should handle messages with nil
+// value. By default the processor ignores nil messages.
+func WithNilHandling(nh NilHandling) ProcessorOption {
+	return func(o *poptions) {
+		o.nilHandling = nh
 	}
 }
 

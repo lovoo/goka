@@ -3,7 +3,6 @@ package goka
 import (
 	"errors"
 	"fmt"
-	"log"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -682,24 +681,34 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 		ctx.storage = st
 	}
 
-	// get stream subcription
-	codec := g.graph.codec(msg.Topic)
-	if codec == nil {
-		return fmt.Errorf("cannot handle topic %s", msg.Topic)
-	}
+	var (
+		m   interface{}
+		err error
+	)
 
-	// drop nil messages
-	if msg.Data == nil {
-		log.Printf("dropping nil message for key %s from %s/%d", msg.Key, msg.Topic, msg.Partition)
+	// decide whether to decode or ignore message
+	switch {
+	case msg.Data == nil && g.opts.nilHandling == NilIgnore:
+		// drop nil messages
 		return nil
+	case msg.Data == nil && g.opts.nilHandling == NilProcess:
+		// process nil messages without decoding them
+		m = nil
+	default:
+		// get stream subcription
+		codec := g.graph.codec(msg.Topic)
+		if codec == nil {
+			return fmt.Errorf("cannot handle topic %s", msg.Topic)
+		}
+
+		// decode message
+		m, err = codec.Decode(msg.Data)
+		if err != nil {
+			return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
+		}
 	}
 
-	// decode message
-	m, err := codec.Decode(msg.Data)
-	if err != nil {
-		return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
-	}
-
+	// start context and call ProcessorCallback
 	ctx.start()
 	defer ctx.finish() // execute even in case of panic
 	cb := g.graph.callback(msg.Topic)
