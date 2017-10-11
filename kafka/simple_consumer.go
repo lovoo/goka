@@ -133,6 +133,7 @@ func (c *simpleConsumer) run(pc sarama.PartitionConsumer, topic string, partitio
 			Offset:    m.Offset,
 			Key:       string(m.Key),
 			Value:     m.Value,
+			Timestamp: m.Timestamp,
 		}:
 		case <-c.dying:
 			return
