@@ -259,10 +259,14 @@ func (p *partition) load(catchup bool) error {
 	}
 	p.proxy.Add(p.topic, local)
 	defer p.proxy.Remove(p.topic)
+
+	// unregister partition consumption delay once partition stops or goes into run mode
+	defer p.registry.Unregister(fmt.Sprintf("%s.%s", p.topic, mxConsumptionDelay))
+
 	syncTicker := time.NewTicker(syncInterval)
 	defer syncTicker.Stop()
+
 	var lastMessage time.Time
-	// create loader
 	for {
 		select {
 		case ev, isOpen := <-p.ch:
