@@ -101,6 +101,14 @@ func (_mr *_MockContextRecorder) SetValue(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetValue", arg0)
 }
 
+func (_m *MockContext) SetValueForKey(_param0 string, _param1 interface{}) {
+	_m.ctrl.Call(_m, "SetValueForKey", _param0, _param1)
+}
+
+func (_mr *_MockContextRecorder) SetValueForKey(arg0 string, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetValueForKey", arg0, arg1)
+}
+
 func (_m *MockContext) Timestamp() time.Time {
 	ret := _m.ctrl.Call(_m, "Timestamp")
 	ret0, _ := ret[0].(time.Time)
@@ -129,4 +137,14 @@ func (_m *MockContext) Value() interface{} {
 
 func (_mr *_MockContextRecorder) Value() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Value")
+}
+
+func (_m *MockContext) ValueForKey(_param0 string) interface{} {
+	ret := _m.ctrl.Call(_m, "ValueForKey", _param0)
+	ret0, _ := ret[0].(interface{})
+	return ret0
+}
+
+func (_mr *_MockContextRecorder) ValueForKey(_param0 string) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "ValueForKey", _param0)
 }

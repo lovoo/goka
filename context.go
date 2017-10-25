@@ -25,8 +25,14 @@ type Context interface {
 	// Value returns the value of the key in the group table.
 	Value() interface{}
 
+	// ValueForKey returns the value of the key provided in the group table.
+	ValueForKey(key string) interface{}
+
 	// SetValue updates the value of the key in the group table.
 	SetValue(value interface{})
+
+	// SetValueForKey updates the value of the key provided in the group table.
+	SetValueForKey(key string, value interface{})
 
 	// Delete deletes a value from the group table. IMPORTANT: this deletes the
 	// value associated with the key from both the local cache and the persisted
@@ -148,9 +154,25 @@ func (ctx *context) Value() interface{} {
 	return val
 }
 
+// ValueForKey returns the value of the key provided in the group table.
+func (ctx *context) ValueForKey(key string) interface{} {
+	val, err := ctx.valueForKey(string(key))
+	if err != nil {
+		ctx.Fail(err)
+	}
+	return val
+}
+
 // SetValue updates the value of the key in the group table.
 func (ctx *context) SetValue(value interface{}) {
 	if err := ctx.setValueForKey(string(ctx.msg.Key), value); err != nil {
+		ctx.Fail(err)
+	}
+}
+
+// SetValueForKey updates the value of the key provided in the group table.
+func (ctx *context) SetValueForKey(key string, value interface{}) {
+	if err := ctx.setValueForKey(key, value); err != nil {
 		ctx.Fail(err)
 	}
 }
