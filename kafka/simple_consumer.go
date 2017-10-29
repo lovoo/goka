@@ -179,11 +179,11 @@ func (c *simpleConsumer) RemovePartition(topic string, partition int32) error {
 	if !has {
 		return fmt.Errorf("%s/%d was not added", topic, partition)
 	}
+	defer delete(c.partitions, tp) // remove tp from map even in case of errors
 	err := pc.Close()
 	if err != nil {
 		return fmt.Errorf("error closing consumer for %s/%d: %v", topic, partition, err)
 	}
-	delete(c.partitions, tp)
 	return nil
 }
 
