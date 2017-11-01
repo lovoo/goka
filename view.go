@@ -107,7 +107,7 @@ func (v *View) createPartitions(brokers []string) (err error) {
 		reg := metrics.NewPrefixedChildRegistry(v.opts.gokaRegistry,
 			fmt.Sprintf("%s.%d.", v.topic, p))
 
-		st, err := v.opts.builders.storage(v.topic, p, v.opts.tableCodec, reg)
+		st, err := v.opts.builders.storage(v.topic, p, reg)
 		if err != nil {
 			// TODO(diogo): gracefully terminate all partitions
 			return fmt.Errorf("Error creating local storage for partition %d: %v", p, err)

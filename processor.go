@@ -457,8 +457,8 @@ func (g *Processor) Stop() {
 // partition management (rebalance)
 ///////////////////////////////////////////////////////////////////////////////
 
-func (g *Processor) newJoinStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
-	st, err := g.opts.builders.storage(topic, id, codec, reg)
+func (g *Processor) newJoinStorage(topic string, id int32, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
+	st, err := g.opts.builders.storage(topic, id, reg)
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +469,7 @@ func (g *Processor) newJoinStorage(topic string, id int32, codec Codec, update U
 	}, nil
 }
 
-func (g *Processor) newStorage(topic string, id int32, codec Codec, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
+func (g *Processor) newStorage(topic string, id int32, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
 	if g.isStateless() {
 		return &storageProxy{
 			Storage:   storage.NewMemory(),
@@ -478,7 +478,7 @@ func (g *Processor) newStorage(topic string, id int32, codec Codec, update Updat
 		}, nil
 	}
 
-	st, err := g.opts.builders.storage(topic, id, codec, reg)
+	st, err := g.opts.builders.storage(topic, id, reg)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +504,7 @@ func (g *Processor) createPartitionViews(id int32) error {
 		reg := metrics.NewPrefixedChildRegistry(g.opts.gokaRegistry,
 			fmt.Sprintf("%s.%d.", t.Topic(), id))
 
-		st, err := g.newJoinStorage(t.Topic(), id, t.Codec(), DefaultUpdate, reg)
+		st, err := g.newJoinStorage(t.Topic(), id, DefaultUpdate, reg)
 		if err != nil {
 			return fmt.Errorf("processor: error creating storage: %v", err)
 		}
@@ -542,15 +542,13 @@ func (g *Processor) createPartition(id int32) error {
 	}
 	// TODO(diogo) what name to use for stateless processors?
 	var groupTable string
-	var groupCodec Codec
 	if gt := g.graph.GroupTable(); gt != nil {
 		groupTable = gt.Topic()
-		groupCodec = gt.Codec()
 	}
 	reg := metrics.NewPrefixedChildRegistry(g.opts.gokaRegistry,
 		fmt.Sprintf("%s.%d.", groupTable, id))
 
-	st, err := g.newStorage(groupTable, id, groupCodec, g.opts.updateCallback, reg)
+	st, err := g.newStorage(groupTable, id, g.opts.updateCallback, reg)
 	if err != nil {
 		return fmt.Errorf("processor: error creating storage: %v", err)
 	}

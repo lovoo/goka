@@ -58,7 +58,7 @@ func TestView_createPartitions(t *testing.T) {
 	var (
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		tm = mock.NewMockTopicManager(ctrl)
@@ -83,7 +83,7 @@ func TestView_createPartitions(t *testing.T) {
 	err = v.createPartitions(nil)
 	ensure.NotNil(t, err)
 
-	sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+	sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 		return nil, errors.New("some error")
 	}
 	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1}, nil)
@@ -100,7 +100,7 @@ func TestView_HasGet(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -133,7 +133,7 @@ func TestView_StartStop(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -185,7 +185,7 @@ func TestView_StartStopWithError(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -235,7 +235,7 @@ func TestView_GetErrors(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)

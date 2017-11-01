@@ -116,7 +116,7 @@ func (km *KafkaMock) SetGroupTableCreator(creator func() (string, []byte)) {
 //     )
 func (km *KafkaMock) ProcessorOptions() []ProcessorOption {
 	return []ProcessorOption{
-		WithStorageBuilder(func(topic string, partition int32, c Codec, reg metrics.Registry) (storage.Storage, error) {
+		WithStorageBuilder(func(topic string, partition int32, reg metrics.Registry) (storage.Storage, error) {
 			return km.storage, nil
 		}),
 		WithConsumer(km.consumerMock),
