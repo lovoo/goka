@@ -37,7 +37,7 @@ func NewMockController(t gomock.TestReporter) *gomock.Controller {
 	return gomock.NewController(&gomockPanicker{reporter: t})
 }
 
-// KafkaMock is allows interacting with a test processor
+// KafkaMock allows interacting with a test processor
 type KafkaMock struct {
 	t       Tester
 	storage storage.Storage
@@ -222,7 +222,12 @@ func (km *KafkaMock) consumeError(err error) {
 func (km *KafkaMock) ValueForKey(key string) interface{} {
 	item, err := km.storage.Get(key)
 	ensure.Nil(km.t, err)
-	return item
+	if item == nil {
+		return nil
+	}
+	value, err := km.codec.Decode(item)
+	ensure.Nil(km.t, err)
+	return value
 }
 
 // SetValue sets a value in the storage.
