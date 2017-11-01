@@ -43,9 +43,8 @@ func NewProducer(brokers []string, config *sarama.Config, registry metrics.Regis
 
 func (p *producer) Close() error {
 	close(p.stop)
-	err := p.producer.Close()
 	<-p.done
-	return err
+	return p.producer.Close()
 }
 
 func (p *producer) Emit(topic string, key string, value []byte) *Promise {
