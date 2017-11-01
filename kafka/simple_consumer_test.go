@@ -200,14 +200,22 @@ func TestSimpleConsumer_RemovePartition(t *testing.T) {
 		topicPartition{topic, partition}: pc,
 	})
 
+	// remove partition even if it returns error
 	pc.EXPECT().Close().Return(errors.New("some error"))
 	err = c.RemovePartition(topic, partition)
 	ensure.NotNil(t, err)
+	ensure.DeepEqual(t, c.partitions, make(map[topicPartition]sarama.PartitionConsumer))
+
+	// add partition again
+	client.EXPECT().GetOffset(topic, partition, sarama.OffsetOldest).Return(oldest, nil)
+	client.EXPECT().GetOffset(topic, partition, sarama.OffsetNewest).Return(hwm, nil)
+	consumer.EXPECT().ConsumePartition(topic, partition, offset).Return(pc, nil)
+	err = c.AddPartition(topic, partition, offset)
+	ensure.Nil(t, err)
 
 	pc.EXPECT().Close().Return(nil)
 	err = c.RemovePartition(topic, partition)
 	ensure.Nil(t, err)
-	ensure.DeepEqual(t, c.partitions, make(map[topicPartition]sarama.PartitionConsumer))
 
 	doTimed(t, func() {
 		close(messages)

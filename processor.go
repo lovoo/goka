@@ -348,7 +348,7 @@ func (g *Processor) run() {
 		case *kafka.Assignment:
 			err := g.rebalance(*ev)
 			if err != nil {
-				g.fail(err)
+				g.fail(fmt.Errorf("error on rebalance: %v", err))
 				return
 			}
 
@@ -398,6 +398,7 @@ func (g *Processor) run() {
 		case *kafka.Error:
 			g.fail(ev.Err)
 			return
+
 		default:
 			g.fail(fmt.Errorf("processor: cannot handle %T = %v", ev, ev))
 			return
