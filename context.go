@@ -179,7 +179,10 @@ func (ctx *context) Join(topic Table) interface{} {
 	data, err := v.st.Get(ctx.Key())
 	if err != nil {
 		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", ctx.Key(), topic, err))
+	} else if data == nil {
+		return nil
 	}
+
 	value, err := ctx.graph.codec(string(topic)).Decode(data)
 	if err != nil {
 		ctx.Fail(fmt.Errorf("error decoding value key %s of table %s: %v", ctx.Key(), topic, err))
@@ -200,19 +203,6 @@ func (ctx *context) Lookup(topic Table, key string) interface{} {
 		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", key, topic, err))
 	}
 	return val
-}
-
-// Has returns true if key has a value in the processor state, otherwise false.
-func (ctx *context) Has(key string) bool {
-	if ctx.storage == nil {
-		ctx.Fail(fmt.Errorf("Cannot access state in stateless processor"))
-	}
-
-	has, err := ctx.storage.Has(key)
-	if err != nil {
-		ctx.Fail(err)
-	}
-	return has
 }
 
 // valueForKey returns the value of key in the processor state.

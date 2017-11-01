@@ -166,10 +166,6 @@ func TestContext_GetSetStateless(t *testing.T) {
 		defer PanicStringContains(t, "stateless")
 		ctx.SetValue("whatever")
 	}()
-	func() {
-		defer PanicStringContains(t, "stateless")
-		_ = ctx.Has("something")
-	}()
 }
 
 func TestContext_Delete(t *testing.T) {
@@ -320,10 +316,6 @@ func TestContext_GetSetStateful(t *testing.T) {
 
 	storage.EXPECT().Set(key, []byte(value)).Return(nil)
 	ctx.SetValue(value)
-
-	storage.EXPECT().Has(key).Return(true, nil)
-	ok := ctx.Has(key)
-	ensure.True(t, ok)
 
 	storage.EXPECT().Get(key).Return([]byte(value), nil)
 	val = ctx.Value()
