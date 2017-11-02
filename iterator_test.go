@@ -1,10 +1,12 @@
-package storage
+package goka
 
 import (
 	"io/ioutil"
 	"testing"
 
 	"github.com/facebookgo/ensure"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/storage"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
@@ -15,7 +17,7 @@ func TestIterator(t *testing.T) {
 	db, err := leveldb.OpenFile(tmpdir, nil)
 	ensure.Nil(t, err)
 
-	st, err := New(db)
+	st, err := storage.New(db)
 	ensure.Nil(t, err)
 
 	kv := map[string]string{
@@ -32,25 +34,30 @@ func TestIterator(t *testing.T) {
 
 	iter, err := st.Iterator()
 	ensure.Nil(t, err)
-	defer iter.Release()
+
+	it := &iterator{
+		iter:  storage.NewMultiIterator([]storage.Iterator{iter}),
+		codec: new(codec.String),
+	}
+	defer it.Release()
 	count := 0
 
 	// accessing iterator before Next should only return nils
-	val, err := iter.Value()
+	val, err := it.Value()
 	ensure.True(t, val == nil)
 	ensure.Nil(t, err)
 
-	for iter.Next() {
+	for it.Next() {
 		count++
-		key := string(iter.Key())
+		key := it.Key()
 		expected, ok := kv[key]
 		if !ok {
 			t.Fatalf("unexpected key from iterator: %s", key)
 		}
 
-		val, err := iter.Value()
+		val, err := it.Value()
 		ensure.Nil(t, err)
-		ensure.DeepEqual(t, expected, string(val))
+		ensure.DeepEqual(t, expected, val.(string))
 	}
 	ensure.DeepEqual(t, count, len(kv))
 }

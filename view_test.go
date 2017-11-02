@@ -58,7 +58,7 @@ func TestView_createPartitions(t *testing.T) {
 	var (
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		tm = mock.NewMockTopicManager(ctrl)
@@ -83,7 +83,7 @@ func TestView_createPartitions(t *testing.T) {
 	err = v.createPartitions(nil)
 	ensure.NotNil(t, err)
 
-	sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+	sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 		return nil, errors.New("some error")
 	}
 	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1}, nil)
@@ -100,7 +100,7 @@ func TestView_HasGet(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -112,7 +112,7 @@ func TestView_HasGet(t *testing.T) {
 		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1, 2}, nil),
 		tm.EXPECT().Close(),
 		st.EXPECT().Has("item1").Return(false, nil),
-		st.EXPECT().Get("item1").Return("item1-value", nil),
+		st.EXPECT().Get("item1").Return([]byte("item1-value"), nil),
 	)
 
 	err := v.createPartitions(nil)
@@ -133,7 +133,7 @@ func TestView_StartStop(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -159,7 +159,6 @@ func TestView_StartStop(t *testing.T) {
 	)
 	gomock.InOrder(
 		consumer.EXPECT().Close().Do(chClose).Return(nil),
-		st.EXPECT().Sync(),
 		consumer.EXPECT().RemovePartition(tableName(group), int32(par)),
 		st.EXPECT().Close(),
 	)
@@ -186,7 +185,7 @@ func TestView_StartStopWithError(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -236,7 +235,7 @@ func TestView_GetErrors(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, c Codec, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -288,8 +287,8 @@ func TestView_Evict(t *testing.T) {
 	key := "some-key"
 	val := "some-val"
 
-	st := storage.NewMemory(new(codec.String))
-	err := st.Set(key, val)
+	st := storage.NewMemory()
+	err := st.Set(key, []byte(val))
 	ensure.Nil(t, err)
 
 	v := &View{
@@ -300,6 +299,7 @@ func TestView_Evict(t *testing.T) {
 			hasher: func() hash.Hash32 {
 				return NewConstHasher(0)
 			},
+			tableCodec: new(codec.String),
 		},
 	}
 

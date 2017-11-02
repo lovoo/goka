@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/facebookgo/ensure"
-	"github.com/lovoo/goka/codec"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
@@ -27,7 +26,7 @@ func BenchmarkStateStorage_unbatched(b *testing.B) {
 	db, err := leveldb.OpenFile(tmpdir, nil)
 	ensure.Nil(b, err)
 
-	storage, err := New(db, &codec.Bytes{})
+	storage, err := New(db)
 	ensure.Nil(b, err)
 	ensure.Nil(b, storage.MarkRecovered())
 	b.ResetTimer()
@@ -44,7 +43,7 @@ func BenchmarkStateStorage_transactioned(b *testing.B) {
 	db, err := leveldb.OpenFile(tmpdir, nil)
 	ensure.Nil(b, err)
 
-	storage, err := New(db, &codec.Bytes{})
+	storage, err := New(db)
 	ensure.Nil(b, err)
 	b.ResetTimer()
 	for i := 0; i < b.N*numWrites; i++ {

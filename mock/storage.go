@@ -49,9 +49,9 @@ func (_mr *_MockStorageRecorder) Delete(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Delete", arg0)
 }
 
-func (_m *MockStorage) Get(_param0 string) (interface{}, error) {
+func (_m *MockStorage) Get(_param0 string) ([]byte, error) {
 	ret := _m.ctrl.Call(_m, "Get", _param0)
-	ret0, _ := ret[0].(interface{})
+	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -123,7 +123,7 @@ func (_mr *_MockStorageRecorder) Recovered() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Recovered")
 }
 
-func (_m *MockStorage) Set(_param0 string, _param1 interface{}) error {
+func (_m *MockStorage) Set(_param0 string, _param1 []byte) error {
 	ret := _m.ctrl.Call(_m, "Set", _param0, _param1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -131,16 +131,6 @@ func (_m *MockStorage) Set(_param0 string, _param1 interface{}) error {
 
 func (_mr *_MockStorageRecorder) Set(arg0, arg1 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Set", arg0, arg1)
-}
-
-func (_m *MockStorage) SetEncoded(_param0 string, _param1 []byte) error {
-	ret := _m.ctrl.Call(_m, "SetEncoded", _param0, _param1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-func (_mr *_MockStorageRecorder) SetEncoded(arg0, arg1 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetEncoded", arg0, arg1)
 }
 
 func (_m *MockStorage) SetOffset(_param0 int64) error {
@@ -151,12 +141,4 @@ func (_m *MockStorage) SetOffset(_param0 int64) error {
 
 func (_mr *_MockStorageRecorder) SetOffset(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetOffset", arg0)
-}
-
-func (_m *MockStorage) Sync() {
-	_m.ctrl.Call(_m, "Sync")
-}
-
-func (_mr *_MockStorageRecorder) Sync() *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "Sync")
 }

@@ -2,8 +2,7 @@ package storage
 
 import (
 	"fmt"
-
-	"github.com/lovoo/goka/codec"
+	"strconv"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	ldbiter "github.com/syndtr/goleveldb/leveldb/iterator"
@@ -22,9 +21,8 @@ type Iterator interface {
 	// Key gets the current key. If the iterator is exhausted, key will return
 	// nil.
 	Key() []byte
-	// Value gets the current value. Value is decoded with the codec given to the
-	// storage.
-	Value() (interface{}, error)
+	// Value gets the current value.
+	Value() ([]byte, error)
 	// Release releases the iterator. After release, the iterator is not usable
 	// anymore.
 	Release()
@@ -33,9 +31,8 @@ type Iterator interface {
 // Storage abstracts the interface for a persistent local storage
 type Storage interface {
 	Has(string) (bool, error)
-	Get(string) (interface{}, error)
-	Set(string, interface{}) error
-	SetEncoded(string, []byte) error
+	Get(string) ([]byte, error)
+	Set(string, []byte) error
 	Delete(string) error
 	SetOffset(value int64) error
 	GetOffset(defValue int64) (int64, error)
@@ -44,7 +41,6 @@ type Storage interface {
 	Recovered() bool
 	Open() error
 	Close() error
-	Sync()
 }
 
 // store is the common interface between a transaction and db instance
@@ -63,13 +59,11 @@ type storage struct {
 	// tx is the transaction used for recovery
 	tx *leveldb.Transaction
 
-	codec         Codec
-	offsetCodec   Codec
 	currentOffset int64
 }
 
 // New creates a new Storage backed by LevelDB.
-func New(db *leveldb.DB, c Codec) (Storage, error) {
+func New(db *leveldb.DB) (Storage, error) {
 	tx, err := db.OpenTransaction()
 	if err != nil {
 		return nil, fmt.Errorf("error opening leveldb transaction: %v", err)
@@ -79,9 +73,6 @@ func New(db *leveldb.DB, c Codec) (Storage, error) {
 		store: tx,
 		db:    db,
 		tx:    tx,
-
-		codec:       c,
-		offsetCodec: &codec.Int64{},
 	}, nil
 }
 
@@ -93,9 +84,8 @@ func (s *storage) Iterator() (Iterator, error) {
 	}
 
 	return &iterator{
-		iter:  s.store.NewIterator(nil, nil),
-		codec: s.codec,
-		snap:  snap,
+		iter: s.store.NewIterator(nil, nil),
+		snap: snap,
 	}, nil
 }
 
@@ -103,52 +93,45 @@ func (s *storage) Has(key string) (bool, error) {
 	return s.store.Has([]byte(key), nil)
 }
 
-func (s *storage) get(key string, codec Codec) (interface{}, error) {
+func (s *storage) Get(key string) ([]byte, error) {
 	if has, err := s.store.Has([]byte(key), nil); err != nil {
 		return nil, fmt.Errorf("error checking for existence in leveldb (key %s): %v", key, err)
 	} else if !has {
 		return nil, nil
 	}
 
-	data, err := s.store.Get([]byte(key), nil)
-	if err != nil {
+	value, err := s.store.Get([]byte(key), nil)
+	if err == leveldb.ErrNotFound {
+		return nil, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("error getting from leveldb (key %s): %v", key, err)
 	}
+	return value, nil
+}
 
-	value, err := codec.Decode(data)
+func (s *storage) GetOffset(defValue int64) (int64, error) {
+	data, err := s.Get(offsetKey)
 	if err != nil {
-		return nil, fmt.Errorf("error decoding (key %s): %v", key, err)
+		return 0, err
+	}
+
+	if data == nil {
+		return defValue, nil
+	}
+
+	value, err := strconv.ParseInt(string(data), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("error decoding offset: %v", err)
 	}
 
 	return value, nil
 }
 
-func (s *storage) Get(key string) (interface{}, error) {
-	return s.get(key, s.codec)
-}
-
-func (s *storage) GetOffset(defValue int64) (int64, error) {
-	val, err := s.get(offsetKey, s.offsetCodec)
-	if err != nil {
-		return 0, err
+func (s *storage) Set(key string, value []byte) error {
+	if err := s.store.Put([]byte(key), value, nil); err != nil {
+		return fmt.Errorf("error setting to leveldb (key %s): %v", key, err)
 	}
-	if val == nil {
-		return defValue, nil
-	}
-	return val.(int64), nil
-}
-
-func (s *storage) set(key string, value interface{}, codec Codec) error {
-	data, err := codec.Encode(value)
-	if err != nil {
-		return fmt.Errorf("error encoding (key %s): %v", key, err)
-	}
-
-	return s.SetEncoded(key, data)
-}
-
-func (s *storage) Set(key string, value interface{}) error {
-	return s.set(key, value, s.codec)
+	return nil
 }
 
 func (s *storage) SetOffset(offset int64) error {
@@ -156,15 +139,7 @@ func (s *storage) SetOffset(offset int64) error {
 		s.currentOffset = offset
 	}
 
-	return s.set(offsetKey, offset, s.offsetCodec)
-}
-
-func (s *storage) SetEncoded(key string, data []byte) error {
-	if err := s.store.Put([]byte(key), data, nil); err != nil {
-		return fmt.Errorf("error setting to leveldb (key %s): %v", key, err)
-	}
-
-	return nil
+	return s.Set(offsetKey, []byte(strconv.FormatInt(offset, 10)))
 }
 
 func (s *storage) Delete(key string) error {
@@ -201,5 +176,3 @@ func (s *storage) Close() error {
 
 	return s.db.Close()
 }
-
-func (s *storage) Sync() {}

@@ -5,20 +5,19 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/lovoo/goka/codec"
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/facebookgo/ensure"
 )
 
 func TestMemStorageDelete(t *testing.T) {
-	storage := NewMemory(&codec.String{})
+	storage := NewMemory()
 
 	has, err := storage.Has("key-1")
 	ensure.Nil(t, err)
 	ensure.False(t, has)
 
-	err = storage.Set("key-1", "content-1")
+	err = storage.Set("key-1", []byte("content-1"))
 	ensure.Nil(t, err)
 
 	has, err = storage.Has("key-1")
@@ -34,7 +33,7 @@ func TestMemStorageDelete(t *testing.T) {
 }
 
 func TestMemIter(t *testing.T) {
-	storage := NewMemory(&codec.String{})
+	storage := NewMemory()
 
 	kv := map[string]string{
 		"key-1": "val-1",
@@ -44,9 +43,9 @@ func TestMemIter(t *testing.T) {
 
 	found := map[string]string{}
 
-	storage.Set(offsetKey, "not-returned")
+	storage.Set(offsetKey, []byte("not-returned"))
 	for k, v := range kv {
-		storage.Set(k, v)
+		storage.Set(k, []byte(v))
 	}
 
 	// released iterator should be immediately exhausted
@@ -62,8 +61,7 @@ func TestMemIter(t *testing.T) {
 		ensure.Nil(t, err)
 
 		key := string(iter.Key())
-		val, ok := raw.(string)
-		ensure.True(t, ok)
+		val := string(raw)
 
 		v, ok := kv[key]
 		ensure.True(t, ok, fmt.Sprintf("unexpected key returned from iterator: %s", key))
@@ -82,7 +80,7 @@ func TestMemIter(t *testing.T) {
 }
 
 func TestGetHas(t *testing.T) {
-	storage := NewMemory(&codec.String{})
+	storage := NewMemory()
 
 	var (
 		err    error
@@ -97,7 +95,7 @@ func TestGetHas(t *testing.T) {
 	ensure.True(t, value == nil)
 	ensure.Nil(t, err)
 
-	err = storage.Set("test-key", "test")
+	err = storage.Set("test-key", []byte("test"))
 	ensure.Nil(t, err)
 
 	hasKey, err = storage.Has("test-key")
@@ -106,7 +104,7 @@ func TestGetHas(t *testing.T) {
 
 	value, err = storage.Get("test-key")
 	ensure.Nil(t, err)
-	ensure.DeepEqual(t, value, "test")
+	ensure.DeepEqual(t, value, []byte("test"))
 
 	hasKey, err = storage.Has("nil-value")
 	ensure.Nil(t, err)
@@ -128,7 +126,7 @@ func TestSetGet(t *testing.T) {
 	db, err := leveldb.OpenFile(tmpdir, nil)
 	ensure.Nil(t, err)
 
-	storage, err := New(db, &codec.String{})
+	storage, err := New(db)
 	ensure.Nil(t, err)
 
 	hasKey, err = storage.Has("example1")
@@ -139,7 +137,7 @@ func TestSetGet(t *testing.T) {
 	ensure.True(t, value == nil)
 	ensure.Nil(t, err)
 
-	err = storage.Set("example1", "example-message")
+	err = storage.Set("example1", []byte("example-message"))
 	ensure.Nil(t, err)
 
 	hasKey, err = storage.Has("example1")
@@ -155,23 +153,23 @@ func TestSetGet(t *testing.T) {
 	ensure.False(t, hasKey)
 
 	// test iteration
-	ensure.Nil(t, storage.SetEncoded("encoded", []byte("encoded-value")))
-	ensure.Nil(t, storage.Set("decoded", "decoded-value"))
+	ensure.Nil(t, storage.Set("key1", []byte("value1")))
+	ensure.Nil(t, storage.Set("key2", []byte("value2")))
 	iter, err := storage.Iterator()
 	ensure.Nil(t, err)
 	defer iter.Release()
-	messages := map[string]interface{}{}
+	messages := make(map[string]string)
+
 	for iter.Next() {
 		key := string(iter.Key())
 		val, err := iter.Value()
 		ensure.Nil(t, err)
-		messages[key] = val
+		messages[key] = string(val)
 	}
 	ensure.True(t, len(messages) == 2, fmt.Sprintf("expected 2 messages, got: %d", len(messages)))
-	ensure.DeepEqual(t, messages["encoded"], "encoded-value")
-	ensure.DeepEqual(t, messages["decoded"], "decoded-value")
+	ensure.DeepEqual(t, messages["key1"], "value1")
+	ensure.DeepEqual(t, messages["key2"], "value2")
 
-	recoveredValue, is := value.(string)
-	ensure.True(t, is)
+	recoveredValue := string(value)
 	ensure.DeepEqual(t, recoveredValue, "example-message")
 }

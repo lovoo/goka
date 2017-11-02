@@ -107,7 +107,7 @@ func (v *View) createPartitions(brokers []string) (err error) {
 		reg := metrics.NewPrefixedChildRegistry(v.opts.gokaRegistry,
 			fmt.Sprintf("%s.%d.", v.topic, p))
 
-		st, err := v.opts.builders.storage(v.topic, p, v.opts.tableCodec, reg)
+		st, err := v.opts.builders.storage(v.topic, p, reg)
 		if err != nil {
 			// TODO(diogo): gracefully terminate all partitions
 			return fmt.Errorf("Error creating local storage for partition %d: %v", p, err)
@@ -137,7 +137,6 @@ func (v *View) Start() error {
 			err := p.startCatchup()
 			if err != nil {
 				v.fail(fmt.Errorf("view: error opening partition %d: %v", id, err))
-				return
 			}
 		}(int32(id), p)
 	}
@@ -151,6 +150,7 @@ func (v *View) Start() error {
 }
 
 func (v *View) fail(err error) {
+	v.opts.log.Printf("failing view: %v", err)
 	v.errors.collect(err)
 	go v.stop()
 }
@@ -225,13 +225,21 @@ func (v *View) Get(key string) (interface{}, error) {
 	}
 
 	// get key and return
-	val, err := s.Get(key)
+	data, err := s.Get(key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting value (key %s): err", key, err)
+	} else if data == nil {
+		return nil, nil
+	}
+
+	// decode value
+	value, err := v.opts.tableCodec.Decode(data)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding value (key %s): err", key, err)
 	}
 
 	// if the key does not exist the return value is nil
-	return val, nil
+	return value, nil
 }
 
 // Has checks whether a value for passed key exists in the view.
@@ -246,7 +254,7 @@ func (v *View) Has(key string) (bool, error) {
 }
 
 // Iterator returns an iterator that iterates over the state of the View.
-func (v *View) Iterator() (storage.Iterator, error) {
+func (v *View) Iterator() (Iterator, error) {
 	iters := make([]storage.Iterator, 0, len(v.partitions))
 	for i := range v.partitions {
 		iter, err := v.partitions[i].st.Iterator()
@@ -262,7 +270,10 @@ func (v *View) Iterator() (storage.Iterator, error) {
 		iters = append(iters, iter)
 	}
 
-	return storage.NewMultiIterator(iters), nil
+	return &iterator{
+		iter:  storage.NewMultiIterator(iters),
+		codec: v.opts.tableCodec,
+	}, nil
 }
 
 // Evict removes the given key only from the local cache. In order to delete a

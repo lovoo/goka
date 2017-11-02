@@ -21,7 +21,7 @@ type UpdateCallback func(s storage.Storage, partition int32, key string, value [
 
 // StorageBuilder creates a local storage (a persistent cache) for a topic
 // table. StorageBuilder creates one storage for each partition of the topic.
-type StorageBuilder func(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error)
+type StorageBuilder func(topic string, partition int32, reg metrics.Registry) (storage.Storage, error)
 
 ///////////////////////////////////////////////////////////////////////////////
 // default values
@@ -54,20 +54,20 @@ func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte)
 		return s.Delete(key)
 	}
 
-	return s.SetEncoded(key, value)
+	return s.Set(key, value)
 }
 
 // DefaultStorageBuilder builds a LevelDB storage with default configuration.
 // The database will be stored in the given path.
 func DefaultStorageBuilder(path string) StorageBuilder {
-	return func(topic string, partition int32, codec Codec, reg metrics.Registry) (storage.Storage, error) {
+	return func(topic string, partition int32, reg metrics.Registry) (storage.Storage, error) {
 		fp := filepath.Join(path, fmt.Sprintf("%s.%d", topic, partition))
 		db, err := leveldb.OpenFile(fp, nil)
 		if err != nil {
 			return nil, fmt.Errorf("error opening leveldb: %v", err)
 		}
 
-		return storage.New(db, codec)
+		return storage.New(db)
 	}
 }
 

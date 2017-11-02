@@ -37,7 +37,7 @@ func NewMockController(t gomock.TestReporter) *gomock.Controller {
 	return gomock.NewController(&gomockPanicker{reporter: t})
 }
 
-// KafkaMock is allows interacting with a test processor
+// KafkaMock allows interacting with a test processor
 type KafkaMock struct {
 	t       Tester
 	storage storage.Storage
@@ -63,6 +63,7 @@ type KafkaMock struct {
 	producerMock *producerMock
 	emitHandler  EmitHandler
 	topicMgrMock *topicMgrMock
+	codec        Codec
 }
 
 // Tester abstracts the interface we assume from the test case.
@@ -76,12 +77,13 @@ type Tester interface {
 // NewKafkaMock returns a new testprocessor mocking every external service
 func NewKafkaMock(t Tester, groupName Group) *KafkaMock {
 	kafkaMock := &KafkaMock{
-		storage:        storage.NewMemory(new(codec.Bytes)),
+		storage:        storage.NewMemory(),
 		t:              t,
 		incomingEvents: make(chan kafka.Event),
 		consumerEvents: make(chan kafka.Event),
 		handledTopics:  make(map[string]bool),
 		groupTopic:     tableName(groupName),
+		codec:          new(codec.Bytes),
 	}
 	kafkaMock.consumerMock = newConsumerMock(kafkaMock)
 	kafkaMock.producerMock = newProducerMock(kafkaMock.handleEmit)
@@ -114,7 +116,7 @@ func (km *KafkaMock) SetGroupTableCreator(creator func() (string, []byte)) {
 //     )
 func (km *KafkaMock) ProcessorOptions() []ProcessorOption {
 	return []ProcessorOption{
-		WithStorageBuilder(func(topic string, partition int32, c Codec, reg metrics.Registry) (storage.Storage, error) {
+		WithStorageBuilder(func(topic string, partition int32, reg metrics.Registry) (storage.Storage, error) {
 			return km.storage, nil
 		}),
 		WithConsumer(km.consumerMock),
@@ -220,12 +222,19 @@ func (km *KafkaMock) consumeError(err error) {
 func (km *KafkaMock) ValueForKey(key string) interface{} {
 	item, err := km.storage.Get(key)
 	ensure.Nil(km.t, err)
-	return item
+	if item == nil {
+		return nil
+	}
+	value, err := km.codec.Decode(item)
+	ensure.Nil(km.t, err)
+	return value
 }
 
 // SetValue sets a value in the storage.
 func (km *KafkaMock) SetValue(key string, value interface{}) {
-	err := km.storage.Set(key, value)
+	data, err := km.codec.Encode(value)
+	ensure.Nil(km.t, err)
+	err = km.storage.Set(key, data)
 	ensure.Nil(km.t, err)
 }
 

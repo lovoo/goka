@@ -21,13 +21,14 @@ const (
 	mxConsumedOffset       = "consumed_offset"
 	mxConsumedPending      = "consumed_messages_pending"
 	mxConsumptionDelay     = "consumption_delay"
+	mxProcessingTime       = "processing_time"
 	mxRecoverHwm           = "recover_hwm"
 	mxPartitionLoaderHwm   = "partition_loader_hwm" // current high water mark of the partition loader.
 	mxRecoverStartOffset   = "recover_start_offset"
 	mxRecoverCurrentOffset = "recover_current_offset"
 
 	defaultPartitionChannelSize = 10
-	syncInterval                = 30 * time.Second
+	stallPeriod                 = 30 * time.Second
 	stalledTimeout              = 2 * time.Minute
 )
 
@@ -172,13 +173,7 @@ func newMessage(ev *kafka.Message) *message {
 func (p *partition) run() error {
 	var wg sync.WaitGroup
 	p.proxy.AddGroup()
-	syncTicker := time.NewTicker(syncInterval)
-
-	defer func() {
-		p.st.Sync()
-		wg.Wait()
-		syncTicker.Stop()
-	}()
+	defer wg.Wait()
 
 	for {
 		select {
@@ -192,14 +187,15 @@ func (p *partition) run() error {
 				if ev.Topic == p.topic {
 					return fmt.Errorf("received message from group table topic after recovery")
 				}
-				msg := newMessage(ev)
+				var (
+					msg = newMessage(ev)
+					now = time.Now()
+				)
 
 				err := p.process(msg, p.st, &wg)
 				if err != nil {
 					return fmt.Errorf("error processing message: %v", err)
 				}
-
-				p.st.Sync()
 
 				// metrics
 				p.mxConsumed.Inc(1)
@@ -212,6 +208,7 @@ func (p *partition) run() error {
 				if !ev.Timestamp.IsZero() {
 					metrics.GetOrRegisterTimer(fmt.Sprintf("%s.%s", ev.Topic, mxConsumptionDelay), p.registry).UpdateSince(ev.Timestamp)
 				}
+				metrics.GetOrRegisterTimer(fmt.Sprintf("%s.%s", ev.Topic, mxProcessingTime), p.registry).UpdateSince(now)
 
 			case *kafka.NOP:
 				// don't do anything but also don't log.
@@ -222,9 +219,6 @@ func (p *partition) run() error {
 			default:
 				return fmt.Errorf("load: cannot handle %T = %v", ev, ev)
 			}
-
-		case <-syncTicker.C:
-			p.st.Sync()
 
 		case <-p.dying:
 			return nil
@@ -263,8 +257,8 @@ func (p *partition) load(catchup bool) error {
 	// unregister partition consumption delay once partition stops or goes into run mode
 	defer p.registry.Unregister(fmt.Sprintf("%s.%s", p.topic, mxConsumptionDelay))
 
-	syncTicker := time.NewTicker(syncInterval)
-	defer syncTicker.Stop()
+	stallTicker := time.NewTicker(stallPeriod)
+	defer stallTicker.Stop()
 
 	var lastMessage time.Time
 	for {
@@ -346,9 +340,7 @@ func (p *partition) load(catchup bool) error {
 				return fmt.Errorf("load: cannot handle %T = %v", ev, ev)
 			}
 
-		case now := <-syncTicker.C:
-			p.st.Sync()
-
+		case now := <-stallTicker.C:
 			// only set to stalled, if the last message was earlier
 			// than the stalled timeout
 			if now.Sub(lastMessage) > stalledTimeout {
@@ -356,7 +348,6 @@ func (p *partition) load(catchup bool) error {
 			}
 
 		case <-p.dying:
-			p.st.Sync()
 			return nil
 		}
 	}
@@ -374,6 +365,5 @@ func (p *partition) storeEvent(msg *kafka.Message) error {
 		return fmt.Errorf("Error updating offset in local storage while recovering from the log: %v", err)
 	}
 
-	p.st.Sync()
 	return nil
 }

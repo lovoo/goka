@@ -141,7 +141,7 @@ func (ctx *context) Delete() {
 
 // Value returns the value of the key in the group table.
 func (ctx *context) Value() interface{} {
-	val, err := ctx.valueForKey(string(ctx.msg.Key))
+	val, err := ctx.valueForKey(ctx.msg.Key)
 	if err != nil {
 		ctx.Fail(err)
 	}
@@ -176,11 +176,18 @@ func (ctx *context) Join(topic Table) interface{} {
 	if !ok {
 		ctx.Fail(fmt.Errorf("table %s not subscribed", topic))
 	}
-	val, err := v.st.Get(ctx.Key())
+	data, err := v.st.Get(ctx.Key())
 	if err != nil {
 		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", ctx.Key(), topic, err))
+	} else if data == nil {
+		return nil
 	}
-	return val
+
+	value, err := ctx.graph.codec(string(topic)).Decode(data)
+	if err != nil {
+		ctx.Fail(fmt.Errorf("error decoding value key %s of table %s: %v", ctx.Key(), topic, err))
+	}
+	return value
 }
 
 func (ctx *context) Lookup(topic Table, key string) interface{} {
@@ -198,26 +205,24 @@ func (ctx *context) Lookup(topic Table, key string) interface{} {
 	return val
 }
 
-// Has returns true if key has a value in the processor state, otherwise false.
-func (ctx *context) Has(key string) bool {
-	if ctx.storage == nil {
-		ctx.Fail(fmt.Errorf("Cannot access state in stateless processor"))
-	}
-
-	has, err := ctx.storage.Has(key)
-	if err != nil {
-		ctx.Fail(err)
-	}
-	return has
-}
-
 // valueForKey returns the value of key in the processor state.
 func (ctx *context) valueForKey(key string) (interface{}, error) {
 	if ctx.storage == nil {
 		return nil, fmt.Errorf("Cannot access state in stateless processor")
 	}
 
-	return ctx.storage.Get(key)
+	data, err := ctx.storage.Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("error reading value: %v", err)
+	} else if data == nil {
+		return nil, nil
+	}
+
+	value, err := ctx.graph.GroupTable().Codec().Decode(data)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding value: %v", err)
+	}
+	return value, nil
 }
 
 func (ctx *context) deleteKey(key string) error {
@@ -248,15 +253,14 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 		return fmt.Errorf("Cannot set nil as value.")
 	}
 
-	ctx.counters.stores++
-	err := ctx.storage.Set(key, value)
-	if err != nil {
-		return fmt.Errorf("Error storing value: %v", err)
-	}
-
 	encodedValue, err := ctx.graph.GroupTable().Codec().Encode(value)
 	if err != nil {
-		return fmt.Errorf("Error encoding value: %v", err)
+		return fmt.Errorf("error encoding value: %v", err)
+	}
+
+	ctx.counters.stores++
+	if err = ctx.storage.Set(key, encodedValue); err != nil {
+		return fmt.Errorf("error storing value: %v", err)
 	}
 
 	ctx.counters.emits++

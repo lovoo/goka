@@ -28,7 +28,7 @@ func (m *multiIterator) Key() []byte {
 	return m.iters[m.current].Key()
 }
 
-func (m *multiIterator) Value() (interface{}, error) {
+func (m *multiIterator) Value() ([]byte, error) {
 	return m.iters[m.current].Value()
 }
 

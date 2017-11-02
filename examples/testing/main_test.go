@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -45,18 +46,19 @@ func Test_ConsumeScalar_Integration(t *testing.T) {
 	msg := []byte(strconv.FormatInt(1, 10))
 
 	// there is no initial value for key "foo"
-	if kafkaMock.ValueForKey("foo") != nil {
-		t.Errorf("state was not initially empty")
+	if val := kafkaMock.ValueForKey("foo"); val != nil {
+		t.Errorf("state was not initially empty: %v", val)
 	}
 
 	// send the message twice
 	kafkaMock.Consume("scalar", "foo", msg)
 	kafkaMock.Consume("scalar", "foo", msg)
 
-	value := kafkaMock.ValueForKey("foo").(int64)
+	value := string(kafkaMock.ValueForKey("foo").([]byte))
+	fmt.Printf("%v\n", value)
 
-	if value != 2 {
-		t.Errorf("Expected value %d, got %d", 2, value)
+	if value != "2" {
+		t.Errorf("Expected value %s, got %s", "2", value)
 	}
 
 	proc.Stop()
