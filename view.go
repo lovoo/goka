@@ -254,7 +254,7 @@ func (v *View) Has(key string) (bool, error) {
 }
 
 // Iterator returns an iterator that iterates over the state of the View.
-func (v *View) Iterator() (storage.Iterator, error) {
+func (v *View) Iterator() (Iterator, error) {
 	iters := make([]storage.Iterator, 0, len(v.partitions))
 	for i := range v.partitions {
 		iter, err := v.partitions[i].st.Iterator()
@@ -270,7 +270,10 @@ func (v *View) Iterator() (storage.Iterator, error) {
 		iters = append(iters, iter)
 	}
 
-	return storage.NewMultiIterator(iters), nil
+	return &iterator{
+		iter:  storage.NewMultiIterator(iters),
+		codec: v.opts.tableCodec,
+	}, nil
 }
 
 // Evict removes the given key only from the local cache. In order to delete a
