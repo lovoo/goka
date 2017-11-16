@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="row">
+  <div class="container">
+    <div class="col-md-12">
+      <h2>Processors</h2>
+      {{range $index, $component := .components}}
+        <div class="col-md-12">
+          <div class="panel panel-default">
+            <div class="panel-heading">
+              <h4 class="panel-title"><a href="{{$component.BasePath}}/">{{$component.Name}}</a>
+              </h4>
+
+            </div>
+          </div>
+        </div>
+      {{end}}
+    </div>
+  </div>
+</div>
+{{end}}

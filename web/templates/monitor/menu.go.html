@@ -1,0 +1,5 @@
+{{define "menu_content"}}
+{{range $index, $proc := .processors}}
+  <li><a href="{{$.base_path}}/processor/{{$index}}">{{$proc.ClientID}}</a></li>
+{{end}}
+{{end}}

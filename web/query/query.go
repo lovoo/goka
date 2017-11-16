@@ -10,7 +10,7 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/logger"
-	"github.com/lovoo/goka/templates"
+	"github.com/lovoo/goka/web/templates"
 
 	"github.com/gorilla/mux"
 )
@@ -108,7 +108,7 @@ func (s *Server) AttachSource(name string, getter goka.Getter) error {
 }
 
 func (s *Server) executeQueryTemplate(w http.ResponseWriter, params map[string]interface{}) {
-	tmpl, err := templates.LoadTemplates(append(templates.BaseTemplates, "templates/query/index.go.html")...)
+	tmpl, err := templates.LoadTemplates(append(templates.BaseTemplates, "web/templates/query/index.go.html")...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

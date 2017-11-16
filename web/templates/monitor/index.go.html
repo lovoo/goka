@@ -1,0 +1,27 @@
+{{define "content"}}
+<div class="row">
+  <div class="container">
+    <div class="col-md-12">
+      <h2>Processors</h2>
+      {{$base_path := .base_path}}
+      {{range $index, $processor := .processors}}
+        <div class="col-md-12">
+          <div class="panel panel-default">
+            <div class="panel-heading">
+              <h4 class="panel-title"><a href="{{$base_path}}/processor/{{$index}}">Processor {{$index}}</a>
+              </h4>
+
+            </div>
+            <div class="panel-body">
+              <dl class="dl-horizontal">
+                <dt>Client ID</dt>
+                <dd>{{$processor.ClientID}}</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      {{end}}
+    </div>
+  </div>
+</div>
+{{end}}

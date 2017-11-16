@@ -1,0 +1,170 @@
+{{define "content"}}
+<div class="row">
+  <div class="container">
+    <div class="col-md-12">
+    <div class="panel panel-default">
+      <div class="panel panel-heading">
+        <h1>{{.processorName}}</h1>
+      </div>
+      <div class="panel-body">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Table</th>
+              <th>Partition</th>
+              <th>Status</th>
+              <th>Rate (msg/s)</th>
+              <th>Start</th>
+              <th>Current</th>
+              <th>HWM</th>
+              <th>ETR (s)</th>
+              <th>SnapRatio (updates/entry)</th>
+              <th>Progress</th>
+            </tr>
+          </thead>
+          <tbody id="partitionView">
+          </tbody>
+        </table>
+      </div>
+
+    <script type="text/javascript">
+      var renderPartitions = function(partitions){
+        partitions = _.pickBy(partitions, function(value, key, object) {
+          return key.startsWith("goka.{{.processorName}}");
+        });
+        var partList = _.flatten(_.map(partitions, function(value, index){
+          var components = index.split(".").slice(2);
+
+          // if components.length != 3, the metrics is a topic specific metric
+          // rather than a partition total
+          if(!index.includes("goka") || components.length != 3) {
+            return [];
+          }
+          value['metricname'] = components.join(".");
+
+          return [value];
+        }), true);
+
+        // console.log("part list");
+        //console.log(partList);
+
+        var partTree = _.map(_.groupBy(partList, function(part){
+          return part.metricname.substring(0, part.metricname.lastIndexOf("."));
+        }), function(value, index){
+          var metrics = _.mapValues(_.groupBy(value, function(v){
+              return v.metricname.substring(v.metricname.lastIndexOf('.')+1);
+            }), function(metric){
+              return metric[0];
+            });
+          metrics['name'] = index;
+          metrics['index'] = index;
+
+          return metrics;
+        });
+
+
+
+        console.log("part tree");
+        console.log(partTree);
+
+        var updatePartitionPanel = function(partition){
+        var table = partition.name.split(".").slice(0,1).join("");
+        var part = partition.name.split(".").slice(1,2).join("");
+
+        var head = "<td>"+table+"</td><td>"+part+"</td>"
+
+          var body = function(){
+            switch(partition.status.value){
+            case 0: // open
+              return '<td><span class="label label-default">Open</span></td>';
+            case 1: // recovering
+
+              var from = partition.recover_start_offset && partition.recover_start_offset.value >=0 ? partition.recover_start_offset.value : 0;
+              var rate = (partition.consumed_messages_rate ? partition.consumed_messages_rate['1m.rate'] : 0);
+              var to = partition.recover_hwm ? partition.recover_hwm.value : 0;
+              var current = partition.recover_current_offset ? partition.recover_current_offset.value : 0;
+
+              // calculate progress
+              var progress = ((current - from)*100 / (to-from)).toFixed(2);
+              progress = isNaN(progress)?0:progress;
+              var etr = ((to - current) / rate).toFixed(0);
+              return '<td>Recovering</td>' +
+                  '<td>'+rate.toFixed(2)+'</td>' +
+                  '<td>'+from+'</td>' +
+                  '<td>'+current+'</td>' +
+                  '<td>'+to+'</td>' +
+                  '<td>'+etr+'</td>'+
+                  '<td>-</td>'+
+                  '<td><div class="progress" style="margin-bottom:0px;">'+
+                    '<div class="progress-bar" role="progressbar" style="min-width: 4em; width:' + progress + '%;">' +
+                    progress+'%</div></div></td>';
+
+            case 2: // recover stalled
+              return '<td><span class="label label-default">Recover Stalled</span></td>';
+            case 3: // recovered
+            var rate = (partition.consumed_messages_rate ? partition.consumed_messages_rate['1m.rate'] : 0);
+            var current = partition.recover_current_offset ? partition.recover_current_offset.value : 0;
+            var hwm = partition.partition_loader_hwm ? partition.partition_loader_hwm.value : 0;
+
+            var reference = Math.min(current, Math.max(hwm-rate*60, 0));
+            if(hwm == 0){
+              var lag = 100;
+            }else{
+              var lag = (Math.max((current - reference), 0)*100 / (hwm-reference)).toFixed(2);
+            }
+
+            return  '<td>Recovered</td>' +
+                '<td>'+rate.toFixed(2)+'</td>' +
+                '<td>-</td>' + //start
+                '<td>'+current+'</td>' +
+                '<td>'+hwm+'</td>' +
+                '<td>-</td>' + // etr
+                '<td>-</td>' + // snapRatio
+                '<td><div class="progress" style="margin-bottom:0px;">'+
+                '<div class="progress-bar progress-bar-success" role="progressbar" style="min-width: 4em; width:' + lag + '%;">' +
+                lag+'% relative lagging</div></div></td>';
+
+            case 4: // running
+
+            var current = partition.recover_current_offset ? partition.recover_current_offset.value : 0;
+            return '<td>Running</td>' +
+                  '<td>'+(partition.consumed_messages_rate ? partition.consumed_messages_rate['1m.rate'] : 0).toFixed(2)+'</td>' +
+                  '<td>-</td>' +  // start
+                  '<td>'+current+'</td>' +
+                  '<td>-</td>' +  // hwm
+                  '<td>-</td>' +  // etr
+                  '<td>'+(partition.snapshot_updateratio ? partition.snapshot_updateratio.value : 0).toFixed(2)+'</td>';
+            case 5: // closing
+              return "closing";
+            case 6: // closed
+              return "closed";
+            default:
+              return "Unknown state";
+            }
+          }();
+
+          var tail = "";
+
+          return head + body + tail;
+
+        }
+
+        // update, enter and remove data
+        var d = d3.select("#partitionView").selectAll(".partitionbox").data(partTree, function(d){ return d.index;});
+        d.html(updatePartitionPanel);
+        d3.select("#partitionView").selectAll(".partitionbox").data(partTree, function(d){ return d.index;}).enter().append("tr").classed("partitionbox", true).html(updatePartitionPanel);
+        d.exit().remove()
+
+      };
+
+      window.setInterval(function(){
+        d3.json("{{.base_path}}/processordata/{{.processorID}}", renderPartitions);
+      }, 4000);
+
+      // call it initially
+      d3.json("{{.base_path}}/processordata/{{.processorID}}", renderPartitions);
+    </script>
+    </div>
+  </div>
+</div>
+{{end}}
