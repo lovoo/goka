@@ -92,6 +92,11 @@ func NewKafkaMock(t Tester, groupName Group) *KafkaMock {
 	return kafkaMock
 }
 
+func (km *KafkaMock) SetCodec(codec Codec) *KafkaMock {
+	km.codec = codec
+	return km
+}
+
 func (km *KafkaMock) SetGroupTableCreator(creator func() (string, []byte)) {
 	km.groupTableCreator = creator
 }
