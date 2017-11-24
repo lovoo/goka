@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+const (
+	tableSuffix = "-table"
+	loopSuffix  = "-loop"
+)
+
 type Stream string
 type Streams []Stream
 type Table string
@@ -288,10 +293,10 @@ func GroupTable(group Group) Table {
 }
 
 func tableName(group Group) string {
-	return string(group) + "-state"
+	return string(group) + tableSuffix
 }
 
 // loopName returns the name of the loop topic of group.
 func loopName(group Group) string {
-	return string(group) + "-loop"
+	return string(group) + loopSuffix
 }

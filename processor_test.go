@@ -206,7 +206,7 @@ func TestProcessor_process(t *testing.T) {
 	promise = new(kafka.Promise)
 	gomock.InOrder(
 		st.EXPECT().Set("key", []byte("message")),
-		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		producer.EXPECT().Emit(tableName(group), "key", []byte("message")).Return(promise),
 		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
 		st.EXPECT().SetOffset(int64(322)),
 		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
@@ -225,9 +225,9 @@ func TestProcessor_process(t *testing.T) {
 	promise2 := new(kafka.Promise)
 	gomock.InOrder(
 		st.EXPECT().Set("key", []byte("message")),
-		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		producer.EXPECT().Emit(tableName(group), "key", []byte("message")).Return(promise),
 		st.EXPECT().Set("key", []byte("message2")),
-		producer.EXPECT().Emit("group-state", "key", []byte("message2")).Return(promise2),
+		producer.EXPECT().Emit(tableName(group), "key", []byte("message2")).Return(promise2),
 		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
 		st.EXPECT().SetOffset(int64(323)),
 		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
@@ -282,7 +282,7 @@ func TestProcessor_processFail(t *testing.T) {
 	promise := new(kafka.Promise)
 	gomock.InOrder(
 		st.EXPECT().Set("key", []byte("message")),
-		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		producer.EXPECT().Emit(tableName(group), "key", []byte("message")).Return(promise),
 		st.EXPECT().GetOffset(int64(0)).Return(int64(321), errors.New("getOffset failed")),
 		consumer.EXPECT().Close().Do(func() { close(p.done) }),
 		producer.EXPECT().Close(),
@@ -305,7 +305,7 @@ func TestProcessor_processFail(t *testing.T) {
 	p = newProcessor()
 	gomock.InOrder(
 		st.EXPECT().Set("key", []byte("message")),
-		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		producer.EXPECT().Emit(tableName(group), "key", []byte("message")).Return(promise),
 		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
 		st.EXPECT().SetOffset(int64(322)).Return(errors.New("setOffset failed")),
 		consumer.EXPECT().Close().Do(func() { close(p.done) }),
@@ -329,7 +329,7 @@ func TestProcessor_processFail(t *testing.T) {
 	p = newProcessor()
 	gomock.InOrder(
 		st.EXPECT().Set("key", []byte("message")),
-		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		producer.EXPECT().Emit(tableName(group), "key", []byte("message")).Return(promise),
 		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
 		st.EXPECT().SetOffset(int64(322)),
 		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)).Return(errors.New("commit error")),
