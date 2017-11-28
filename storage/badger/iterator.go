@@ -8,8 +8,7 @@ const (
 	offsetKey = "__offset_key"
 )
 
-// iterator wraps an Iterator implementation and handles the value decoding and
-// offset key skipping.
+// iterator wraps a BadgerDB Iterator and handles offset key skipping.
 type iterator struct {
 	txn   *badger.Txn
 	iter  *badger.Iterator
@@ -39,12 +38,12 @@ func (i *iterator) Key() []byte {
 	return i.iter.Item().Key()
 }
 
-// Value returns the current value decoded by the codec of the storage.
+// Value returns the current value.
 func (i *iterator) Value() ([]byte, error) {
 	return i.iter.Item().Value()
 }
 
-// Releases releases the iterator and the associated snapshot. The iterator is
+// Releases releases the iterator and the associated transaction. The iterator is
 // not usable anymore after calling Release.
 func (i *iterator) Release() {
 	i.iter.Close()
