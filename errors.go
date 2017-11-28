@@ -20,13 +20,13 @@ type Errors struct {
 	m    sync.Mutex
 }
 
-func (e *Errors) collect(err error) {
+func (e *Errors) Collect(err error) {
 	e.m.Lock()
 	e.errs = append(e.errs, err)
 	e.m.Unlock()
 }
 
-func (e *Errors) hasErrors() bool {
+func (e *Errors) HasErrors() bool {
 	return len(e.errs) > 0
 }
 
@@ -36,4 +36,11 @@ func (e *Errors) Error() string {
 		str += fmt.Sprintf("\t%s\n", err.Error())
 	}
 	return str
+}
+
+func (e *Errors) ErrorOrNil() error {
+	if e.HasErrors() {
+		return e
+	}
+	return nil
 }
