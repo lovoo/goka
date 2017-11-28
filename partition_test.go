@@ -817,3 +817,49 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 	})
 	ensure.Nil(t, err)
 }
+
+func BenchmarkFib10(b *testing.B) {
+	var (
+		key          = "key"
+		par    int32 = 1
+		offset int64 = 4
+		value        = []byte("value")
+		wait         = make(chan bool)
+		st           = storage.NewNull()
+	)
+
+	update := func(st storage.Storage, p int32, k string, v []byte) error {
+		return nil
+	}
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), new(nullProxy), metrics.DefaultRegistry, 0)
+
+	go func() {
+		err := p.start()
+		if err != nil {
+			panic(err)
+		}
+		close(wait)
+	}()
+
+	// beginning of file marks the beginning of topic
+	p.ch <- &kafka.BOF{
+		Topic:     topic,
+		Partition: par,
+		Offset:    offset,
+		Hwm:       int64(b.N + 1),
+	}
+	// run the Fib function b.N times
+	for n := 0; n < b.N; n++ {
+		p.ch <- &kafka.Message{
+			Topic:     topic,
+			Partition: par,
+			Offset:    offset,
+			Key:       key,
+			Value:     value,
+		}
+		offset++
+	}
+
+	p.stop()
+	<-wait
+}

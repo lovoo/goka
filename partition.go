@@ -315,12 +315,12 @@ func (p *partition) load(catchup bool) error {
 				}
 				lastMessage = time.Now()
 				// update metrics
-				p.mxConsumedRate.Mark(1)
-				metrics.GetOrRegisterMeter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedRate), p.registry).Mark(1)
-				if !ev.Timestamp.IsZero() {
-					metrics.GetOrRegisterTimer(fmt.Sprintf("%s.%s", ev.Topic, mxConsumptionDelay), p.registry).UpdateSince(ev.Timestamp)
-				}
-				p.mxRecoverCurrentOffset.Update(ev.Offset)
+				//p.mxConsumedRate.Mark(1)
+				//metrics.GetOrRegisterMeter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedRate), p.registry).Mark(1)
+				//if !ev.Timestamp.IsZero() {
+				//		metrics.GetOrRegisterTimer(fmt.Sprintf("%s.%s", ev.Topic, mxConsumptionDelay), p.registry).UpdateSince(ev.Timestamp)
+				//	}
+				//	p.mxRecoverCurrentOffset.Update(ev.Offset)
 				if ev.Offset < p.initialHwm-1 {
 					p.mxStatus.Update(partitionRecovering)
 				} else {
