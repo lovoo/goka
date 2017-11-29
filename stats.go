@@ -43,6 +43,8 @@ func (s *PartitionStats) copy(o *PartitionStats) {
 	s.Now = o.Now
 	s.Table.Recovered = o.Table.Recovered
 	s.Table.Stalled = o.Table.Stalled
+	s.Table.StartTime = o.Table.StartTime
+	s.Table.RecoveryTime = o.Table.RecoveryTime
 	for k, v := range o.Input {
 		s.Input[k] = v
 	}
