@@ -12,6 +12,7 @@ import (
 	"github.com/lovoo/goka/web/graph"
 	"github.com/lovoo/goka/web/index"
 	"github.com/lovoo/goka/web/monitor"
+	"github.com/lovoo/goka/web/query"
 )
 
 var (
@@ -84,7 +85,7 @@ func process(ctx goka.Context, msg interface{}) {
 	fmt.Printf("[proc] key: %s clicks: %d, msg: %v\n", ctx.Key(), u.Clicks, msg)
 }
 
-func runProcessor(monitor *monitor.Server, graph *graph.Server) {
+func runProcessor(monitor *monitor.Server, graph *graph.Server, query *query.Server) {
 	g := goka.DefineGroup(group,
 		goka.Input(topic, new(codec.String), process),
 		goka.Persist(new(userCodec)),
@@ -97,6 +98,7 @@ func runProcessor(monitor *monitor.Server, graph *graph.Server) {
 	// attach the processor to the monitor
 	monitor.AttachProcessor(string(group), p.Registry())
 	graph.Attach(g)
+	query.AttachSource("user-clicks", p.Get)
 
 	err = p.Start()
 	if err != nil {
@@ -134,10 +136,12 @@ func main() {
 	root := mux.NewRouter()
 	monitorServer := monitor.NewServer("/monitor", root)
 	graphServer := graph.NewServer("/graph", root)
+	queryServer := query.NewServer("/query", root)
 	idxServer := index.NewServer("/", root)
 	idxServer.AddComponent(monitorServer, "Monitor")
 	idxServer.AddComponent(graphServer, "Graph")
+	idxServer.AddComponent(queryServer, "Query")
 	go runEmitter()
-	go runProcessor(monitorServer, graphServer)
+	go runProcessor(monitorServer, graphServer, queryServer)
 	runView(root, monitorServer, graphServer)
 }

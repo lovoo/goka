@@ -75,6 +75,10 @@ func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
 	return srv
 }
 
+func (s *Server) BasePath() string {
+	return s.basePath
+}
+
 func (s *Server) getter(name string) goka.Getter {
 	s.m.RLock()
 	defer s.m.RUnlock()

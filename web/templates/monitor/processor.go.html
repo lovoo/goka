@@ -11,15 +11,14 @@
           <thead>
             <tr>
               <th>Table</th>
-              <th>Partition</th>
-              <th>Status</th>
-              <th>Rate (msg/s)</th>
-              <th>Start</th>
-              <th>Current</th>
-              <th>HWM</th>
-              <th>ETR (s)</th>
-              <th>SnapRatio (updates/entry)</th>
-              <th>Progress</th>
+              <th title="partition hash">Partition</th>
+              <th title="Status of the processor" >Status</th>
+              <th title="Messages processed per second">Rate (msg/s)</th>
+              <th title="Offset where the partition started">Start</th>
+              <th title="Number of messages lagging behind HWM">Offset-Lag</th>
+              <th title="High water mark (offset of the next message being consumed)">HWM</th>
+              <th title="Estimated time of recovery in seconds">ETR (s)</th>
+              <th title="progress of recovery or percentage of lag behind the hwm once recovered">Progress</th>
             </tr>
           </thead>
           <tbody id="partitionView">
@@ -83,7 +82,7 @@
               var rate = (partition.consumed_messages_rate ? partition.consumed_messages_rate['1m.rate'] : 0);
               var to = partition.recover_hwm ? partition.recover_hwm.value : 0;
               var current = partition.recover_current_offset ? partition.recover_current_offset.value : 0;
-
+              var offsetLag = hwm - current;
               // calculate progress
               var progress = ((current - from)*100 / (to-from)).toFixed(2);
               progress = isNaN(progress)?0:progress;
@@ -91,10 +90,9 @@
               return '<td>Recovering</td>' +
                   '<td>'+rate.toFixed(2)+'</td>' +
                   '<td>'+from+'</td>' +
-                  '<td>'+current+'</td>' +
+                  '<td>'+offsetLag+'</td>' +
                   '<td>'+to+'</td>' +
                   '<td>'+etr+'</td>'+
-                  '<td>-</td>'+
                   '<td><div class="progress" style="margin-bottom:0px;">'+
                     '<div class="progress-bar" role="progressbar" style="min-width: 4em; width:' + progress + '%;">' +
                     progress+'%</div></div></td>';
@@ -105,6 +103,8 @@
             var rate = (partition.consumed_messages_rate ? partition.consumed_messages_rate['1m.rate'] : 0);
             var current = partition.recover_current_offset ? partition.recover_current_offset.value : 0;
             var hwm = partition.partition_loader_hwm ? partition.partition_loader_hwm.value : 0;
+            // number of messages the current-offset is behind the hwm
+            var offsetLag = hwm - current;
 
             var reference = Math.min(current, Math.max(hwm-rate*60, 0));
             if(hwm == 0){
@@ -116,10 +116,9 @@
             return  '<td>Recovered</td>' +
                 '<td>'+rate.toFixed(2)+'</td>' +
                 '<td>-</td>' + //start
-                '<td>'+current+'</td>' +
+                '<td>'+offsetLag+'</td>' +
                 '<td>'+hwm+'</td>' +
                 '<td>-</td>' + // etr
-                '<td>-</td>' + // snapRatio
                 '<td><div class="progress" style="margin-bottom:0px;">'+
                 '<div class="progress-bar progress-bar-success" role="progressbar" style="min-width: 4em; width:' + lag + '%;">' +
                 lag+'% relative lagging</div></div></td>';
