@@ -4,15 +4,15 @@ import "time"
 
 // Input Streams/Table
 type InputStats struct {
-	Count map[string]uint
-	Bytes map[string]int
-	Delay map[string]time.Duration
+	Count uint
+	Bytes int
+	Delay time.Duration
 }
 
 // Output Streams/Table
 type OutputStats struct {
-	Count map[string]uint
-	Bytes map[string]int
+	Count uint
+	Bytes int
 }
 
 type PartitionStats struct {
@@ -28,21 +28,14 @@ type PartitionStats struct {
 		StartTime    time.Time
 		RecoveryTime time.Time
 	}
-	Input  InputStats
-	Output OutputStats
+	Input  map[string]InputStats
+	Output map[string]OutputStats
 }
 
 func newPartitionStats() *PartitionStats {
 	return &PartitionStats{
-		Input: InputStats{
-			Count: make(map[string]uint),
-			Bytes: make(map[string]int),
-			Delay: make(map[string]time.Duration),
-		},
-		Output: OutputStats{
-			Count: make(map[string]uint),
-			Bytes: make(map[string]int),
-		},
+		Input:  make(map[string]InputStats),
+		Output: make(map[string]OutputStats),
 	}
 }
 
@@ -50,20 +43,13 @@ func (s *PartitionStats) copy(o *PartitionStats) {
 	s.Now = o.Now
 	s.Table.Recovered = o.Table.Recovered
 	s.Table.Stalled = o.Table.Stalled
-	for k, v := range o.Input.Count {
-		s.Input.Count[k] = v
+	s.Table.StartTime = o.Table.StartTime
+	s.Table.RecoveryTime = o.Table.RecoveryTime
+	for k, v := range o.Input {
+		s.Input[k] = v
 	}
-	for k, v := range o.Input.Bytes {
-		s.Input.Bytes[k] = v
-	}
-	for k, v := range o.Input.Delay {
-		s.Input.Delay[k] = v
-	}
-	for k, v := range o.Output.Count {
-		s.Output.Count[k] = v
-	}
-	for k, v := range o.Output.Bytes {
-		s.Output.Bytes[k] = v
+	for k, v := range o.Output {
+		s.Output[k] = v
 	}
 }
 

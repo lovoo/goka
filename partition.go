@@ -157,11 +157,13 @@ func (p *partition) run() error {
 				p.hwm = p.offset + 1
 
 				// metrics
-				p.stats.Input.Count[ev.Topic]++
-				p.stats.Input.Bytes[ev.Topic] += len(ev.Value)
+				s := p.stats.Input[ev.Topic]
+				s.Count++
+				s.Bytes += len(ev.Value)
 				if !ev.Timestamp.IsZero() {
-					p.stats.Input.Delay[ev.Topic] = time.Since(ev.Timestamp)
+					s.Delay = time.Since(ev.Timestamp)
 				}
+				p.stats.Input[ev.Topic] = s
 
 			case *kafka.NOP:
 				// don't do anything but also don't log.
@@ -176,6 +178,7 @@ func (p *partition) run() error {
 		case <-p.requestStats:
 			s := newPartitionStats()
 			s.copy(p.stats)
+			s.Now = time.Now()
 			s.Table.Hwm = p.hwm
 			s.Table.Offset = p.offset
 			p.responseStats <- s
@@ -266,11 +269,13 @@ func (p *partition) load(catchup bool) error {
 				}
 
 				// update metrics
-				p.stats.Input.Count[ev.Topic]++
-				p.stats.Input.Bytes[ev.Topic] += len(ev.Value)
+				s := p.stats.Input[ev.Topic]
+				s.Count++
+				s.Bytes += len(ev.Value)
 				if !ev.Timestamp.IsZero() {
-					p.stats.Input.Delay[ev.Topic] = time.Since(ev.Timestamp)
+					s.Delay = time.Since(ev.Timestamp)
 				}
+				p.stats.Input[ev.Topic] = s
 				if ev.Offset < p.hwm-1 {
 					p.stats.Table.Stalled = false
 				}
@@ -292,6 +297,7 @@ func (p *partition) load(catchup bool) error {
 		case <-p.requestStats:
 			s := newPartitionStats()
 			s.copy(p.stats)
+			s.Now = time.Now()
 			s.Table.Hwm = p.hwm
 			s.Table.Offset = p.offset
 			p.responseStats <- s
