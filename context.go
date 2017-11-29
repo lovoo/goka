@@ -134,8 +134,8 @@ func (ctx *context) emit(topic string, key string, value []byte) {
 		ctx.emitDone(err)
 	})
 
-	ctx.pstats.Output.Count[topic]++
-	ctx.pstats.Output.Bytes[topic] += len(value)
+	//ctx.pstats.Output[topic].Count++
+	//ctx.pstats.Output[topic].Bytes += len(value)
 }
 
 func (ctx *context) Delete() {
@@ -274,8 +274,8 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 		ctx.emitDone(err)
 	})
 
-	ctx.pstats.Output.Count[table]++
-	ctx.pstats.Output.Bytes[table] += len(encodedValue)
+	//ctx.pstats.Output[table].Count++
+	//ctx.pstats.Output[table].Bytes += len(encodedValue)
 	return nil
 }
 
