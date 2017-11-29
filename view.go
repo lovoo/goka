@@ -8,8 +8,6 @@ import (
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
-
-	"github.com/rcrowley/go-metrics"
 )
 
 // Getter functions return a value for a key or an error. If no value exists for the key, nil is returned without errors.
@@ -33,7 +31,6 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	options = append(
 		// default options comes first
 		[]ViewOption{
-			WithViewRegistry(metrics.NewRegistry()),
 			WithViewLogger(logger.Default()),
 			WithViewCallback(DefaultUpdate),
 			WithViewPartitionChannelSize(defaultPartitionChannelSize),
@@ -53,7 +50,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 
 	opts.tableCodec = codec
 
-	consumer, err := opts.builders.consumer(brokers, "goka-view", opts.clientID, opts.kafkaRegistry)
+	consumer, err := opts.builders.consumer(brokers, "goka-view", opts.clientID)
 	if err != nil {
 		return nil, fmt.Errorf("view: cannot create Kafka consumer: %v", err)
 	}
@@ -71,11 +68,6 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	}
 
 	return v, err
-}
-
-// Registry returns the go-metrics registry used by the view.
-func (v *View) Registry() metrics.Registry {
-	return v.opts.registry
 }
 
 func (v *View) createPartitions(brokers []string) (err error) {
@@ -104,10 +96,7 @@ func (v *View) createPartitions(brokers []string) (err error) {
 
 	v.opts.log.Printf("Table %s has %d partitions", v.topic, len(partitions))
 	for _, p := range partitions {
-		reg := metrics.NewPrefixedChildRegistry(v.opts.gokaRegistry,
-			fmt.Sprintf("%s.%d.", v.topic, p))
-
-		st, err := v.opts.builders.storage(v.topic, p, reg)
+		st, err := v.opts.builders.storage(v.topic, p)
 		if err != nil {
 			// TODO(diogo): gracefully terminate all partitions
 			return fmt.Errorf("Error creating local storage for partition %d: %v", p, err)
@@ -116,7 +105,6 @@ func (v *View) createPartitions(brokers []string) (err error) {
 		po := newPartition(v.opts.log, v.topic, nil,
 			&storageProxy{Storage: st, partition: p, update: v.opts.updateCallback},
 			&proxy{p, v.consumer},
-			reg,
 			v.opts.partitionChannelSize,
 		)
 		v.partitions = append(v.partitions, po)
@@ -316,10 +304,18 @@ func (v *View) run() {
 // Recovered returns true when the view has caught up with events from kafka.
 func (v *View) Recovered() bool {
 	for _, p := range v.partitions {
-		if !p.ready() {
+		if !p.recovered() {
 			return false
 		}
 	}
 
 	return true
+}
+
+func (v *View) Stats() *ViewStats {
+	stats := newViewStats()
+	for i, p := range v.partitions {
+		stats.Partitions[int32(i)] = p.fetchStats()
+	}
+	return stats
 }

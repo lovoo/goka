@@ -7,7 +7,6 @@ import (
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
 	"github.com/golang/protobuf/proto"
-	metrics "github.com/rcrowley/go-metrics"
 
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
@@ -92,6 +91,11 @@ func NewKafkaMock(t Tester, groupName Group) *KafkaMock {
 	return kafkaMock
 }
 
+func (km *KafkaMock) SetCodec(codec Codec) *KafkaMock {
+	km.codec = codec
+	return km
+}
+
 func (km *KafkaMock) SetGroupTableCreator(creator func() (string, []byte)) {
 	km.groupTableCreator = creator
 }
@@ -116,7 +120,7 @@ func (km *KafkaMock) SetGroupTableCreator(creator func() (string, []byte)) {
 //     )
 func (km *KafkaMock) ProcessorOptions() []ProcessorOption {
 	return []ProcessorOption{
-		WithStorageBuilder(func(topic string, partition int32, reg metrics.Registry) (storage.Storage, error) {
+		WithStorageBuilder(func(topic string, partition int32) (storage.Storage, error) {
 			return km.storage, nil
 		}),
 		WithConsumer(km.consumerMock),

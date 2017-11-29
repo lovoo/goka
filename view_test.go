@@ -14,7 +14,6 @@ import (
 
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
-	metrics "github.com/rcrowley/go-metrics"
 )
 
 var (
@@ -33,9 +32,7 @@ func createTestView(t *testing.T, consumer kafka.Consumer, sb StorageBuilder, tm
 			recoveredMessages++
 			return nil
 		},
-		registry:     metrics.DefaultRegistry,
-		gokaRegistry: metrics.DefaultRegistry,
-		hasher:       DefaultHasher(),
+		hasher: DefaultHasher(),
 	}
 	opts.builders.storage = sb
 	opts.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
@@ -58,7 +55,7 @@ func TestView_createPartitions(t *testing.T) {
 	var (
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, partition int32) (storage.Storage, error) {
 			return st, nil
 		}
 		tm = mock.NewMockTopicManager(ctrl)
@@ -83,7 +80,7 @@ func TestView_createPartitions(t *testing.T) {
 	err = v.createPartitions(nil)
 	ensure.NotNil(t, err)
 
-	sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
+	sb = func(topic string, partition int32) (storage.Storage, error) {
 		return nil, errors.New("some error")
 	}
 	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1}, nil)
@@ -100,7 +97,7 @@ func TestView_HasGet(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -133,7 +130,7 @@ func TestView_StartStop(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -185,7 +182,7 @@ func TestView_StartStopWithError(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)
@@ -235,7 +232,7 @@ func TestView_GetErrors(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)

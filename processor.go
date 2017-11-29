@@ -10,8 +10,6 @@ import (
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
-
-	"github.com/rcrowley/go-metrics"
 )
 
 // Processor is a set of stateful callback functions that, on the arrival of
@@ -59,7 +57,6 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	options = append(
 		// default options comes first
 		[]ProcessorOption{
-			WithRegistry(metrics.NewRegistry()),
 			WithLogger(logger.Default()),
 			WithUpdateCallback(DefaultUpdate),
 			WithPartitionChannelSize(defaultPartitionChannelSize),
@@ -86,13 +83,13 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	}
 
 	// create kafka consumer
-	consumer, err := opts.builders.consumer(brokers, string(gg.Group()), opts.clientID, opts.kafkaRegistry)
+	consumer, err := opts.builders.consumer(brokers, string(gg.Group()), opts.clientID)
 	if err != nil {
 		return nil, fmt.Errorf(errBuildConsumer, err)
 	}
 
 	// create kafka producer
-	producer, err := opts.builders.producer(brokers, opts.kafkaRegistry)
+	producer, err := opts.builders.producer(brokers)
 	if err != nil {
 		return nil, fmt.Errorf(errBuildProducer, err)
 	}
@@ -192,11 +189,6 @@ func copartitioned(tm kafka.TopicManager, topics []string) (int, error) {
 		}
 	}
 	return npar, nil
-}
-
-// Registry returns the go-metrics registry used by the processor.
-func (g *Processor) Registry() metrics.Registry {
-	return g.opts.registry
 }
 
 // isStateless returns whether the processor is a stateless one.
@@ -457,8 +449,8 @@ func (g *Processor) Stop() {
 // partition management (rebalance)
 ///////////////////////////////////////////////////////////////////////////////
 
-func (g *Processor) newJoinStorage(topic string, id int32, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
-	st, err := g.opts.builders.storage(topic, id, reg)
+func (g *Processor) newJoinStorage(topic string, id int32, update UpdateCallback) (*storageProxy, error) {
+	st, err := g.opts.builders.storage(topic, id)
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +461,7 @@ func (g *Processor) newJoinStorage(topic string, id int32, update UpdateCallback
 	}, nil
 }
 
-func (g *Processor) newStorage(topic string, id int32, update UpdateCallback, reg metrics.Registry) (*storageProxy, error) {
+func (g *Processor) newStorage(topic string, id int32, update UpdateCallback) (*storageProxy, error) {
 	if g.isStateless() {
 		return &storageProxy{
 			Storage:   storage.NewMemory(),
@@ -478,7 +470,7 @@ func (g *Processor) newStorage(topic string, id int32, update UpdateCallback, re
 		}, nil
 	}
 
-	st, err := g.opts.builders.storage(topic, id, reg)
+	st, err := g.opts.builders.storage(topic, id)
 	if err != nil {
 		return nil, err
 	}
@@ -501,10 +493,7 @@ func (g *Processor) createPartitionViews(id int32) error {
 		if _, has := g.partitions[id]; has {
 			continue
 		}
-		reg := metrics.NewPrefixedChildRegistry(g.opts.gokaRegistry,
-			fmt.Sprintf("%s.%d.", t.Topic(), id))
-
-		st, err := g.newJoinStorage(t.Topic(), id, DefaultUpdate, reg)
+		st, err := g.newJoinStorage(t.Topic(), id, DefaultUpdate)
 		if err != nil {
 			return fmt.Errorf("processor: error creating storage: %v", err)
 		}
@@ -512,7 +501,6 @@ func (g *Processor) createPartitionViews(id int32) error {
 			g.opts.log,
 			t.Topic(),
 			nil, st, &proxy{id, g.consumer},
-			reg,
 			g.opts.partitionChannelSize,
 		)
 		g.partitionViews[id][t.Topic()] = p
@@ -545,10 +533,7 @@ func (g *Processor) createPartition(id int32) error {
 	if gt := g.graph.GroupTable(); gt != nil {
 		groupTable = gt.Topic()
 	}
-	reg := metrics.NewPrefixedChildRegistry(g.opts.gokaRegistry,
-		fmt.Sprintf("%s.%d.", groupTable, id))
-
-	st, err := g.newStorage(groupTable, id, g.opts.updateCallback, reg)
+	st, err := g.newStorage(groupTable, id, g.opts.updateCallback)
 	if err != nil {
 		return fmt.Errorf("processor: error creating storage: %v", err)
 	}
@@ -557,7 +542,7 @@ func (g *Processor) createPartition(id int32) error {
 	var wait []func() bool
 	if pviews, has := g.partitionViews[id]; has {
 		for _, p := range pviews {
-			wait = append(wait, p.ready)
+			wait = append(wait, p.recovered)
 		}
 	}
 	for _, v := range g.views {
@@ -568,7 +553,6 @@ func (g *Processor) createPartition(id int32) error {
 		g.opts.log,
 		groupTable,
 		g.process, st, &delayProxy{partition: id, consumer: g.consumer, wait: wait},
-		reg,
 		g.opts.partitionChannelSize,
 	)
 
@@ -635,7 +619,7 @@ func (g *Processor) removePartition(partition int32) {
 // context builder
 ///////////////////////////////////////////////////////////////////////////////
 
-func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 	g.m.RLock()
 	views := g.partitionViews[msg.Partition]
 	g.m.RUnlock()
@@ -643,6 +627,7 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	ctx := &context{
 		graph: g.graph,
 
+		pstats: pstats,
 		pviews: views,
 		views:  g.views,
 		wg:     wg,
@@ -691,7 +676,7 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	switch {
 	case msg.Data == nil && g.opts.nilHandling == NilIgnore:
 		// drop nil messages
-		return nil
+		return 0, nil
 	case msg.Data == nil && g.opts.nilHandling == NilProcess:
 		// process nil messages without decoding them
 		m = nil
@@ -699,26 +684,27 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 		// get stream subcription
 		codec := g.graph.codec(msg.Topic)
 		if codec == nil {
-			return fmt.Errorf("cannot handle topic %s", msg.Topic)
+			return 0, fmt.Errorf("cannot handle topic %s", msg.Topic)
 		}
 
 		// decode message
 		m, err = codec.Decode(msg.Data)
 		if err != nil {
-			return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
+			return 0, fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
 		}
+	}
+
+	cb := g.graph.callback(msg.Topic)
+	if cb == nil {
+		return 0, fmt.Errorf("error processing message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
 	}
 
 	// start context and call ProcessorCallback
 	ctx.start()
 	defer ctx.finish() // execute even in case of panic
-	cb := g.graph.callback(msg.Topic)
-	if cb == nil {
-		return fmt.Errorf("error processing message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
-	}
 	cb(ctx, m)
 
-	return nil
+	return ctx.counters.stores, nil
 }
 
 // Recovered returns true when the processor has caught up with events from kafka.
@@ -731,17 +717,33 @@ func (g *Processor) Recovered() bool {
 
 	for _, part := range g.partitionViews {
 		for _, topicPart := range part {
-			if !topicPart.ready() {
+			if !topicPart.recovered() {
 				return false
 			}
 		}
 	}
 
 	for _, p := range g.partitions {
-		if !p.ready() {
+		if !p.recovered() {
 			return false
 		}
 	}
 
 	return true
+}
+
+func (g *Processor) Stats() *ProcessorStats {
+	stats := newProcessorStats(len(g.partitions))
+	for i, p := range g.partitions {
+		stats.Group[i] = p.fetchStats()
+	}
+	for i, p := range g.partitionViews {
+		for t, tp := range p {
+			stats.Joined[i][t] = tp.fetchStats()
+		}
+	}
+	for t, v := range g.views {
+		stats.Lookup[t] = v.Stats()
+	}
+	return stats
 }
