@@ -747,3 +747,7 @@ func (g *Processor) Stats() *ProcessorStats {
 	}
 	return stats
 }
+
+func (g *Processor) Graph() *GroupGraph {
+	return g.graph
+}

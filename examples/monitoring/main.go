@@ -96,7 +96,7 @@ func runProcessor(monitor *monitor.Server, graph *graph.Server, query *query.Ser
 	}
 
 	// attach the processor to the monitor
-	monitor.AttachProcessor(string(group), p.Registry())
+	monitor.AttachProcessor(p)
 	graph.Attach(g)
 	query.AttachSource("user-clicks", p.Get)
 
@@ -118,7 +118,7 @@ func runView(root *mux.Router, monitor *monitor.Server, graph *graph.Server) {
 	}
 
 	// attach the processor to the monitor
-	monitor.AttachView(string(group), view.Registry())
+	monitor.AttachView(view)
 
 	go view.Start()
 	defer view.Stop()

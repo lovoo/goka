@@ -1,11 +1,12 @@
 package monitor
 
 import (
+	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"sync"
 
+	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/web/templates"
 
@@ -23,8 +24,9 @@ type Server struct {
 	log logger.Logger
 	m   sync.RWMutex
 
-	basePath string
-	procs    []*processorStats
+	basePath   string
+	views      []*goka.View
+	processors []*goka.Processor
 }
 
 // NewServer creates a new Server
@@ -57,24 +59,17 @@ type processorStats struct {
 	metrics  metrics.Registry
 }
 
-// AttachProcessor attaches a processor to the monitor.
-func (s *Server) AttachProcessor(clientID string, metrics metrics.Registry) {
-	s.attach("processor-"+clientID, metrics)
+func (s *Server) AttachProcessor(processor *goka.Processor) {
+	s.m.Lock()
+	defer s.m.Unlock()
+	s.processors = append(s.processors, processor)
 }
 
 // AttachView attaches a processor to the monitor.
-func (s *Server) AttachView(clientID string, metrics metrics.Registry) {
-	s.attach("view-"+clientID, metrics)
-}
-
-func (s *Server) attach(clientID string, metrics metrics.Registry) {
+func (s *Server) AttachView(view *goka.View) {
 	s.m.Lock()
 	defer s.m.Unlock()
-	s.procs = append(s.procs, &processorStats{
-		ID:       fmt.Sprintf("%d", len(s.procs)),
-		ClientID: clientID,
-		metrics:  metrics,
-	})
+	s.views = append(s.views, view)
 }
 
 // index page: all processors
@@ -89,7 +84,8 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		"base_path":  s.basePath,
 		"page_title": "Monitor",
 		"menu_title": "Index",
-		"processors": s.procs,
+		"processors": s.processors,
+		"views":      s.views,
 	}
 
 	if err := tmpl.Execute(w, params); err != nil {
@@ -101,12 +97,18 @@ func (s *Server) renderProcessorData(w http.ResponseWriter, r *http.Request) {
 	s.m.RLock()
 	defer s.m.RUnlock()
 
-	cons, err := s.getProcessorByID(r)
+	proc, err := s.getProcessorByIdx(r)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	metrics.WriteJSONOnce(cons.metrics, w)
+	marshalled, err := json.Marshal(proc.Stats())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write(marshalled)
 }
 
 // renders the processor page
@@ -117,7 +119,7 @@ func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cons, err := s.getProcessorByID(r)
+	proc, err := s.getProcessorByIdx(r)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -125,10 +127,11 @@ func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
 
 	params := map[string]interface{}{
 		"base_path":     s.basePath,
-		"page_title":    cons.ClientID,
-		"processorName": cons.ClientID,
-		"processorID":   cons.ID,
-		"processors":    s.procs,
+		"page_title":    proc.Graph().Group(),
+		"processorName": proc.Graph().Group(),
+		"graph":         proc.Graph(),
+		"processors":    s.processors,
+		"vars":          mux.Vars(r),
 	}
 
 	if err = tmpl.Execute(w, params); err != nil {
@@ -136,7 +139,7 @@ func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) getProcessorByID(r *http.Request) (*processorStats, error) {
+func (s *Server) getProcessorByIdx(r *http.Request) (*goka.Processor, error) {
 	vars := mux.Vars(r)
 	consID, exists := vars["processorId"]
 	if !exists {
@@ -147,9 +150,9 @@ func (s *Server) getProcessorByID(r *http.Request) (*processorStats, error) {
 		return nil, errors.New("error parsing processorId from request")
 	}
 
-	if consIDParsed < 0 || consIDParsed >= len(s.procs) {
+	if consIDParsed < 0 || consIDParsed >= len(s.processors) {
 		return nil, errors.New("processor ID out of range")
 	}
 
-	return s.procs[consIDParsed], nil
+	return s.processors[consIDParsed], nil
 }
