@@ -178,6 +178,7 @@ func (p *partition) run() error {
 		case <-p.requestStats:
 			s := newPartitionStats()
 			s.copy(p.stats)
+			s.Now = time.Now()
 			s.Table.Hwm = p.hwm
 			s.Table.Offset = p.offset
 			p.responseStats <- s
