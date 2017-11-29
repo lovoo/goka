@@ -166,7 +166,7 @@ func TestProcessor_process(t *testing.T) {
 		st       = mock.NewMockStorage(ctrl)
 		consumer = mock.NewMockConsumer(ctrl)
 		producer = mock.NewMockProducer(ctrl)
-		pstats   = newStats()
+		pstats   = newPartitionStats()
 	)
 
 	p := &Processor{
@@ -255,7 +255,7 @@ func TestProcessor_processFail(t *testing.T) {
 		st       = mock.NewMockStorage(ctrl)
 		consumer = mock.NewMockConsumer(ctrl)
 		producer = mock.NewMockProducer(ctrl)
-		pstats   = newStats()
+		pstats   = newPartitionStats()
 	)
 
 	newProcessor := func() *Processor {

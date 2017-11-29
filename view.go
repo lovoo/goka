@@ -323,3 +323,11 @@ func (v *View) Recovered() bool {
 
 	return true
 }
+
+func (v *View) Stats() *ViewStats {
+	stats := newViewStats()
+	for i, p := range v.partitions {
+		stats.Partitions[int32(i)] = p.fetchStats()
+	}
+	return stats
+}

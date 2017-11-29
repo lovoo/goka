@@ -68,7 +68,7 @@ type context struct {
 	pviews  map[string]*partition
 	views   map[string]*View
 
-	pstats *partitionStats
+	pstats *PartitionStats
 
 	msg      *message
 	done     bool

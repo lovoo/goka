@@ -39,7 +39,9 @@ type partition struct {
 
 	recoveredOnce sync.Once
 
-	stats *partitionStats
+	stats         *PartitionStats
+	requestStats  chan bool
+	responseStats chan *PartitionStats
 }
 
 type kafkaProxy interface {
@@ -49,7 +51,7 @@ type kafkaProxy interface {
 	Stop()
 }
 
-type processCallback func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error)
+type processCallback func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error)
 
 func newPartition(log logger.Logger, topic string, cb processCallback, st *storageProxy, proxy kafkaProxy, reg metrics.Registry, channelSize int) *partition {
 	return &partition{
@@ -65,13 +67,16 @@ func newPartition(log logger.Logger, topic string, cb processCallback, st *stora
 		proxy:         proxy,
 		process:       cb,
 
-		stats: newStats(),
+		stats:         newPartitionStats(),
+		requestStats:  make(chan bool),
+		responseStats: make(chan *PartitionStats, 1),
 	}
 }
 
 func (p *partition) start() error {
 	defer close(p.done)
 	defer p.proxy.Stop()
+	p.stats.Table.StartTime = time.Now()
 
 	if !p.st.Stateless() {
 		err := p.st.Open()
@@ -95,6 +100,7 @@ func (p *partition) start() error {
 func (p *partition) startCatchup() error {
 	defer close(p.done)
 	defer p.proxy.Stop()
+	p.stats.Table.StartTime = time.Now()
 
 	err := p.st.Open()
 	if err != nil {
@@ -167,6 +173,13 @@ func (p *partition) run() error {
 			default:
 				return fmt.Errorf("load: cannot handle %T = %v", ev, ev)
 			}
+
+		case <-p.requestStats:
+			s := newPartitionStats()
+			s.copy(p.stats)
+			s.Table.Hwm = p.hwm
+			s.Table.Offset = p.offset
+			p.responseStats <- s
 
 		case <-p.dying:
 			return nil
@@ -277,6 +290,13 @@ func (p *partition) load(catchup bool) error {
 				p.stats.Table.Stalled = true
 			}
 
+		case <-p.requestStats:
+			s := newPartitionStats()
+			s.copy(p.stats)
+			s.Table.Hwm = p.hwm
+			s.Table.Offset = p.offset
+			p.responseStats <- s
+
 		case <-p.dying:
 			return nil
 		}
@@ -299,8 +319,26 @@ func (p *partition) storeEvent(msg *kafka.Message) error {
 func (p *partition) markRecovered() (err error) {
 	p.stats.Table.Recovered = true
 	p.recoveredOnce.Do(func() {
+		p.stats.Table.RecoveryTime = time.Now()
 		atomic.StoreInt32(&p.recoveredFlag, 1)
 		err = p.st.MarkRecovered()
 	})
 	return
+}
+
+func (p *partition) fetchStats() *PartitionStats {
+	select {
+	case p.requestStats <- true:
+	case <-p.dying:
+		// if closing, return empty stats
+		return newPartitionStats()
+	}
+
+	select {
+	case s := <-p.responseStats:
+		return s
+	case <-p.dying:
+		// if closing, return empty stats
+		return newPartitionStats()
+	}
 }

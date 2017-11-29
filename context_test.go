@@ -59,7 +59,7 @@ func TestContext_Emit(t *testing.T) {
 		graph:  DefineGroup(group),
 		commit: func() { ack++ },
 		wg:     &sync.WaitGroup{},
-		pstats: newStats(),
+		pstats: newPartitionStats(),
 	}
 
 	// after that the message is processed
@@ -103,7 +103,7 @@ func TestContext_EmitError(t *testing.T) {
 		graph:  DefineGroup(group, Persist(new(codec.String))),
 		commit: func() { ack++ },
 		wg:     &sync.WaitGroup{},
-		pstats: newStats(),
+		pstats: newPartitionStats(),
 		failer: func(err error) {
 			ensure.StringContains(t, err.Error(), errToEmit.Error())
 		},
@@ -262,7 +262,7 @@ func TestContext_Set(t *testing.T) {
 		graph:   DefineGroup(group, Persist(new(codec.String))),
 		storage: storage,
 		wg:      new(sync.WaitGroup),
-		pstats:  newStats(),
+		pstats:  newPartitionStats(),
 		commit:  func() { ack++ },
 		msg:     &message{Offset: offset},
 	}
@@ -300,7 +300,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 	)
 	graph := DefineGroup(group, Persist(new(codec.String)))
 	ctx := &context{
-		pstats:  newStats(),
+		pstats:  newPartitionStats(),
 		wg:      wg,
 		graph:   graph,
 		msg:     &message{Key: key, Offset: offset},
@@ -340,7 +340,7 @@ func TestContext_SetErrors(t *testing.T) {
 	)
 
 	ctx := &context{
-		pstats:  newStats(),
+		pstats:  newPartitionStats(),
 		wg:      wg,
 		graph:   DefineGroup(group, Persist(new(codec.String))),
 		msg:     &message{Key: key, Offset: offset},
@@ -395,7 +395,7 @@ func TestContext_Loopback(t *testing.T) {
 	ctx := &context{
 		graph:  graph,
 		msg:    new(message),
-		pstats: newStats(),
+		pstats: newPartitionStats(),
 		emitter: func(tp string, k string, v []byte) *kafka.Promise {
 			cnt++
 			ensure.DeepEqual(t, tp, graph.LoopStream().Topic())

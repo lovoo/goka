@@ -635,7 +635,7 @@ func (g *Processor) removePartition(partition int32) {
 // context builder
 ///////////////////////////////////////////////////////////////////////////////
 
-func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
+func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 	g.m.RLock()
 	views := g.partitionViews[msg.Partition]
 	g.m.RUnlock()
@@ -746,4 +746,20 @@ func (g *Processor) Recovered() bool {
 	}
 
 	return true
+}
+
+func (g *Processor) Stats() *ProcessorStats {
+	stats := newProcessorStats(len(g.partitions))
+	for i, p := range g.partitions {
+		stats.Group[i] = p.fetchStats()
+	}
+	for i, p := range g.partitionViews {
+		for t, tp := range p {
+			stats.Joined[i][t] = tp.fetchStats()
+		}
+	}
+	for t, v := range g.views {
+		stats.Lookup[t] = v.Stats()
+	}
+	return stats
 }

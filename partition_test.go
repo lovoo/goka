@@ -122,7 +122,7 @@ func TestPartition_runStateless(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Data, value)
@@ -175,7 +175,7 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
 		return 0, nil
 	}
@@ -247,7 +247,7 @@ func TestPartition_runStateful(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Data, value)
@@ -327,7 +327,7 @@ func TestPartition_runStatefulWithError(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 		if msg.Topic == "error" {
 			return 0, errors.New("some error")
 		}
@@ -407,7 +407,7 @@ func TestPartition_loadStateful(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Topic, "some-other-topic")
