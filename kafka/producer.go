@@ -5,7 +5,6 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/logger"
-	metrics "github.com/rcrowley/go-metrics"
 )
 
 // Producer abstracts the kafka producer
@@ -23,7 +22,7 @@ type producer struct {
 }
 
 // NewProducer creates new kafka producer for passed brokers.
-func NewProducer(brokers []string, config *sarama.Config, registry metrics.Registry, log logger.Logger) (Producer, error) {
+func NewProducer(brokers []string, config *sarama.Config, log logger.Logger) (Producer, error) {
 	aprod, err := sarama.NewAsyncProducer(brokers, config)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to start Sarama producer: %v", err)

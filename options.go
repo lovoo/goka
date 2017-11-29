@@ -21,7 +21,7 @@ type UpdateCallback func(s storage.Storage, partition int32, key string, value [
 
 // StorageBuilder creates a local storage (a persistent cache) for a topic
 // table. StorageBuilder creates one storage for each partition of the topic.
-type StorageBuilder func(topic string, partition int32, reg metrics.Registry) (storage.Storage, error)
+type StorageBuilder func(topic string, partition int32) (storage.Storage, error)
 
 ///////////////////////////////////////////////////////////////////////////////
 // default values
@@ -29,8 +29,7 @@ type StorageBuilder func(topic string, partition int32, reg metrics.Registry) (s
 
 const (
 	defaultBaseStoragePath = "/tmp/goka"
-
-	defaultClientID = "goka"
+	defaultClientID        = "goka"
 )
 
 // DefaultProcessorStoragePath is the default path where processor state
@@ -60,7 +59,7 @@ func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte)
 // DefaultStorageBuilder builds a LevelDB storage with default configuration.
 // The database will be stored in the given path.
 func DefaultStorageBuilder(path string) StorageBuilder {
-	return func(topic string, partition int32, reg metrics.Registry) (storage.Storage, error) {
+	return func(topic string, partition int32) (storage.Storage, error) {
 		fp := filepath.Join(path, fmt.Sprintf("%s.%d", topic, partition))
 		db, err := leveldb.OpenFile(fp, nil)
 		if err != nil {
@@ -79,20 +78,20 @@ func DefaultHasher() func() hash.Hash32 {
 
 }
 
-type consumerBuilder func(brokers []string, group string, clientID string, registry metrics.Registry) (kafka.Consumer, error)
-type producerBuilder func(brokers []string, registry metrics.Registry) (kafka.Producer, error)
+type consumerBuilder func(brokers []string, group string, clientID string) (kafka.Consumer, error)
+type producerBuilder func(brokers []string) (kafka.Producer, error)
 type topicmgrBuilder func(brokers []string) (kafka.TopicManager, error)
 
-func defaultConsumerBuilder(brokers []string, group string, clientID string, registry metrics.Registry) (kafka.Consumer, error) {
-	config := kafka.CreateDefaultSaramaConfig(clientID, nil, registry)
-	return kafka.NewSaramaConsumer(brokers, group, config, registry)
+func defaultConsumerBuilder(brokers []string, group string, clientID string) (kafka.Consumer, error) {
+	config := kafka.CreateDefaultSaramaConfig(clientID, nil, metrics.DefaultRegistry)
+	return kafka.NewSaramaConsumer(brokers, group, config)
 }
 
 func defaultProducerBuilder(clientID string, hasher func() hash.Hash32, log logger.Logger) producerBuilder {
-	return func(brokers []string, registry metrics.Registry) (kafka.Producer, error) {
+	return func(brokers []string) (kafka.Producer, error) {
 		partitioner := sarama.NewCustomHashPartitioner(hasher)
-		config := kafka.CreateDefaultSaramaConfig(clientID, partitioner, registry)
-		return kafka.NewProducer(brokers, &config.Config, registry, log)
+		config := kafka.CreateDefaultSaramaConfig(clientID, partitioner, metrics.DefaultRegistry)
+		return kafka.NewProducer(brokers, &config.Config, log)
 	}
 }
 
@@ -113,7 +112,6 @@ type poptions struct {
 	clientID string
 
 	updateCallback       UpdateCallback
-	registry             metrics.Registry
 	partitionChannelSize int
 	hasher               func() hash.Hash32
 	nilHandling          NilHandling
@@ -124,8 +122,6 @@ type poptions struct {
 		producer producerBuilder
 		topicmgr topicmgrBuilder
 	}
-	gokaRegistry  metrics.Registry
-	kafkaRegistry metrics.Registry
 }
 
 // WithUpdateCallback defines the callback called upon recovering a message
@@ -165,7 +161,7 @@ func WithTopicManager(tm kafka.TopicManager) ProcessorOption {
 // WithConsumer replaces goka's default consumer.
 func WithConsumer(c kafka.Consumer) ProcessorOption {
 	return func(o *poptions) {
-		o.builders.consumer = func(brokers []string, group string, clientID string, registry metrics.Registry) (kafka.Consumer, error) {
+		o.builders.consumer = func(brokers []string, group string, clientID string) (kafka.Consumer, error) {
 			if c == nil {
 				return nil, fmt.Errorf("consumer cannot be nil")
 			}
@@ -177,20 +173,12 @@ func WithConsumer(c kafka.Consumer) ProcessorOption {
 // WithProducer replaces goka's default producer.
 func WithProducer(p kafka.Producer) ProcessorOption {
 	return func(o *poptions) {
-		o.builders.producer = func(brokers []string, registry metrics.Registry) (kafka.Producer, error) {
+		o.builders.producer = func(brokers []string) (kafka.Producer, error) {
 			if p == nil {
 				return nil, fmt.Errorf("producer cannot be nil")
 			}
 			return p, nil
 		}
-	}
-}
-
-// WithKafkaMetrics sets a go-metrics registry to collect Kafka metrics.
-// The metric-points are https://godoc.org/github.com/Shopify/sarama
-func WithKafkaMetrics(registry metrics.Registry) ProcessorOption {
-	return func(o *poptions) {
-		o.kafkaRegistry = registry
 	}
 }
 
@@ -208,15 +196,6 @@ func WithPartitionChannelSize(size int) ProcessorOption {
 func WithLogger(log logger.Logger) ProcessorOption {
 	return func(o *poptions) {
 		o.log = log
-	}
-}
-
-// WithRegistry sets the metrics registry the processor should use. The registry
-// should not be prefixed, otherwise the monitor web view won't work as it
-// expects metrics of certain name.
-func WithRegistry(r metrics.Registry) ProcessorOption {
-	return func(o *poptions) {
-		o.registry = r
 	}
 }
 
@@ -269,14 +248,6 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 		opt.builders.topicmgr = defaultTopicManagerBuilder
 	}
 
-	// prefix registry
-	opt.gokaRegistry = metrics.NewPrefixedChildRegistry(opt.registry, fmt.Sprintf("goka.processor-%s.", group))
-
-	// Set a default registry to pass it to the kafka producer/consumer builders.
-	if opt.kafkaRegistry == nil {
-		opt.kafkaRegistry = metrics.NewPrefixedChildRegistry(opt.registry, fmt.Sprintf("kafka.processor-%s.", group))
-	}
-
 	return nil
 }
 
@@ -292,7 +263,6 @@ type voptions struct {
 	clientID             string
 	tableCodec           Codec
 	updateCallback       UpdateCallback
-	registry             metrics.Registry
 	partitionChannelSize int
 	hasher               func() hash.Hash32
 
@@ -300,17 +270,6 @@ type voptions struct {
 		storage  StorageBuilder
 		consumer consumerBuilder
 		topicmgr topicmgrBuilder
-	}
-	gokaRegistry  metrics.Registry
-	kafkaRegistry metrics.Registry
-}
-
-// WithViewRegistry sets the metrics registry the processor should use. The
-// registry should not be prefixed, otherwise the monitor web view won't work as
-// it expects metrics of certain name.
-func WithViewRegistry(r metrics.Registry) ViewOption {
-	return func(o *voptions) {
-		o.registry = r
 	}
 }
 
@@ -340,7 +299,7 @@ func WithViewStorageBuilder(sb StorageBuilder) ViewOption {
 // WithViewConsumer replaces goka's default view consumer. Mainly for testing.
 func WithViewConsumer(c kafka.Consumer) ViewOption {
 	return func(o *voptions) {
-		o.builders.consumer = func(brokers []string, group string, clientID string, registry metrics.Registry) (kafka.Consumer, error) {
+		o.builders.consumer = func(brokers []string, group string, clientID string) (kafka.Consumer, error) {
 			if c == nil {
 				return nil, fmt.Errorf("consumer cannot be nil")
 			}
@@ -358,14 +317,6 @@ func WithViewTopicManager(tm kafka.TopicManager) ViewOption {
 			}
 			return tm, nil
 		}
-	}
-}
-
-// WithViewKafkaMetrics sets a go-metrics registry to collect Kafka metrics.
-// The metric-points are https://godoc.org/github.com/Shopify/sarama
-func WithViewKafkaMetrics(registry metrics.Registry) ViewOption {
-	return func(o *voptions) {
-		o.kafkaRegistry = registry
 	}
 }
 
@@ -412,14 +363,6 @@ func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 		opt.builders.topicmgr = defaultTopicManagerBuilder
 	}
 
-	// Set a default registry to pass it to the kafka consumer builders.
-	if opt.kafkaRegistry == nil {
-		opt.kafkaRegistry = metrics.NewPrefixedChildRegistry(opt.registry, fmt.Sprintf("kafka.view-%s.", topic))
-	}
-
-	// prefix registry
-	opt.gokaRegistry = metrics.NewPrefixedChildRegistry(opt.registry, fmt.Sprintf("goka.view-%s.", topic))
-
 	return nil
 }
 
@@ -436,15 +379,13 @@ type eoptions struct {
 	log      logger.Logger
 	clientID string
 
-	registry metrics.Registry
-	codec    Codec
-	hasher   func() hash.Hash32
+	codec  Codec
+	hasher func() hash.Hash32
 
 	builders struct {
 		topicmgr topicmgrBuilder
 		producer producerBuilder
 	}
-	kafkaRegistry metrics.Registry
 }
 
 // WithEmitterLogger sets the logger the emitter should use. By default,
@@ -477,21 +418,12 @@ func WithEmitterTopicManager(tm kafka.TopicManager) EmitterOption {
 // WithEmitterProducer replaces goka's default producer. Mainly for testing.
 func WithEmitterProducer(p kafka.Producer) EmitterOption {
 	return func(o *eoptions) {
-		o.builders.producer = func(brokers []string, registry metrics.Registry) (kafka.Producer, error) {
+		o.builders.producer = func(brokers []string) (kafka.Producer, error) {
 			if p == nil {
 				return nil, fmt.Errorf("producer cannot be nil")
 			}
 			return p, nil
 		}
-	}
-}
-
-// WithEmitterKafkaMetrics sets a go-metrics registry to collect
-// kafka metrics.
-// The metric-points are https://godoc.org/github.com/Shopify/sarama
-func WithEmitterKafkaMetrics(registry metrics.Registry) EmitterOption {
-	return func(o *eoptions) {
-		o.kafkaRegistry = registry
 	}
 }
 
@@ -518,14 +450,6 @@ func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = defaultTopicManagerBuilder
 	}
-
-	// Set a default registry to pass it to the kafka producer/consumer builders.
-	if opt.kafkaRegistry == nil {
-		opt.kafkaRegistry = metrics.NewPrefixedRegistry("goka.kafka.producer.")
-	}
-
-	// prefix registry
-	opt.registry = metrics.NewPrefixedRegistry("goka.producer.")
 
 	return nil
 }

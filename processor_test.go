@@ -20,7 +20,6 @@ import (
 
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
-	metrics "github.com/rcrowley/go-metrics"
 )
 
 var (
@@ -28,7 +27,7 @@ var (
 )
 
 func nullStorageBuilder() StorageBuilder {
-	return func(topic string, partition int32, reg metrics.Registry) (storage.Storage, error) {
+	return func(topic string, partition int32) (storage.Storage, error) {
 		return &storage.Null{}, nil
 	}
 }
@@ -556,7 +555,7 @@ func TestProcessor_StartWithErrorBeforeRebalance(t *testing.T) {
 				err      error
 				consumer = mock.NewMockConsumer(ctrl)
 				st       = mock.NewMockStorage(ctrl)
-				sb       = func(topic string, par int32, r metrics.Registry) (storage.Storage, error) {
+				sb       = func(topic string, par int32) (storage.Storage, error) {
 					return st, nil
 				}
 				final = make(chan bool)
@@ -596,7 +595,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32) (storage.Storage, error) {
 			return st, nil
 		}
 		final = make(chan bool)
@@ -677,7 +676,7 @@ func TestProcessor_StartWithTableWithErrorAfterRebalance(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32) (storage.Storage, error) {
 			return st, nil
 		}
 		final     = make(chan bool)
@@ -797,7 +796,7 @@ func TestProcessor_Start(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32) (storage.Storage, error) {
 			return st, nil
 		}
 		final = make(chan bool)
@@ -946,7 +945,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32) (storage.Storage, error) {
 			return st, nil
 		}
 		final    = make(chan bool)
@@ -1070,7 +1069,7 @@ func TestProcessor_rebalanceError(t *testing.T) {
 		wait     = make(chan bool)
 		ch       = make(chan kafka.Event)
 		p        = createProcessor(t, ctrl, consumer, 1,
-			func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
+			func(topic string, partition int32) (storage.Storage, error) {
 				return nil, errors.New("some error")
 			})
 	)
@@ -1104,7 +1103,7 @@ func TestProcessor_HasGet(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)

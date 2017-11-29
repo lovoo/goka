@@ -11,7 +11,6 @@ import (
 	"github.com/lovoo/goka/storage"
 
 	"github.com/Shopify/sarama"
-	metrics "github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -53,7 +52,7 @@ type kafkaProxy interface {
 
 type processCallback func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error)
 
-func newPartition(log logger.Logger, topic string, cb processCallback, st *storageProxy, proxy kafkaProxy, reg metrics.Registry, channelSize int) *partition {
+func newPartition(log logger.Logger, topic string, cb processCallback, st *storageProxy, proxy kafkaProxy, channelSize int) *partition {
 	return &partition{
 		log:   log,
 		topic: topic,
