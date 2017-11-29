@@ -15,62 +15,31 @@ import (
 )
 
 const (
-	mxStatus               = "status"
-	mxConsumed             = "consumed_messages"
-	mxConsumedRate         = "consumed_messages_rate"
-	mxConsumedOffset       = "consumed_offset"
-	mxConsumedPending      = "consumed_messages_pending"
-	mxConsumptionDelay     = "consumption_delay"
-	mxProcessingTime       = "processing_time"
-	mxRecoverHwm           = "recover_hwm"
-	mxPartitionLoaderHwm   = "partition_loader_hwm" // current high water mark of the partition loader.
-	mxRecoverStartOffset   = "recover_start_offset"
-	mxRecoverCurrentOffset = "recover_current_offset"
-
 	defaultPartitionChannelSize = 10
 	stallPeriod                 = 30 * time.Second
 	stalledTimeout              = 2 * time.Minute
-)
-
-const (
-	partitionOpen int64 = iota
-	partitionRecovering
-	partitionRecoverStalled
-	partitionRecovered
-	partitionRunning
-	partitionClosing
-	partitionClosed
 )
 
 type partition struct {
 	log   logger.Logger
 	topic string
 
-	ch         chan kafka.Event
-	dying      chan bool
-	done       chan bool
-	stopFlag   int64
-	readyFlag  int32
-	initialHwm int64
+	ch      chan kafka.Event
+	st      *storageProxy
+	proxy   kafkaProxy
+	process processCallback
 
-	st            *storageProxy
+	dying    chan bool
+	done     chan bool
+	stopFlag int64
+
+	recoveredFlag int32
+	hwm           int64
+	offset        int64
+
 	recoveredOnce sync.Once
-	proxy         kafkaProxy
-	process       processCallback
 
-	// metrics
-	registry          metrics.Registry
-	mxStatus          metrics.Gauge   // partition status = ?
-	mxConsumed        metrics.Counter // number of processed messages
-	mxConsumedRate    metrics.Meter   // rate of processed messages
-	mxConsumedPending metrics.Gauge   // size of the partition channel (p.ch)
-	mxConsumedOffset  metrics.Gauge   // last offset processed
-
-	mxRecoverStartOffset   metrics.Gauge
-	mxRecoverCurrentOffset metrics.Gauge
-
-	mxRecoverHwm         metrics.Gauge
-	mxPartitionLoaderHwm metrics.Gauge
+	stats *partitionStats
 }
 
 type kafkaProxy interface {
@@ -80,7 +49,7 @@ type kafkaProxy interface {
 	Stop()
 }
 
-type processCallback func(msg *message, st storage.Storage, wg *sync.WaitGroup) error
+type processCallback func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error)
 
 func newPartition(log logger.Logger, topic string, cb processCallback, st *storageProxy, proxy kafkaProxy, reg metrics.Registry, channelSize int) *partition {
 	return &partition{
@@ -96,24 +65,13 @@ func newPartition(log logger.Logger, topic string, cb processCallback, st *stora
 		proxy:         proxy,
 		process:       cb,
 
-		// metrics
-		registry:               reg,
-		mxConsumed:             metrics.GetOrRegisterCounter(mxConsumed, reg),
-		mxConsumedRate:         metrics.GetOrRegisterMeter(mxConsumedRate, reg),
-		mxConsumedPending:      metrics.GetOrRegisterGauge(mxConsumedPending, reg),
-		mxConsumedOffset:       metrics.GetOrRegisterGauge(mxConsumedOffset, reg),
-		mxStatus:               metrics.GetOrRegisterGauge(mxStatus, reg),
-		mxRecoverHwm:           metrics.GetOrRegisterGauge(mxRecoverHwm, reg),
-		mxPartitionLoaderHwm:   metrics.GetOrRegisterGauge(mxPartitionLoaderHwm, reg),
-		mxRecoverStartOffset:   metrics.GetOrRegisterGauge(mxRecoverStartOffset, reg),
-		mxRecoverCurrentOffset: metrics.GetOrRegisterGauge(mxRecoverCurrentOffset, reg),
+		stats: newStats(),
 	}
 }
 
 func (p *partition) start() error {
 	defer close(p.done)
 	defer p.proxy.Stop()
-	defer p.mxStatus.Update(partitionClosed)
 
 	if !p.st.Stateless() {
 		err := p.st.Open()
@@ -131,8 +89,6 @@ func (p *partition) start() error {
 	if atomic.LoadInt64(&p.stopFlag) == 1 {
 		return nil
 	}
-
-	p.mxStatus.Update(partitionRunning)
 	return p.run()
 }
 
@@ -187,28 +143,20 @@ func (p *partition) run() error {
 				if ev.Topic == p.topic {
 					return fmt.Errorf("received message from group table topic after recovery")
 				}
-				var (
-					msg = newMessage(ev)
-					now = time.Now()
-				)
 
-				err := p.process(msg, p.st, &wg)
+				updates, err := p.process(newMessage(ev), p.st, &wg, p.stats)
 				if err != nil {
 					return fmt.Errorf("error processing message: %v", err)
 				}
+				p.offset += int64(updates)
+				p.hwm = p.offset + 1
 
 				// metrics
-				p.mxConsumed.Inc(1)
-				p.mxConsumedPending.Update(int64(len(p.ch)))
-				p.mxConsumedRate.Mark(1)
-				p.mxConsumedOffset.Update(msg.Offset)
-				metrics.GetOrRegisterCounter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumed), p.registry).Inc(1)
-				metrics.GetOrRegisterMeter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedRate), p.registry).Mark(1)
-				metrics.GetOrRegisterGauge(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedOffset), p.registry).Update(msg.Offset)
+				p.stats.Input.Count[ev.Topic]++
+				p.stats.Input.Bytes[ev.Topic] += len(ev.Value)
 				if !ev.Timestamp.IsZero() {
-					metrics.GetOrRegisterTimer(fmt.Sprintf("%s.%s", ev.Topic, mxConsumptionDelay), p.registry).UpdateSince(ev.Timestamp)
+					p.stats.Input.Delay[ev.Topic] = time.Since(ev.Timestamp)
 				}
-				metrics.GetOrRegisterTimer(fmt.Sprintf("%s.%s", ev.Topic, mxProcessingTime), p.registry).UpdateSince(now)
 
 			case *kafka.NOP:
 				// don't do anything but also don't log.
@@ -232,17 +180,15 @@ func (p *partition) run() error {
 ///////////////////////////////////////////////////////////////////////////////
 
 func (p *partition) catchup() error {
-	p.mxStatus.Update(partitionRecovering)
 	return p.load(true)
 }
 
 func (p *partition) recover() error {
-	p.mxStatus.Update(partitionRecovering)
 	return p.load(false)
 }
 
-func (p *partition) ready() bool {
-	return atomic.LoadInt32(&p.readyFlag) == 1
+func (p *partition) recovered() bool {
+	return atomic.LoadInt32(&p.recoveredFlag) == 1
 }
 
 func (p *partition) load(catchup bool) error {
@@ -253,9 +199,6 @@ func (p *partition) load(catchup bool) error {
 	}
 	p.proxy.Add(p.topic, local)
 	defer p.proxy.Remove(p.topic)
-
-	// unregister partition consumption delay once partition stops or goes into run mode
-	defer p.registry.Unregister(fmt.Sprintf("%s.%s", p.topic, mxConsumptionDelay))
 
 	stallTicker := time.NewTicker(stallPeriod)
 	defer stallTicker.Stop()
@@ -272,37 +215,30 @@ func (p *partition) load(catchup bool) error {
 
 			switch ev := ev.(type) {
 			case *kafka.BOF:
-				p.mxRecoverStartOffset.Update(ev.Offset)
-				p.mxRecoverHwm.Update(ev.Hwm)
-				p.mxPartitionLoaderHwm.Update(ev.Hwm)
-				p.initialHwm = ev.Hwm
+				p.hwm = ev.Hwm
 
-				// nothing to recover
 				if ev.Offset == ev.Hwm {
-					p.mxStatus.Update(partitionRecovered)
-					atomic.StoreInt32(&p.readyFlag, 1)
-				}
-
-			case *kafka.EOF:
-				p.mxPartitionLoaderHwm.Update(ev.Hwm)
-				if atomic.LoadInt32(&p.readyFlag) == 0 {
-					p.log.Printf("readyFlag was false when EOF arrived")
-					p.mxStatus.Update(partitionRecovered)
-					atomic.StoreInt32(&p.readyFlag, 1)
-					var err error
-					p.recoveredOnce.Do(func() {
-						err = p.st.MarkRecovered()
-					})
-					if err != nil {
+					// nothing to recover
+					if err := p.markRecovered(); err != nil {
 						return fmt.Errorf("error setting recovered: %v", err)
 					}
 				}
+
+			case *kafka.EOF:
+				p.offset = ev.Hwm - 1
+				p.hwm = ev.Hwm
+
+				if err := p.markRecovered(); err != nil {
+					return fmt.Errorf("error setting recovered: %v", err)
+				}
+
 				if catchup {
 					continue
 				}
 				return nil
 
 			case *kafka.Message:
+				lastMessage = time.Now()
 				if ev.Topic != p.topic {
 					return fmt.Errorf("load: wrong topic = %s", ev.Topic)
 				}
@@ -310,29 +246,23 @@ func (p *partition) load(catchup bool) error {
 				if err != nil {
 					return fmt.Errorf("load: error updating storage: %v", err)
 				}
-				if ev.Offset >= p.initialHwm-1 {
-					atomic.StoreInt32(&p.readyFlag, 1)
-				}
-				lastMessage = time.Now()
-				// update metrics
-				//p.mxConsumedRate.Mark(1)
-				//metrics.GetOrRegisterMeter(fmt.Sprintf("%s.%s", ev.Topic, mxConsumedRate), p.registry).Mark(1)
-				//if !ev.Timestamp.IsZero() {
-				//		metrics.GetOrRegisterTimer(fmt.Sprintf("%s.%s", ev.Topic, mxConsumptionDelay), p.registry).UpdateSince(ev.Timestamp)
-				//	}
-				//	p.mxRecoverCurrentOffset.Update(ev.Offset)
-				if ev.Offset < p.initialHwm-1 {
-					p.mxStatus.Update(partitionRecovering)
-				} else {
-					p.mxStatus.Update(partitionRecovered)
-					var err error
-					p.recoveredOnce.Do(func() {
-						err = p.st.MarkRecovered()
-					})
-					if err != nil {
+				p.offset = ev.Offset
+				if p.offset >= p.hwm-1 {
+					if err := p.markRecovered(); err != nil {
 						return fmt.Errorf("error setting recovered: %v", err)
 					}
 				}
+
+				// update metrics
+				p.stats.Input.Count[ev.Topic]++
+				p.stats.Input.Bytes[ev.Topic] += len(ev.Value)
+				if !ev.Timestamp.IsZero() {
+					p.stats.Input.Delay[ev.Topic] = time.Since(ev.Timestamp)
+				}
+				if ev.Offset < p.hwm-1 {
+					p.stats.Table.Stalled = false
+				}
+
 			case *kafka.NOP:
 				// don't do anything
 
@@ -344,7 +274,7 @@ func (p *partition) load(catchup bool) error {
 			// only set to stalled, if the last message was earlier
 			// than the stalled timeout
 			if now.Sub(lastMessage) > stalledTimeout {
-				p.mxStatus.Update(partitionRecoverStalled)
+				p.stats.Table.Stalled = true
 			}
 
 		case <-p.dying:
@@ -358,12 +288,19 @@ func (p *partition) storeEvent(msg *kafka.Message) error {
 	if err != nil {
 		return fmt.Errorf("Error from the update callback while recovering from the log: %v", err)
 	}
-
-	// update offset in local storage
 	err = p.st.SetOffset(int64(msg.Offset))
 	if err != nil {
 		return fmt.Errorf("Error updating offset in local storage while recovering from the log: %v", err)
 	}
-
 	return nil
+}
+
+// mark storage as recovered
+func (p *partition) markRecovered() (err error) {
+	p.stats.Table.Recovered = true
+	p.recoveredOnce.Do(func() {
+		atomic.StoreInt32(&p.recoveredFlag, 1)
+		err = p.st.MarkRecovered()
+	})
+	return
 }

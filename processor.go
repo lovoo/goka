@@ -557,7 +557,7 @@ func (g *Processor) createPartition(id int32) error {
 	var wait []func() bool
 	if pviews, has := g.partitionViews[id]; has {
 		for _, p := range pviews {
-			wait = append(wait, p.ready)
+			wait = append(wait, p.recovered)
 		}
 	}
 	for _, v := range g.views {
@@ -635,7 +635,7 @@ func (g *Processor) removePartition(partition int32) {
 // context builder
 ///////////////////////////////////////////////////////////////////////////////
 
-func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
 	g.m.RLock()
 	views := g.partitionViews[msg.Partition]
 	g.m.RUnlock()
@@ -643,6 +643,7 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	ctx := &context{
 		graph: g.graph,
 
+		pstats: pstats,
 		pviews: views,
 		views:  g.views,
 		wg:     wg,
@@ -691,7 +692,7 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	switch {
 	case msg.Data == nil && g.opts.nilHandling == NilIgnore:
 		// drop nil messages
-		return nil
+		return 0, nil
 	case msg.Data == nil && g.opts.nilHandling == NilProcess:
 		// process nil messages without decoding them
 		m = nil
@@ -699,26 +700,27 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 		// get stream subcription
 		codec := g.graph.codec(msg.Topic)
 		if codec == nil {
-			return fmt.Errorf("cannot handle topic %s", msg.Topic)
+			return 0, fmt.Errorf("cannot handle topic %s", msg.Topic)
 		}
 
 		// decode message
 		m, err = codec.Decode(msg.Data)
 		if err != nil {
-			return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
+			return 0, fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
 		}
+	}
+
+	cb := g.graph.callback(msg.Topic)
+	if cb == nil {
+		return 0, fmt.Errorf("error processing message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
 	}
 
 	// start context and call ProcessorCallback
 	ctx.start()
 	defer ctx.finish() // execute even in case of panic
-	cb := g.graph.callback(msg.Topic)
-	if cb == nil {
-		return fmt.Errorf("error processing message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
-	}
 	cb(ctx, m)
 
-	return nil
+	return ctx.counters.stores, nil
 }
 
 // Recovered returns true when the processor has caught up with events from kafka.
@@ -731,14 +733,14 @@ func (g *Processor) Recovered() bool {
 
 	for _, part := range g.partitionViews {
 		for _, topicPart := range part {
-			if !topicPart.ready() {
+			if !topicPart.recovered() {
 				return false
 			}
 		}
 	}
 
 	for _, p := range g.partitions {
-		if !p.ready() {
+		if !p.recovered() {
 			return false
 		}
 	}

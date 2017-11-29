@@ -2,6 +2,7 @@ package goka
 
 import (
 	"errors"
+	"log"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -121,12 +122,12 @@ func TestPartition_runStateless(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Data, value)
 		step <- true
-		return nil
+		return 0, nil
 	}
 
 	p := newPartition(logger.Default(), topic, consume, newNullStorageProxy(0), proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
@@ -174,9 +175,9 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
-		return nil
+		return 0, nil
 	}
 
 	p := newPartition(logger.Default(), topic, consume, newNullStorageProxy(0),
@@ -246,12 +247,12 @@ func TestPartition_runStateful(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Data, value)
 		step <- true
-		return nil
+		return 0, nil
 	}
 
 	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, 0)
@@ -260,6 +261,7 @@ func TestPartition_runStateful(t *testing.T) {
 		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset),
+		st.EXPECT().MarkRecovered(),
 		proxy.EXPECT().Remove(topic),
 		proxy.EXPECT().AddGroup(),
 		st.EXPECT().Close().Return(nil),
@@ -268,12 +270,13 @@ func TestPartition_runStateful(t *testing.T) {
 
 	go func() {
 		err := p.start()
+		log.Printf("%v", err)
 		ensure.Nil(t, err)
 		close(wait)
 	}()
 
-	// partition should be marked ready after the HWM or EOF message
-	ensure.False(t, p.ready())
+	// partition should be marked recovered after the HWM or EOF message
+	ensure.False(t, p.recovered())
 	p.ch <- &kafka.BOF{
 		Partition: par,
 		Topic:     topic,
@@ -288,7 +291,7 @@ func TestPartition_runStateful(t *testing.T) {
 		Hwm:       offset,
 	}
 	p.ch <- new(kafka.NOP)
-	ensure.True(t, p.ready())
+	ensure.True(t, p.recovered())
 
 	// message will be processed
 	p.ch <- &kafka.Message{
@@ -324,15 +327,15 @@ func TestPartition_runStatefulWithError(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
 		if msg.Topic == "error" {
-			return errors.New("some error")
+			return 0, errors.New("some error")
 		}
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Data, value)
 		step <- true
-		return nil
+		return 0, nil
 	}
 
 	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
@@ -404,13 +407,13 @@ func TestPartition_loadStateful(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *partitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Topic, "some-other-topic")
 		ensure.DeepEqual(t, msg.Data, value)
 		step <- true
-		return nil
+		return 0, nil
 	}
 
 	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, DefaultUpdate), proxy,
@@ -675,7 +678,7 @@ func TestPartition_catchupStateful(t *testing.T) {
 		Hwm:       offset,
 	}
 	p.ch <- new(kafka.NOP)
-	ensure.True(t, p.ready())
+	ensure.True(t, p.recovered())
 
 	// message will not terminate load (catchup modus)
 	p.ch <- &kafka.EOF{
@@ -684,7 +687,7 @@ func TestPartition_catchupStateful(t *testing.T) {
 		Hwm:       offset,
 	}
 	p.ch <- new(kafka.NOP)
-	ensure.True(t, p.ready())
+	ensure.True(t, p.recovered())
 
 	// message will be loaded (Topic is tableTopic)
 	p.ch <- &kafka.Message{
@@ -790,7 +793,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 		Hwm:       offset,
 	}
 	p.ch <- new(kafka.NOP)
-	ensure.True(t, p.ready())
+	ensure.True(t, p.recovered())
 
 	// message will not terminate load (catchup modus)
 	p.ch <- &kafka.EOF{
@@ -799,7 +802,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 		Hwm:       offset,
 	}
 	p.ch <- new(kafka.NOP)
-	ensure.True(t, p.ready())
+	ensure.True(t, p.recovered())
 
 	// message will cause error (wrong topic)
 	p.ch <- &kafka.Message{
@@ -818,7 +821,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 	ensure.Nil(t, err)
 }
 
-func BenchmarkFib10(b *testing.B) {
+func BenchmarkPartition_load(b *testing.B) {
 	var (
 		key          = "key"
 		par    int32 = 1

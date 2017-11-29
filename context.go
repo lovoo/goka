@@ -68,6 +68,8 @@ type context struct {
 	pviews  map[string]*partition
 	views   map[string]*View
 
+	pstats *partitionStats
+
 	msg      *message
 	done     bool
 	counters struct {
@@ -131,6 +133,9 @@ func (ctx *context) emit(topic string, key string, value []byte) {
 		}
 		ctx.emitDone(err)
 	})
+
+	ctx.pstats.Output.Count[topic]++
+	ctx.pstats.Output.Bytes[topic] += len(value)
 }
 
 func (ctx *context) Delete() {
@@ -263,10 +268,14 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 		return fmt.Errorf("error storing value: %v", err)
 	}
 
+	table := ctx.graph.GroupTable().Topic()
 	ctx.counters.emits++
-	ctx.emitter(ctx.graph.GroupTable().Topic(), key, encodedValue).Then(func(err error) {
+	ctx.emitter(table, key, encodedValue).Then(func(err error) {
 		ctx.emitDone(err)
 	})
+
+	ctx.pstats.Output.Count[table]++
+	ctx.pstats.Output.Bytes[table] += len(encodedValue)
 	return nil
 }
 

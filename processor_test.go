@@ -166,6 +166,7 @@ func TestProcessor_process(t *testing.T) {
 		st       = mock.NewMockStorage(ctrl)
 		consumer = mock.NewMockConsumer(ctrl)
 		producer = mock.NewMockProducer(ctrl)
+		pstats   = newStats()
 	)
 
 	p := &Processor{
@@ -183,8 +184,9 @@ func TestProcessor_process(t *testing.T) {
 	// no emits
 	consumer.EXPECT().Commit("sometopic", int32(1), int64(123))
 	msg := &message{Topic: "sometopic", Partition: 1, Offset: 123, Data: []byte("something")}
-	err := p.process(msg, st, &wg)
+	updates, err := p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 0)
 
 	// emit something
 	promise := new(kafka.Promise)
@@ -196,8 +198,9 @@ func TestProcessor_process(t *testing.T) {
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.Emit("anothertopic", "key", "message")
 	}
-	err = p.process(msg, st, &wg)
+	updates, err = p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 0)
 	promise.Finish(nil)
 
 	// store something
@@ -213,9 +216,34 @@ func TestProcessor_process(t *testing.T) {
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
-	err = p.process(msg, st, &wg)
+	updates, err = p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 1)
 	promise.Finish(nil)
+
+	// store something twice
+	promise = new(kafka.Promise)
+	promise2 := new(kafka.Promise)
+	gomock.InOrder(
+		st.EXPECT().Set("key", []byte("message")),
+		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		st.EXPECT().Set("key", []byte("message2")),
+		producer.EXPECT().Emit("group-state", "key", []byte("message2")).Return(promise2),
+		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
+		st.EXPECT().SetOffset(int64(323)),
+		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
+	)
+	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
+	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
+		ctx.SetValue("message")
+		ctx.SetValue("message2")
+	}
+	updates, err = p.process(msg, st, &wg, pstats)
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 2)
+	promise.Finish(nil)
+	promise2.Finish(nil)
+
 }
 
 func TestProcessor_processFail(t *testing.T) {
@@ -227,6 +255,7 @@ func TestProcessor_processFail(t *testing.T) {
 		st       = mock.NewMockStorage(ctrl)
 		consumer = mock.NewMockConsumer(ctrl)
 		producer = mock.NewMockProducer(ctrl)
+		pstats   = newStats()
 	)
 
 	newProcessor := func() *Processor {
@@ -263,8 +292,9 @@ func TestProcessor_processFail(t *testing.T) {
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
-	err := p.process(msg, st, &wg)
+	updates, err := p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 1)
 	promise.Finish(nil)
 	err = doTimed(t, func() {
 		<-p.dead
@@ -286,8 +316,9 @@ func TestProcessor_processFail(t *testing.T) {
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
-	err = p.process(msg, st, &wg)
+	updates, err = p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 1)
 	promise.Finish(nil)
 	err = doTimed(t, func() {
 		<-p.dead
@@ -310,8 +341,9 @@ func TestProcessor_processFail(t *testing.T) {
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
-	err = p.process(msg, st, &wg)
+	updates, err = p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 1)
 	promise.Finish(nil)
 	err = doTimed(t, func() {
 		<-p.dead
@@ -992,9 +1024,9 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	ch <- &kafka.EOF{
 		Partition: 1,
 	}
-	ensure.False(t, p.partitionViews[1][table].ready())
+	ensure.False(t, p.partitionViews[1][table].recovered())
 	time.Sleep(delayProxyInterval)
-	ensure.False(t, p.partitionViews[1][table].ready())
+	ensure.False(t, p.partitionViews[1][table].recovered())
 	ch <- &kafka.EOF{
 		Topic:     table,
 		Partition: 1,
@@ -1002,7 +1034,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	err = syncWith(t, ch)
 	ensure.Nil(t, err)
 	time.Sleep(delayProxyInterval)
-	ensure.True(t, p.partitionViews[1][table].ready())
+	ensure.True(t, p.partitionViews[1][table].recovered())
 
 	// 5. process messages in partition 1
 	ch <- &kafka.Message{

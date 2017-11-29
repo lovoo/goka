@@ -316,7 +316,7 @@ func (v *View) run() {
 // Recovered returns true when the view has caught up with events from kafka.
 func (v *View) Recovered() bool {
 	for _, p := range v.partitions {
-		if !p.ready() {
+		if !p.recovered() {
 			return false
 		}
 	}
