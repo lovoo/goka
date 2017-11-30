@@ -1,5 +1,8 @@
 {{define "menu_content"}}
 {{range $index, $proc := .processors}}
-  <li><a href="{{$.base_path}}/processor/{{$index}}">{{$proc.Graph.Group}}</a></li>
+  <li><a href="{{$.base_path}}/processor/{{$index}}">{{$proc.Graph.Group}} (processor)</a></li>
+{{end}}
+{{range $index, $proc := .views}}
+  <li><a href="{{$.base_path}}/view/{{$index}}">{{$proc.Topic}} (view)</a></li>
 {{end}}
 {{end}}

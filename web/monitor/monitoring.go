@@ -2,7 +2,7 @@ package monitor
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 
@@ -42,8 +42,9 @@ func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
 
 	sub := router.PathPrefix(basePath).Subrouter()
 	sub.HandleFunc("/", srv.index)
-	sub.HandleFunc("/processor/{processorId}", srv.renderProcessor)
-	sub.HandleFunc("/processordata/{processorId}", srv.renderProcessorData)
+	sub.HandleFunc("/processor/{idx}", srv.renderProcessor)
+	sub.HandleFunc("/view/{idx}", srv.renderView)
+	sub.HandleFunc("/data/{type}/{idx}", srv.renderData)
 
 	return srv
 }
@@ -93,16 +94,37 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) renderProcessorData(w http.ResponseWriter, r *http.Request) {
+func (s *Server) renderData(w http.ResponseWriter, r *http.Request) {
 	s.m.RLock()
 	defer s.m.RUnlock()
 
-	proc, err := s.getProcessorByIdx(r)
+	var stats interface{}
+	vars := mux.Vars(r)
+	idx, err := strconv.Atoi(mux.Vars(r)["idx"])
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	marshalled, err := json.Marshal(proc.Stats())
+	switch vars["type"] {
+	case "processor":
+
+		if idx < 0 || idx > len(s.processors) {
+			http.NotFound(w, r)
+			return
+		}
+		stats = s.processors[idx].Stats()
+	case "view":
+		if idx < 0 || idx > len(s.views) {
+			http.NotFound(w, r)
+			return
+		}
+		stats = s.views[idx].Stats()
+	default:
+		w.Write([]byte("Invalid render type"))
+		http.NotFound(w, r)
+		return
+	}
+	marshalled, err := json.Marshal(stats)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -113,46 +135,59 @@ func (s *Server) renderProcessorData(w http.ResponseWriter, r *http.Request) {
 
 // renders the processor page
 func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/processor.go.html")...)
+	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/details.go.html")...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	proc, err := s.getProcessorByIdx(r)
-	if err != nil {
+	idx, err := strconv.Atoi(mux.Vars(r)["idx"])
+	if err != nil || idx < 0 || idx > len(s.processors) {
 		http.NotFound(w, r)
 		return
 	}
+	proc := s.processors[idx]
 
 	params := map[string]interface{}{
-		"base_path":     s.basePath,
-		"page_title":    proc.Graph().Group(),
-		"processorName": proc.Graph().Group(),
-		"graph":         proc.Graph(),
-		"processors":    s.processors,
-		"vars":          mux.Vars(r),
+		"base_path":  s.basePath,
+		"page_title": fmt.Sprintf("Processor details for %s", proc.Graph().Group()),
+		"title":      proc.Graph().Group(),
+		"processors": s.processors,
+		"views":      s.views,
+		"vars":       mux.Vars(r),
+		"renderType": "processor",
 	}
 
 	if err = tmpl.Execute(w, params); err != nil {
-		s.log.Printf("error rendering processor view: %v", err)
+		s.log.Printf("error rendering processor details: %v", err)
 	}
 }
 
-func (s *Server) getProcessorByIdx(r *http.Request) (*goka.Processor, error) {
-	vars := mux.Vars(r)
-	consID, exists := vars["processorId"]
-	if !exists {
-		return nil, errors.New("no processorId passed")
-	}
-	consIDParsed, err := strconv.Atoi(consID)
+// renders the processor page
+func (s *Server) renderView(w http.ResponseWriter, r *http.Request) {
+	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/details.go.html")...)
 	if err != nil {
-		return nil, errors.New("error parsing processorId from request")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	idx, err := strconv.Atoi(mux.Vars(r)["idx"])
+	if err != nil || idx < 0 || idx > len(s.views) {
+		http.NotFound(w, r)
+		return
+	}
+	view := s.views[idx]
+
+	params := map[string]interface{}{
+		"base_path":  s.basePath,
+		"page_title": fmt.Sprintf("View details for %s", view.Topic()),
+		"title":      view.Topic(),
+		"processors": s.processors,
+		"views":      s.views,
+		"vars":       mux.Vars(r),
+		"renderType": "view",
 	}
 
-	if consIDParsed < 0 || consIDParsed >= len(s.processors) {
-		return nil, errors.New("processor ID out of range")
+	if err = tmpl.Execute(w, params); err != nil {
+		s.log.Printf("error rendering view details: %v", err)
 	}
-
-	return s.processors[consIDParsed], nil
 }

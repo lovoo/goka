@@ -8,15 +8,51 @@
         <div class="col-md-12">
           <div class="panel panel-default">
             <div class="panel-heading">
-              <h4 class="panel-title"><a href="{{$base_path}}/processor/{{$index}}">Processor {{$index}}</a>
+              <h4 class="panel-title"><a href="{{$base_path}}/processor/{{$index}}">{{$processor.Graph.Group}}</a>
               </h4>
-
             </div>
             <div class="panel-body">
-              <dl class="dl-horizontal">
-                <dt>Client ID</dt>
-                <dd>{{$processor.Graph.Group}}</dd>
-              </dl>
+              {{ with $graph := $processor.Graph }}
+              <ul>
+                {{range $edgeIdx, $edge := $graph.InputStreams}}
+                <li>INPUT: {{$edge.Topic}} &rarr; {{printf "%T" $edge.Codec}}</li>
+                {{end}}
+                {{range $edgeIdx, $edge := $graph.JointTables}}
+                <li>JOINT: {{$edge.Topic}} &rarr; {{printf "%T" $edge.Codec}}</li>
+                {{end}}
+                {{range $edgeIdx, $edge := $graph.LookupTables}}
+                <li>LOOKUP: {{$edge.Topic}} &rarr; {{printf "%T" $edge.Codec}}</li>
+                {{end}}
+                {{with $groupTable := $graph.GroupTable}}
+                <li>GROUPTABLE: {{$groupTable.Topic}} &rarr; {{printf "%T" $groupTable.Codec}}</li>
+                {{end}}
+                {{with $loop := $graph.LoopStream}}
+                <li>LOOP: {{$loop.Topic}} &rarr; {{printf "%T" $loop.Codec}}</li>
+                {{end}}
+                {{range $edgeIdx, $edge := $graph.OutputStreams}}
+                <li>OUTPUT: {{$edge.Topic}} &rarr; {{printf "%T" $edge.Codec}}</li>
+                {{end}}
+              </ul>
+              {{ end }}
+            </div>
+          </div>
+        </div>
+      {{end}}
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="col-md-12">
+      <h2>Views</h2>
+      {{$base_path := .base_path}}
+      {{range $index, $view := .views}}
+        <div class="col-md-12">
+          <div class="panel panel-default">
+            <div class="panel-heading">
+              <h4 class="panel-title"><a href="{{$base_path}}/view/{{$index}}">{{$view.Topic}}</a>
+              </h4>
+            </div>
+            <div class="panel-body">
             </div>
           </div>
         </div>
