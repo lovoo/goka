@@ -22,6 +22,8 @@ type GroupGraph struct {
 
 	codecs    map[string]Codec
 	callbacks map[string]ProcessCallback
+
+	joinCheck map[string]bool
 }
 
 func (gg *GroupGraph) Group() Group {
@@ -74,18 +76,14 @@ func (gg *GroupGraph) callback(topic string) ProcessCallback {
 }
 
 func (gg *GroupGraph) joint(topic string) bool {
-	for _, t := range gg.inputTables {
-		if t.Topic() == topic {
-			return true
-		}
-	}
-	return false
+	return gg.joinCheck[topic]
 }
 
 func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 	gg := GroupGraph{group: string(group),
 		codecs:    make(map[string]Codec),
 		callbacks: make(map[string]ProcessCallback),
+		joinCheck: make(map[string]bool),
 	}
 
 	for _, e := range edges {
@@ -112,6 +110,7 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 		case *inputTable:
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.inputTables = append(gg.inputTables, e)
+			gg.joinCheck[e.Topic()] = true
 		case *crossTable:
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.crossTables = append(gg.crossTables, e)
