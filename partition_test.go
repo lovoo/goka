@@ -2,6 +2,7 @@ package goka
 
 import (
 	"errors"
+	"log"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
-	metrics "github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -40,7 +40,7 @@ func newNullStorageProxy(id int32) *storageProxy {
 func TestNewPartition(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	p := newPartition(logger.Default(), topic, nil, nil, nil, metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p := newPartition(logger.Default(), topic, nil, nil, nil, defaultPartitionChannelSize)
 	ensure.True(t, p != nil)
 }
 
@@ -53,8 +53,7 @@ func TestPartition_startStateless(t *testing.T) {
 		final = make(chan bool)
 	)
 
-	p := newPartition(logger.Default(), topic, nil, newNullStorageProxy(0), proxy,
-		metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p := newPartition(logger.Default(), topic, nil, newNullStorageProxy(0), proxy, defaultPartitionChannelSize)
 
 	proxy.EXPECT().AddGroup().Do(func() { close(wait) })
 	proxy.EXPECT().Stop()
@@ -83,8 +82,8 @@ func TestPartition_startStateful(t *testing.T) {
 		wait   = make(chan bool)
 	)
 
-	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, nil), proxy,
-		metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, nil), proxy, defaultPartitionChannelSize)
+
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(offset, nil),
@@ -121,15 +120,15 @@ func TestPartition_runStateless(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Data, value)
 		step <- true
-		return nil
+		return 0, nil
 	}
 
-	p := newPartition(logger.Default(), topic, consume, newNullStorageProxy(0), proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p := newPartition(logger.Default(), topic, consume, newNullStorageProxy(0), proxy, defaultPartitionChannelSize)
 
 	proxy.EXPECT().AddGroup()
 	proxy.EXPECT().Stop()
@@ -174,13 +173,12 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
-		return nil
+		return 0, nil
 	}
 
-	p := newPartition(logger.Default(), topic, consume, newNullStorageProxy(0),
-		proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p := newPartition(logger.Default(), topic, consume, newNullStorageProxy(0), proxy, defaultPartitionChannelSize)
 
 	proxy.EXPECT().AddGroup()
 	proxy.EXPECT().Stop()
@@ -207,8 +205,7 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 	ensure.Nil(t, err)
 
 	// test sending error into the channel
-	p = newPartition(logger.Default(), topic, consume, newNullStorageProxy(0), proxy,
-		metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p = newPartition(logger.Default(), topic, consume, newNullStorageProxy(0), proxy, defaultPartitionChannelSize)
 	wait = make(chan bool)
 
 	proxy.EXPECT().AddGroup()
@@ -246,20 +243,21 @@ func TestPartition_runStateful(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Data, value)
 		step <- true
-		return nil
+		return 0, nil
 	}
 
-	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, 0)
+	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, nil), proxy, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset),
+		st.EXPECT().MarkRecovered(),
 		proxy.EXPECT().Remove(topic),
 		proxy.EXPECT().AddGroup(),
 		st.EXPECT().Close().Return(nil),
@@ -268,12 +266,13 @@ func TestPartition_runStateful(t *testing.T) {
 
 	go func() {
 		err := p.start()
+		log.Printf("%v", err)
 		ensure.Nil(t, err)
 		close(wait)
 	}()
 
-	// partition should be marked ready after the HWM or EOF message
-	ensure.False(t, p.ready())
+	// partition should be marked recovered after the HWM or EOF message
+	ensure.False(t, p.recovered())
 	p.ch <- &kafka.BOF{
 		Partition: par,
 		Topic:     topic,
@@ -288,7 +287,7 @@ func TestPartition_runStateful(t *testing.T) {
 		Hwm:       offset,
 	}
 	p.ch <- new(kafka.NOP)
-	ensure.True(t, p.ready())
+	ensure.True(t, p.recovered())
 
 	// message will be processed
 	p.ch <- &kafka.Message{
@@ -324,18 +323,18 @@ func TestPartition_runStatefulWithError(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 		if msg.Topic == "error" {
-			return errors.New("some error")
+			return 0, errors.New("some error")
 		}
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Data, value)
 		step <- true
-		return nil
+		return 0, nil
 	}
 
-	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, nil), proxy, defaultPartitionChannelSize)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -404,17 +403,16 @@ func TestPartition_loadStateful(t *testing.T) {
 		count  int64
 	)
 
-	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup) error {
+	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
 		atomic.AddInt64(&count, 1)
 		ensure.DeepEqual(t, msg.Key, string(key))
 		ensure.DeepEqual(t, msg.Topic, "some-other-topic")
 		ensure.DeepEqual(t, msg.Data, value)
 		step <- true
-		return nil
+		return 0, nil
 	}
 
-	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, DefaultUpdate), proxy,
-		metrics.DefaultRegistry, defaultPartitionChannelSize)
+	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, DefaultUpdate), proxy, defaultPartitionChannelSize)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -496,7 +494,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 		return errors.New("some error")
 	}
 
-	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, metrics.DefaultRegistry, 0)
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -530,7 +528,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 
 	// error in SetOffset
 	wait = make(chan bool)
-	p = newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, DefaultUpdate), proxy, metrics.DefaultRegistry, 0)
+	p = newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, DefaultUpdate), proxy, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -566,7 +564,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 
 	// error in GetOffset
 	wait = make(chan bool)
-	p = newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, nil), proxy, metrics.DefaultRegistry, 0)
+	p = newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, nil), proxy, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -611,7 +609,7 @@ func TestPartition_catchupStateful(t *testing.T) {
 		step <- true
 		return DefaultUpdate(st, p, k, v)
 	}
-	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, metrics.DefaultRegistry, 0)
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -675,7 +673,7 @@ func TestPartition_catchupStateful(t *testing.T) {
 		Hwm:       offset,
 	}
 	p.ch <- new(kafka.NOP)
-	ensure.True(t, p.ready())
+	ensure.True(t, p.recovered())
 
 	// message will not terminate load (catchup modus)
 	p.ch <- &kafka.EOF{
@@ -684,7 +682,7 @@ func TestPartition_catchupStateful(t *testing.T) {
 		Hwm:       offset,
 	}
 	p.ch <- new(kafka.NOP)
-	ensure.True(t, p.ready())
+	ensure.True(t, p.recovered())
 
 	// message will be loaded (Topic is tableTopic)
 	p.ch <- &kafka.Message{
@@ -728,7 +726,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 		step <- true
 		return DefaultUpdate(st, p, k, v)
 	}
-	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, metrics.DefaultRegistry, 0)
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, 0)
 
 	gomock.InOrder(
 		st.EXPECT().Open().Return(nil),
@@ -790,7 +788,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 		Hwm:       offset,
 	}
 	p.ch <- new(kafka.NOP)
-	ensure.True(t, p.ready())
+	ensure.True(t, p.recovered())
 
 	// message will not terminate load (catchup modus)
 	p.ch <- &kafka.EOF{
@@ -799,7 +797,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 		Hwm:       offset,
 	}
 	p.ch <- new(kafka.NOP)
-	ensure.True(t, p.ready())
+	ensure.True(t, p.recovered())
 
 	// message will cause error (wrong topic)
 	p.ch <- &kafka.Message{
@@ -816,4 +814,50 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(2))
 	})
 	ensure.Nil(t, err)
+}
+
+func BenchmarkPartition_load(b *testing.B) {
+	var (
+		key          = "key"
+		par    int32 = 1
+		offset int64 = 4
+		value        = []byte("value")
+		wait         = make(chan bool)
+		st           = storage.NewNull()
+	)
+
+	update := func(st storage.Storage, p int32, k string, v []byte) error {
+		return nil
+	}
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), new(nullProxy), 0)
+
+	go func() {
+		err := p.start()
+		if err != nil {
+			panic(err)
+		}
+		close(wait)
+	}()
+
+	// beginning of file marks the beginning of topic
+	p.ch <- &kafka.BOF{
+		Topic:     topic,
+		Partition: par,
+		Offset:    offset,
+		Hwm:       int64(b.N + 1),
+	}
+	// run the Fib function b.N times
+	for n := 0; n < b.N; n++ {
+		p.ch <- &kafka.Message{
+			Topic:     topic,
+			Partition: par,
+			Offset:    offset,
+			Key:       key,
+			Value:     value,
+		}
+		offset++
+	}
+
+	p.stop()
+	<-wait
 }

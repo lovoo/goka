@@ -4,7 +4,6 @@ import (
 	"time"
 
 	cluster "github.com/bsm/sarama-cluster"
-	metrics "github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -51,7 +50,7 @@ type saramaConsumer struct {
 }
 
 // NewSaramaConsumer creates a new Consumer using sarama
-func NewSaramaConsumer(brokers []string, group string, config *cluster.Config, registry metrics.Registry) (Consumer, error) {
+func NewSaramaConsumer(brokers []string, group string, config *cluster.Config) (Consumer, error) {
 	events := make(chan Event, defaultChannelBufferSize)
 
 	g, err := newGroupConsumer(brokers, group, events, config)

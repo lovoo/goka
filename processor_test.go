@@ -20,7 +20,6 @@ import (
 
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
-	metrics "github.com/rcrowley/go-metrics"
 )
 
 var (
@@ -28,7 +27,7 @@ var (
 )
 
 func nullStorageBuilder() StorageBuilder {
-	return func(topic string, partition int32, reg metrics.Registry) (storage.Storage, error) {
+	return func(topic string, partition int32) (storage.Storage, error) {
 		return &storage.Null{}, nil
 	}
 }
@@ -166,6 +165,7 @@ func TestProcessor_process(t *testing.T) {
 		st       = mock.NewMockStorage(ctrl)
 		consumer = mock.NewMockConsumer(ctrl)
 		producer = mock.NewMockProducer(ctrl)
+		pstats   = newPartitionStats()
 	)
 
 	p := &Processor{
@@ -183,8 +183,9 @@ func TestProcessor_process(t *testing.T) {
 	// no emits
 	consumer.EXPECT().Commit("sometopic", int32(1), int64(123))
 	msg := &message{Topic: "sometopic", Partition: 1, Offset: 123, Data: []byte("something")}
-	err := p.process(msg, st, &wg)
+	updates, err := p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 0)
 
 	// emit something
 	promise := new(kafka.Promise)
@@ -196,8 +197,9 @@ func TestProcessor_process(t *testing.T) {
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.Emit("anothertopic", "key", "message")
 	}
-	err = p.process(msg, st, &wg)
+	updates, err = p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 0)
 	promise.Finish(nil)
 
 	// store something
@@ -213,9 +215,34 @@ func TestProcessor_process(t *testing.T) {
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
-	err = p.process(msg, st, &wg)
+	updates, err = p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 1)
 	promise.Finish(nil)
+
+	// store something twice
+	promise = new(kafka.Promise)
+	promise2 := new(kafka.Promise)
+	gomock.InOrder(
+		st.EXPECT().Set("key", []byte("message")),
+		producer.EXPECT().Emit("group-state", "key", []byte("message")).Return(promise),
+		st.EXPECT().Set("key", []byte("message2")),
+		producer.EXPECT().Emit("group-state", "key", []byte("message2")).Return(promise2),
+		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
+		st.EXPECT().SetOffset(int64(323)),
+		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
+	)
+	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
+	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
+		ctx.SetValue("message")
+		ctx.SetValue("message2")
+	}
+	updates, err = p.process(msg, st, &wg, pstats)
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 2)
+	promise.Finish(nil)
+	promise2.Finish(nil)
+
 }
 
 func TestProcessor_processFail(t *testing.T) {
@@ -227,6 +254,7 @@ func TestProcessor_processFail(t *testing.T) {
 		st       = mock.NewMockStorage(ctrl)
 		consumer = mock.NewMockConsumer(ctrl)
 		producer = mock.NewMockProducer(ctrl)
+		pstats   = newPartitionStats()
 	)
 
 	newProcessor := func() *Processor {
@@ -263,8 +291,9 @@ func TestProcessor_processFail(t *testing.T) {
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
-	err := p.process(msg, st, &wg)
+	updates, err := p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 1)
 	promise.Finish(nil)
 	err = doTimed(t, func() {
 		<-p.dead
@@ -286,8 +315,9 @@ func TestProcessor_processFail(t *testing.T) {
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
-	err = p.process(msg, st, &wg)
+	updates, err = p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 1)
 	promise.Finish(nil)
 	err = doTimed(t, func() {
 		<-p.dead
@@ -310,8 +340,9 @@ func TestProcessor_processFail(t *testing.T) {
 	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
 		ctx.SetValue("message")
 	}
-	err = p.process(msg, st, &wg)
+	updates, err = p.process(msg, st, &wg, pstats)
 	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 1)
 	promise.Finish(nil)
 	err = doTimed(t, func() {
 		<-p.dead
@@ -524,7 +555,7 @@ func TestProcessor_StartWithErrorBeforeRebalance(t *testing.T) {
 				err      error
 				consumer = mock.NewMockConsumer(ctrl)
 				st       = mock.NewMockStorage(ctrl)
-				sb       = func(topic string, par int32, r metrics.Registry) (storage.Storage, error) {
+				sb       = func(topic string, par int32) (storage.Storage, error) {
 					return st, nil
 				}
 				final = make(chan bool)
@@ -564,7 +595,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32) (storage.Storage, error) {
 			return st, nil
 		}
 		final = make(chan bool)
@@ -645,7 +676,7 @@ func TestProcessor_StartWithTableWithErrorAfterRebalance(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32) (storage.Storage, error) {
 			return st, nil
 		}
 		final     = make(chan bool)
@@ -765,7 +796,7 @@ func TestProcessor_Start(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32) (storage.Storage, error) {
 			return st, nil
 		}
 		final = make(chan bool)
@@ -914,7 +945,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 		err      error
 		consumer = mock.NewMockConsumer(ctrl)
 		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32, r metrics.Registry) (storage.Storage, error) {
+		sb       = func(topic string, par int32) (storage.Storage, error) {
 			return st, nil
 		}
 		final    = make(chan bool)
@@ -992,9 +1023,9 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	ch <- &kafka.EOF{
 		Partition: 1,
 	}
-	ensure.False(t, p.partitionViews[1][table].ready())
+	ensure.False(t, p.partitionViews[1][table].recovered())
 	time.Sleep(delayProxyInterval)
-	ensure.False(t, p.partitionViews[1][table].ready())
+	ensure.False(t, p.partitionViews[1][table].recovered())
 	ch <- &kafka.EOF{
 		Topic:     table,
 		Partition: 1,
@@ -1002,7 +1033,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	err = syncWith(t, ch)
 	ensure.Nil(t, err)
 	time.Sleep(delayProxyInterval)
-	ensure.True(t, p.partitionViews[1][table].ready())
+	ensure.True(t, p.partitionViews[1][table].recovered())
 
 	// 5. process messages in partition 1
 	ch <- &kafka.Message{
@@ -1038,7 +1069,7 @@ func TestProcessor_rebalanceError(t *testing.T) {
 		wait     = make(chan bool)
 		ch       = make(chan kafka.Event)
 		p        = createProcessor(t, ctrl, consumer, 1,
-			func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
+			func(topic string, partition int32) (storage.Storage, error) {
 				return nil, errors.New("some error")
 			})
 	)
@@ -1072,7 +1103,7 @@ func TestProcessor_HasGet(t *testing.T) {
 
 	var (
 		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32, r metrics.Registry) (storage.Storage, error) {
+		sb = func(topic string, partition int32) (storage.Storage, error) {
 			return st, nil
 		}
 		consumer = mock.NewMockConsumer(ctrl)

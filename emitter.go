@@ -33,7 +33,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 		return nil, fmt.Errorf(errApplyOptions, err)
 	}
 
-	prod, err := opts.builders.producer(brokers, opts.kafkaRegistry)
+	prod, err := opts.builders.producer(brokers)
 	if err != nil {
 		return nil, fmt.Errorf(errBuildProducer, err)
 	}

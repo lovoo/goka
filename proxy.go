@@ -86,6 +86,13 @@ func (p *delayProxy) Stop() {
 	p.m.Unlock()
 }
 
+type nullProxy struct{}
+
+func (p *nullProxy) Add(topic string, offset int64) {}
+func (p *nullProxy) Remove(topic string)            {}
+func (p *nullProxy) AddGroup()                      {}
+func (p *nullProxy) Stop()                          {}
+
 type storageProxy struct {
 	storage.Storage
 	partition int32
