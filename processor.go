@@ -738,6 +738,9 @@ func (g *Processor) Stats() *ProcessorStats {
 		stats.Group[i] = p.fetchStats()
 	}
 	for i, p := range g.partitionViews {
+		if _, ok := stats.Joined[i]; !ok {
+			stats.Joined[i] = make(map[string]*PartitionStats)
+		}
 		for t, tp := range p {
 			stats.Joined[i][t] = tp.fetchStats()
 		}
