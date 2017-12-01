@@ -131,7 +131,7 @@
 
       window.setInterval(function(){
         d3.json("{{.base_path}}/data/{{.renderType}}/{{.vars.idx}}", renderPartitions);
-      }, 10000);
+      }, 2000);
 
       // call it initially
       d3.json("{{.base_path}}/data/{{.renderType}}/{{.vars.idx}}", renderPartitions);
