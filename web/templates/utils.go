@@ -8,9 +8,9 @@ import (
 // BaseTemplates represents all partial templates used to build the base of the
 // site.
 var BaseTemplates = []string{
-	"templates/common/base.go.html",
-	"templates/common/head.go.html",
-	"templates/common/menu.go.html",
+	"web/templates/common/base.go.html",
+	"web/templates/common/head.go.html",
+	"web/templates/common/menu.go.html",
 }
 
 // LoadTemplates loads and associates the given templates.

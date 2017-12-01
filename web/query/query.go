@@ -10,7 +10,7 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/logger"
-	"github.com/lovoo/goka/templates"
+	"github.com/lovoo/goka/web/templates"
 
 	"github.com/gorilla/mux"
 )
@@ -75,6 +75,10 @@ func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
 	return srv
 }
 
+func (s *Server) BasePath() string {
+	return s.basePath
+}
+
 func (s *Server) getter(name string) goka.Getter {
 	s.m.RLock()
 	defer s.m.RUnlock()
@@ -108,7 +112,7 @@ func (s *Server) AttachSource(name string, getter goka.Getter) error {
 }
 
 func (s *Server) executeQueryTemplate(w http.ResponseWriter, params map[string]interface{}) {
-	tmpl, err := templates.LoadTemplates(append(templates.BaseTemplates, "templates/query/index.go.html")...)
+	tmpl, err := templates.LoadTemplates(append(templates.BaseTemplates, "web/templates/query/index.go.html")...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
