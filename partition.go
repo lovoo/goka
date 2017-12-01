@@ -276,9 +276,7 @@ func (p *partition) load(catchup bool) error {
 					s.Delay = time.Since(ev.Timestamp)
 				}
 				p.stats.Input[ev.Topic] = s
-				if ev.Offset < p.hwm-1 {
-					p.stats.Table.Stalled = false
-				}
+				p.stats.Table.Stalled = false
 
 			case *kafka.NOP:
 				// don't do anything
@@ -322,8 +320,8 @@ func (p *partition) storeEvent(msg *kafka.Message) error {
 
 // mark storage as recovered
 func (p *partition) markRecovered() (err error) {
-	p.stats.Table.Recovered = true
 	p.recoveredOnce.Do(func() {
+		p.stats.Table.Recovered = true
 		p.stats.Table.RecoveryTime = time.Now()
 		atomic.StoreInt32(&p.recoveredFlag, 1)
 		err = p.st.MarkRecovered()
