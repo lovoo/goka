@@ -84,14 +84,17 @@ type context struct {
 
 // Emit sends a message asynchronously to a topic.
 func (ctx *context) Emit(topic Stream, key string, value interface{}) {
+	if key == "" {
+		ctx.Fail(errors.New("cannot emit to empty key"))
+	}
 	if topic == "" {
-		ctx.Fail(errors.New("Cannot emit to empty topic"))
+		ctx.Fail(errors.New("cannot emit to empty topic"))
 	}
 	if loopName(ctx.graph.Group()) == string(topic) {
-		ctx.Fail(errors.New("Cannot emit to loop topic, use Loopback() instead."))
+		ctx.Fail(errors.New("cannot emit to loop topic (use Loopback)"))
 	}
 	if tableName(ctx.graph.Group()) == string(topic) {
-		ctx.Fail(errors.New("Cannot emit to table topic, use SetValue() instead."))
+		ctx.Fail(errors.New("cannot emit to table topic (use SetValue)"))
 	}
 	c := ctx.graph.codec(string(topic))
 	if c == nil {
@@ -103,7 +106,7 @@ func (ctx *context) Emit(topic Stream, key string, value interface{}) {
 		var err error
 		data, err = c.Encode(value)
 		if err != nil {
-			ctx.Fail(fmt.Errorf("error encoding message for topic %s: %v", topic, err))
+			ctx.Fail(fmt.Errorf("error encoding message (topic=%s key=%s): %v", topic, key, err))
 		}
 	}
 
@@ -112,14 +115,17 @@ func (ctx *context) Emit(topic Stream, key string, value interface{}) {
 
 // Loopback sends a message to another key of the processor.
 func (ctx *context) Loopback(key string, value interface{}) {
+	if key == "" {
+		ctx.Fail(errors.New("cannot loopback to empty key"))
+	}
 	l := ctx.graph.LoopStream()
 	if l == nil {
-		ctx.Fail(errors.New("No loop topic configured"))
+		ctx.Fail(errors.New("cannot loopback (no loop callback configured)"))
 	}
 
 	data, err := l.Codec().Encode(value)
 	if err != nil {
-		ctx.Fail(fmt.Errorf("Error encoding message for key %s: %v", key, err))
+		ctx.Fail(fmt.Errorf("error encoding message (loopback, key=%s): %v", key, err))
 	}
 
 	ctx.emit(l.Topic(), key, data)
@@ -129,7 +135,7 @@ func (ctx *context) emit(topic string, key string, value []byte) {
 	ctx.counters.emits++
 	ctx.emitter(topic, key, value).Then(func(err error) {
 		if err != nil {
-			err = fmt.Errorf("error emitting to %s: %v", topic, err)
+			err = fmt.Errorf("error emitting to %s (key=%s): %v", topic, key, err)
 		}
 		ctx.emitDone(err)
 	})
@@ -177,37 +183,40 @@ func (ctx *context) Topic() Stream {
 
 func (ctx *context) Join(topic Table) interface{} {
 	if ctx.pviews == nil {
-		ctx.Fail(fmt.Errorf("table %s not subscribed", topic))
+		ctx.Fail(fmt.Errorf("cannot join with table %s (not subscribed)", topic))
 	}
 	v, ok := ctx.pviews[string(topic)]
 	if !ok {
-		ctx.Fail(fmt.Errorf("table %s not subscribed", topic))
+		ctx.Fail(fmt.Errorf("cannot join with table %s (not subscribed)", topic))
 	}
 	data, err := v.st.Get(ctx.Key())
 	if err != nil {
-		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", ctx.Key(), topic, err))
+		ctx.Fail(fmt.Errorf("error joining key %s of table %s: %v", ctx.Key(), topic, err))
 	} else if data == nil {
 		return nil
 	}
 
 	value, err := ctx.graph.codec(string(topic)).Decode(data)
 	if err != nil {
-		ctx.Fail(fmt.Errorf("error decoding value key %s of table %s: %v", ctx.Key(), topic, err))
+		ctx.Fail(fmt.Errorf("error decoding value for key %s of table %s: %v", ctx.Key(), topic, err))
 	}
 	return value
 }
 
 func (ctx *context) Lookup(topic Table, key string) interface{} {
+	if key == "" {
+		ctx.Fail(errors.New("cannot lookup empty key"))
+	}
 	if ctx.views == nil {
-		ctx.Fail(fmt.Errorf("topic %s not subscribed", topic))
+		ctx.Fail(fmt.Errorf("cannot lookup topic %s (not subscribed)", topic))
 	}
 	v, ok := ctx.views[string(topic)]
 	if !ok {
-		ctx.Fail(fmt.Errorf("topic %s not subscribed", topic))
+		ctx.Fail(fmt.Errorf("cannot lookup topic %s (not subscribed)", topic))
 	}
 	val, err := v.Get(key)
 	if err != nil {
-		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", key, topic, err))
+		ctx.Fail(fmt.Errorf("error looking up key %s of table %s: %v", key, topic, err))
 	}
 	return val
 }
@@ -215,31 +224,31 @@ func (ctx *context) Lookup(topic Table, key string) interface{} {
 // valueForKey returns the value of key in the processor state.
 func (ctx *context) valueForKey(key string) (interface{}, error) {
 	if ctx.storage == nil {
-		return nil, fmt.Errorf("Cannot access state in stateless processor")
+		return nil, fmt.Errorf("cannot access table in stateless processor")
 	}
 
 	data, err := ctx.storage.Get(key)
 	if err != nil {
-		return nil, fmt.Errorf("error reading value: %v", err)
+		return nil, fmt.Errorf("error getting value (key=%s): %v", key, err)
 	} else if data == nil {
 		return nil, nil
 	}
 
 	value, err := ctx.graph.GroupTable().Codec().Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("error decoding value: %v", err)
+		return nil, fmt.Errorf("error decoding value (key=%s): %v", key, err)
 	}
 	return value, nil
 }
 
 func (ctx *context) deleteKey(key string) error {
 	if ctx.graph.GroupTable() == nil {
-		return fmt.Errorf("Cannot access state in stateless processor")
+		return fmt.Errorf("cannot access table in stateless processor")
 	}
 
 	ctx.counters.stores++
 	if err := ctx.storage.Delete(key); err != nil {
-		return fmt.Errorf("error deleting key (%s) from storage: %v", key, err)
+		return fmt.Errorf("error deleting key %s from storage: %v", key, err)
 	}
 
 	ctx.counters.emits++
@@ -253,11 +262,14 @@ func (ctx *context) deleteKey(key string) error {
 // setValueForKey sets a value for a key in the processor state.
 func (ctx *context) setValueForKey(key string, value interface{}) error {
 	if ctx.graph.GroupTable() == nil {
-		return fmt.Errorf("Cannot access state in stateless processor")
+		return fmt.Errorf("cannot access table in stateless processor")
 	}
 
 	if value == nil {
-		return fmt.Errorf("Cannot set nil as value.")
+		return fmt.Errorf("cannot set nil value")
+	}
+	if key == "" {
+		return fmt.Errorf("cannot set value for empty key")
 	}
 
 	encodedValue, err := ctx.graph.GroupTable().Codec().Encode(value)
@@ -308,7 +320,7 @@ func (ctx *context) start() {
 // if some emit failed.
 func (ctx *context) tryCommit(err error) {
 	if err != nil {
-		ctx.errors.collect(err)
+		ctx.errors.Collect(err)
 	}
 
 	// not all calls are done yet, do not send the ack upstream.
@@ -317,7 +329,7 @@ func (ctx *context) tryCommit(err error) {
 	}
 
 	// commit if no errors, otherwise fail context
-	if ctx.errors.hasErrors() {
+	if ctx.errors.HasErrors() {
 		ctx.failer(fmt.Errorf("error emitting to %s: %v", ctx.graph.GroupTable().Topic(), ctx.errors.Error()))
 	} else {
 		ctx.commit()

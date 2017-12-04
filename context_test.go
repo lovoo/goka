@@ -133,15 +133,15 @@ func TestContext_EmitError(t *testing.T) {
 func TestContext_EmitToStateTopic(t *testing.T) {
 	ctx := &context{graph: DefineGroup(group, Persist(c), Loop(c, cb))}
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to table topic, use SetValue() instead."))
+		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to table topic (use SetValue)"))
 		ctx.Emit(Stream(tableName(group)), "key", []byte("value"))
 	}()
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to loop topic, use Loopback() instead."))
+		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to loop topic (use Loopback)"))
 		ctx.Emit(Stream(loopName(group)), "key", []byte("value"))
 	}()
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to empty topic"))
+		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to empty topic"))
 		ctx.Emit("", "key", []byte("value"))
 	}()
 }
@@ -221,7 +221,7 @@ func TestContext_DeleteStateless(t *testing.T) {
 	ctx.emitter = newEmitter(nil, nil)
 
 	err := ctx.deleteKey(key)
-	ensure.Err(t, err, regexp.MustCompile("^Cannot access state in stateless processor$"))
+	ensure.Err(t, err, regexp.MustCompile("^cannot access table in stateless processor$"))
 }
 
 func TestContext_DeleteStorageError(t *testing.T) {
@@ -245,7 +245,7 @@ func TestContext_DeleteStorageError(t *testing.T) {
 	ctx.emitter = newEmitter(nil, nil)
 
 	err := ctx.deleteKey(key)
-	ensure.Err(t, err, regexp.MustCompile("^error deleting key \\(key\\) from storage: storage error$"))
+	ensure.Err(t, err, regexp.MustCompile("^error deleting key key from storage: storage error$"))
 }
 
 func TestContext_Set(t *testing.T) {
@@ -350,7 +350,11 @@ func TestContext_SetErrors(t *testing.T) {
 
 	err := ctx.setValueForKey(key, nil)
 	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "Cannot set nil")
+	ensure.StringContains(t, err.Error(), "cannot set nil")
+
+	err = ctx.setValueForKey("", value)
+	ensure.NotNil(t, err)
+	ensure.StringContains(t, err.Error(), "cannot set value for empty key")
 
 	err = ctx.setValueForKey(key, 123) // cannot encode 123 as string
 	ensure.NotNil(t, err)

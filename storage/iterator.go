@@ -5,8 +5,7 @@ import (
 	ldbiter "github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
-// iterator wraps an Iterator implementation and handles the value decoding and
-// offset key skipping.
+// iterator wraps a leveldb Iterator and handles offset key skipping.
 type iterator struct {
 	iter ldbiter.Iterator
 	snap *leveldb.Snapshot
@@ -27,7 +26,7 @@ func (i *iterator) Key() []byte {
 	return i.iter.Key()
 }
 
-// Value returns the current value decoded by the codec of the storage.
+// Value returns the current value.
 func (i *iterator) Value() ([]byte, error) {
 	data := i.iter.Value()
 	if data == nil {

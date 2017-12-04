@@ -131,7 +131,7 @@ func (v *View) Start() error {
 	wg.Wait()
 
 	<-v.dead
-	if v.errors.hasErrors() {
+	if v.errors.HasErrors() {
 		return &v.errors
 	}
 	return nil
@@ -139,7 +139,7 @@ func (v *View) Start() error {
 
 func (v *View) fail(err error) {
 	v.opts.log.Printf("failing view: %v", err)
-	v.errors.collect(err)
+	v.errors.Collect(err)
 	go v.stop()
 }
 
@@ -148,7 +148,7 @@ func (v *View) stop() {
 		defer close(v.dead)
 		// stop consumer
 		if err := v.consumer.Close(); err != nil {
-			v.errors.collect(fmt.Errorf("failed to close consumer on stopping the view: %v", err))
+			v.errors.Collect(fmt.Errorf("failed to close consumer on stopping the view: %v", err))
 		}
 		<-v.done
 
