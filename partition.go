@@ -87,6 +87,8 @@ func (p *partition) start() error {
 		if err := p.recover(); err != nil {
 			return err
 		}
+	} else {
+		p.markRecovered()
 	}
 
 	// if stopped, just return
