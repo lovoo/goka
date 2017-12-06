@@ -53,6 +53,11 @@ func (s *PartitionStats) copy(o *PartitionStats) {
 	}
 }
 
+func (s *PartitionStats) reset() {
+	s.Input = make(map[string]InputStats)
+	s.Output = make(map[string]OutputStats)
+}
+
 type ViewStats struct {
 	Partitions map[int32]*PartitionStats
 }
