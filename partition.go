@@ -218,6 +218,9 @@ func (p *partition) load(catchup bool) error {
 	stallTicker := time.NewTicker(stallPeriod)
 	defer stallTicker.Stop()
 
+	// reset stats after load
+	defer p.stats.reset()
+
 	var lastMessage time.Time
 	for {
 		select {
