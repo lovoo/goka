@@ -83,7 +83,29 @@ func process(ctx goka.Context, msg interface{}) {
 	ctx.SetValue(u)
 	fmt.Printf("[proc] key: %s clicks: %d, msg: %v\n", ctx.Key(), u.Clicks, msg)
 }
+func runStatelessProcessor(monitor *monitor.Server) {
+	g := goka.DefineGroup(group+"-stateless",
+		goka.Input(topic,
+			new(codec.String),
+			func(ctx goka.Context, msg interface{}) {
+				//ignored
+			}),
+	)
+	p, err := goka.NewProcessor(brokers, g)
+	if err != nil {
+		panic(err)
+	}
 
+	// attach the processor to the monitor
+	monitor.AttachProcessor(p)
+
+	err = p.Start()
+	if err != nil {
+		panic(err)
+	} else {
+		fmt.Println("Processor stopped without errors")
+	}
+}
 func runProcessor(monitor *monitor.Server, query *query.Server) {
 	g := goka.DefineGroup(group,
 		goka.Input(topic, new(codec.String), process),
@@ -139,5 +161,6 @@ func main() {
 	idxServer.AddComponent(queryServer, "Query")
 	go runEmitter()
 	go runProcessor(monitorServer, queryServer)
+	go runStatelessProcessor(monitorServer)
 	runView(root, monitorServer)
 }
