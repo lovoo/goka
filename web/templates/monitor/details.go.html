@@ -60,13 +60,7 @@
           var outputBytes = 0;
           var inputDelay = -1;
           // start with a chained operation on the Input of stats.
-          // if the table is recovered and we're displaying a processor
-          // let's omit the tableName's metrics from recovery, as they do not change
-          // anymore and just mess up our delay value in the frontend
           var inputChain = _.chain(stats.Input);
-          if(stats.Table.Recovered && {{.renderType }} == "processor"){
-            inputChain = inputChain.omit({{.tableName}});
-          }
           // if we do have values to get the avg from, let's take it.
           // if we tried on an empty list, it would create a NaN
           if(inputChain.size().value() > 0){
