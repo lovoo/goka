@@ -150,7 +150,7 @@ func webTemplatesMonitorDetailsGoHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "web/templates/monitor/details.go.html", size: 5078, mode: os.FileMode(436), modTime: time.Unix(1512576995, 0)}
+	info := bindataFileInfo{name: "web/templates/monitor/details.go.html", size: 5078, mode: os.FileMode(436), modTime: time.Unix(1512580349, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
