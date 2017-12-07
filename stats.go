@@ -15,12 +15,20 @@ type OutputStats struct {
 	Bytes int
 }
 
+type PartitionStatus int
+
+const (
+	PartitionRecovering PartitionStatus = iota
+	PartitionPreparing
+	PartitionRunning
+)
+
 type PartitionStats struct {
 	Now time.Time
 
 	Table struct {
-		Recovered bool
-		Stalled   bool
+		Status  PartitionStatus
+		Stalled bool
 
 		Offset int64 // last offset processed or recovered
 		Hwm    int64 // next offset to be written
@@ -39,18 +47,21 @@ func newPartitionStats() *PartitionStats {
 	}
 }
 
-func (s *PartitionStats) copy(o *PartitionStats) {
-	s.Now = o.Now
-	s.Table.Recovered = o.Table.Recovered
+func (s *PartitionStats) init(o *PartitionStats, offset, hwm int64) *PartitionStats {
+	s.Table.Status = o.Table.Status
 	s.Table.Stalled = o.Table.Stalled
 	s.Table.StartTime = o.Table.StartTime
 	s.Table.RecoveryTime = o.Table.RecoveryTime
+	s.Table.Offset = offset
+	s.Table.Hwm = hwm
+	s.Now = time.Now()
 	for k, v := range o.Input {
 		s.Input[k] = v
 	}
 	for k, v := range o.Output {
 		s.Output[k] = v
 	}
+	return s
 }
 
 func (s *PartitionStats) reset() {

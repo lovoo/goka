@@ -32,6 +32,7 @@ type partition struct {
 	done     chan bool
 	stopFlag int64
 
+	preparingFlag int32
 	recoveredFlag int32
 	hwm           int64
 	offset        int64
@@ -39,6 +40,7 @@ type partition struct {
 	recoveredOnce sync.Once
 
 	stats         *PartitionStats
+	lastStats     *PartitionStats
 	requestStats  chan bool
 	responseStats chan *PartitionStats
 }
@@ -178,12 +180,11 @@ func (p *partition) run() error {
 			}
 
 		case <-p.requestStats:
-			s := newPartitionStats()
-			s.copy(p.stats)
-			s.Now = time.Now()
-			s.Table.Hwm = p.hwm
-			s.Table.Offset = p.offset
-			p.responseStats <- s
+			select {
+			case p.responseStats <- newPartitionStats().init(p.stats, p.offset, p.hwm):
+			case <-p.dying:
+				return nil
+			}
 
 		case <-p.dying:
 			return nil
@@ -298,12 +299,11 @@ func (p *partition) load(catchup bool) error {
 			}
 
 		case <-p.requestStats:
-			s := newPartitionStats()
-			s.copy(p.stats)
-			s.Now = time.Now()
-			s.Table.Hwm = p.hwm
-			s.Table.Offset = p.offset
-			p.responseStats <- s
+			select {
+			case p.responseStats <- newPartitionStats().init(p.stats, p.offset, p.hwm):
+			case <-p.dying:
+				return nil
+			}
 
 		case <-p.dying:
 			return nil
@@ -326,15 +326,26 @@ func (p *partition) storeEvent(msg *kafka.Message) error {
 // mark storage as recovered
 func (p *partition) markRecovered() (err error) {
 	p.recoveredOnce.Do(func() {
-		p.stats.Table.Recovered = true
-		p.stats.Table.RecoveryTime = time.Now()
-		atomic.StoreInt32(&p.recoveredFlag, 1)
+		p.lastStats = newPartitionStats().init(p.stats, p.offset, p.hwm)
+		p.lastStats.Table.Status = PartitionPreparing
+		p.stats.Table.Status = PartitionPreparing
+
+		atomic.StoreInt32(&p.preparingFlag, 1)
 		err = p.st.MarkRecovered()
+		atomic.StoreInt32(&p.preparingFlag, 0)
+
+		p.stats.Table.Status = PartitionRunning
+		p.stats.Table.RecoveryTime = time.Now()
+
+		atomic.StoreInt32(&p.recoveredFlag, 1)
 	})
 	return
 }
 
 func (p *partition) fetchStats() *PartitionStats {
+	if atomic.LoadInt32(&p.preparingFlag) == 1 {
+		return p.lastStats
+	}
 	select {
 	case p.requestStats <- true:
 	case <-p.dying:

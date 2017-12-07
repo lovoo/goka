@@ -43,8 +43,11 @@
           var partitionId = data[0];
           var stats = data[1];
           var status = "running";
-          if(!stats.Table.Recovered){
+          if(stats.Table.Status == 0){
             status = "recovering";
+          }
+          if(stats.Table.Status == 1){
+            status = "preparing";
           }
           if(stats.Table.Stalled){
             status = "stalled";
