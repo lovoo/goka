@@ -99,6 +99,7 @@ func TestSimpleConsumer_AddPartition(t *testing.T) {
 		hwm       int64 = 1237
 		messages        = make(chan *sarama.ConsumerMessage)
 		ch              = make(chan Event)
+		cherr           = make(chan *sarama.ConsumerError)
 	)
 
 	c := &simpleConsumer{
@@ -121,7 +122,8 @@ func TestSimpleConsumer_AddPartition(t *testing.T) {
 	client.EXPECT().GetOffset(topic, partition, sarama.OffsetOldest).Return(oldest, nil)
 	client.EXPECT().GetOffset(topic, partition, sarama.OffsetNewest).Return(hwm, nil)
 	consumer.EXPECT().ConsumePartition(topic, partition, offset).Return(pc, nil)
-	pc.EXPECT().Messages().Return(messages)
+	pc.EXPECT().Messages().Return(messages).AnyTimes()
+	pc.EXPECT().Errors().Return(cherr).AnyTimes()
 	err = c.AddPartition(topic, partition, offset)
 	ensure.Nil(t, err)
 	m, ok := (<-ch).(*BOF)
@@ -173,6 +175,7 @@ func TestSimpleConsumer_RemovePartition(t *testing.T) {
 		hwm       int64 = 1237
 		messages        = make(chan *sarama.ConsumerMessage)
 		ch              = make(chan Event)
+		cherr           = make(chan *sarama.ConsumerError)
 	)
 
 	c := &simpleConsumer{
@@ -188,7 +191,8 @@ func TestSimpleConsumer_RemovePartition(t *testing.T) {
 	client.EXPECT().GetOffset(topic, partition, sarama.OffsetOldest).Return(oldest, nil)
 	client.EXPECT().GetOffset(topic, partition, sarama.OffsetNewest).Return(hwm, nil)
 	consumer.EXPECT().ConsumePartition(topic, partition, offset).Return(pc, nil)
-	pc.EXPECT().Messages().Return(messages)
+	pc.EXPECT().Messages().Return(messages).AnyTimes()
+	pc.EXPECT().Errors().Return(cherr).AnyTimes()
 	err = c.AddPartition(topic, partition, offset)
 	ensure.Nil(t, err)
 
@@ -242,6 +246,7 @@ func TestSimpleConsumer_ErrorBlocked(t *testing.T) {
 		hwm       int64 = 1237
 		messages        = make(chan *sarama.ConsumerMessage)
 		ch              = make(chan Event)
+		cherr           = make(chan *sarama.ConsumerError)
 	)
 
 	c := &simpleConsumer{
@@ -265,7 +270,8 @@ func TestSimpleConsumer_ErrorBlocked(t *testing.T) {
 	client.EXPECT().GetOffset(topic, partition, sarama.OffsetOldest).Return(oldest, nil)
 	client.EXPECT().GetOffset(topic, partition, sarama.OffsetNewest).Return(hwm, nil)
 	consumer.EXPECT().ConsumePartition(topic, partition, offset).Return(pc, nil)
-	pc.EXPECT().Messages().Return(messages)
+	pc.EXPECT().Messages().Return(messages).AnyTimes()
+	pc.EXPECT().Errors().Return(cherr).AnyTimes()
 	err = c.AddPartition(topic, partition, offset)
 	ensure.Nil(t, err)
 	m, ok := (<-ch).(*BOF)

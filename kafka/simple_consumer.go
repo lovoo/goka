@@ -92,6 +92,13 @@ func (c *simpleConsumer) AddPartition(topic string, partition int32, offset int6
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
+		defer func() {
+			if err := recover(); err != nil {
+				c.events <- &Error{
+					Err: fmt.Errorf("panic: %v", err),
+				}
+			}
+		}()
 		c.run(pc, topic, partition, start, hwm)
 	}()
 	return nil
@@ -125,48 +132,71 @@ func (c *simpleConsumer) run(pc sarama.PartitionConsumer, topic string, partitio
 
 	count := 0
 	// wait for messages to arrive
-	for m := range pc.Messages() {
+	for {
 		select {
-		case c.events <- &Message{
-			Topic:     m.Topic,
-			Partition: m.Partition,
-			Offset:    m.Offset,
-			Key:       string(m.Key),
-			Value:     m.Value,
-			Timestamp: m.Timestamp,
-		}:
+		case m, ok := <-pc.Messages():
+			if !ok {
+				// Closed, this might happen due to an error. Continue the loop
+				// so we can send the error further down.
+				continue
+			}
+			select {
+			case c.events <- &Message{
+				Topic:     m.Topic,
+				Partition: m.Partition,
+				Offset:    m.Offset,
+				Key:       string(m.Key),
+				Value:     m.Value,
+				Timestamp: m.Timestamp,
+			}:
+			case <-c.dying:
+				return
+			}
+
+			// is this EOF?
+			// TODO (franz): check how fast the topic has to be until we don't get an EOF for
+			// *every* message.
+			if m.Offset == pc.HighWaterMarkOffset()-1 {
+				select {
+				case c.events <- &EOF{
+					Topic:     m.Topic,
+					Partition: m.Partition,
+					Hwm:       m.Offset + 1,
+				}:
+				case <-c.dying:
+					return
+				}
+			}
+
+			count++
+			if count%1000 == 0 && m.Offset >= hwm { // was this EOF?
+				select {
+				case c.events <- &EOF{
+					Topic:     m.Topic,
+					Partition: m.Partition,
+					Hwm:       pc.HighWaterMarkOffset(),
+				}:
+				case <-c.dying:
+					return
+				}
+			}
+		case err, ok := <-pc.Errors():
+			if !ok {
+				// Closed, this might happend if the error is not recoverable and will
+				// shutdown the partition consumer. Continue the loop and wait for a
+				// dying message.
+				continue
+			}
+			select {
+			case c.events <- &Error{
+				Err: err,
+			}:
+			case <-c.dying:
+				return
+			}
+			return
 		case <-c.dying:
 			return
-		}
-
-		// is this EOF?
-		// TODO (franz): check how fast the topic has to be until we don't get an EOF for
-		// *every* message.
-		if m.Offset == pc.HighWaterMarkOffset()-1 {
-			select {
-			case c.events <- &EOF{
-				Topic:     m.Topic,
-				Partition: m.Partition,
-				Hwm:       m.Offset + 1,
-			}:
-			case <-c.dying:
-				return
-			}
-
-		}
-
-		count++
-		if count%1000 == 0 && m.Offset >= hwm { // was this EOF?
-			select {
-			case c.events <- &EOF{
-				Topic:     m.Topic,
-				Partition: m.Partition,
-				Hwm:       pc.HighWaterMarkOffset(),
-			}:
-			case <-c.dying:
-				return
-			}
-
 		}
 	}
 }
