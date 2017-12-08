@@ -32,7 +32,6 @@ type partition struct {
 	done     chan bool
 	stopFlag int64
 
-	preparingFlag int32
 	recoveredFlag int32
 	hwm           int64
 	offset        int64
@@ -69,6 +68,7 @@ func newPartition(log logger.Logger, topic string, cb processCallback, st *stora
 		process:       cb,
 
 		stats:         newPartitionStats(),
+		lastStats:     newPartitionStats(),
 		requestStats:  make(chan bool),
 		responseStats: make(chan *PartitionStats, 1),
 	}
@@ -180,8 +180,9 @@ func (p *partition) run() error {
 			}
 
 		case <-p.requestStats:
+			p.lastStats = newPartitionStats().init(p.stats, p.offset, p.hwm)
 			select {
-			case p.responseStats <- newPartitionStats().init(p.stats, p.offset, p.hwm):
+			case p.responseStats <- p.lastStats:
 			case <-p.dying:
 				return nil
 			}
@@ -299,8 +300,9 @@ func (p *partition) load(catchup bool) error {
 			}
 
 		case <-p.requestStats:
+			p.lastStats = newPartitionStats().init(p.stats, p.offset, p.hwm)
 			select {
-			case p.responseStats <- newPartitionStats().init(p.stats, p.offset, p.hwm):
+			case p.responseStats <- p.lastStats:
 			case <-p.dying:
 				return nil
 			}
@@ -328,11 +330,8 @@ func (p *partition) markRecovered() (err error) {
 	p.recoveredOnce.Do(func() {
 		p.lastStats = newPartitionStats().init(p.stats, p.offset, p.hwm)
 		p.lastStats.Table.Status = PartitionPreparing
-		p.stats.Table.Status = PartitionPreparing
 
-		atomic.StoreInt32(&p.preparingFlag, 1)
 		err = p.st.MarkRecovered()
-		atomic.StoreInt32(&p.preparingFlag, 0)
 
 		p.stats.Table.Status = PartitionRunning
 		p.stats.Table.RecoveryTime = time.Now()
@@ -343,14 +342,16 @@ func (p *partition) markRecovered() (err error) {
 }
 
 func (p *partition) fetchStats() *PartitionStats {
-	if atomic.LoadInt32(&p.preparingFlag) == 1 {
-		return p.lastStats
-	}
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+
 	select {
 	case p.requestStats <- true:
 	case <-p.dying:
 		// if closing, return empty stats
 		return newPartitionStats()
+	case <-timer.C:
+		return p.lastStats
 	}
 
 	select {
