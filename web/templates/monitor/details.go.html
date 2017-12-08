@@ -36,16 +36,17 @@
 
 
       var lastPartition = d3.local();
+      
+      var statusMap = {0: "recovering", 1:"preparing", 2: "running"};
 
       var renderPartitions = function(partitions){
 
         var updatePartitionPanel = function(data){
           var partitionId = data[0];
           var stats = data[1];
-          var status = "running";
-          if(!stats.Table.Recovered){
-            status = "recovering";
-          }
+          
+          var status = statusMap[stats.Table.Status];
+          
           if(stats.Table.Stalled){
             status = "stalled";
           }
