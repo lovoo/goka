@@ -336,14 +336,20 @@ func (g *Processor) pushToPartitionView(topic string, part int32, ev kafka.Event
 func (g *Processor) run() {
 	g.opts.log.Printf("Processor: started")
 	defer g.opts.log.Printf("Processor: stopped")
+	var failed bool
 
 	for ev := range g.consumer.Events() {
+		if _, ok := ev.(*kafka.Error); failed && !ok {
+			// if we failed and message is not a further error, drop message
+			continue
+		}
+
 		switch ev := ev.(type) {
 		case *kafka.Assignment:
 			err := g.rebalance(*ev)
 			if err != nil {
 				g.fail(fmt.Errorf("error on rebalance: %v", err))
-				return
+				failed = true
 			}
 
 		case *kafka.Message:
@@ -355,7 +361,7 @@ func (g *Processor) run() {
 			}
 			if err != nil {
 				g.fail(fmt.Errorf("error consuming message: %v", err))
-				return
+				failed = true
 			}
 
 		case *kafka.BOF:
@@ -367,7 +373,7 @@ func (g *Processor) run() {
 			}
 			if err != nil {
 				g.fail(fmt.Errorf("error consuming BOF: %v", err))
-				return
+				failed = true
 			}
 
 		case *kafka.EOF:
@@ -379,7 +385,7 @@ func (g *Processor) run() {
 			}
 			if err != nil {
 				g.fail(fmt.Errorf("error consuming EOF: %v", err))
-				return
+				failed = true
 			}
 
 		case *kafka.NOP:
@@ -391,11 +397,11 @@ func (g *Processor) run() {
 
 		case *kafka.Error:
 			g.fail(ev.Err)
-			return
+			failed = true
 
 		default:
 			g.fail(fmt.Errorf("processor: cannot handle %T = %v", ev, ev))
-			return
+			failed = true
 		}
 	}
 }
