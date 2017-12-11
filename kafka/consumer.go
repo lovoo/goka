@@ -78,10 +78,7 @@ func (c *saramaConsumer) Close() error {
 	if err1 != nil {
 		return err1
 	}
-	if err2 != nil {
-		return err2
-	}
-	return nil
+	return err2
 }
 
 func (c *saramaConsumer) Events() <-chan Event {

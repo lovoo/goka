@@ -51,12 +51,11 @@ func (c *simpleConsumer) Close() error {
 	c.m.Lock()
 	defer c.m.Unlock()
 	for tp, pc := range c.partitions {
-		err := pc.Close()
-		if err != nil {
-			return fmt.Errorf("Failed to terminate partition consumer (FATAL): %v", err)
-		}
+		pc.AsyncClose()
 		delete(c.partitions, tp)
 	}
+
+	// wait until all partition consumers have finished
 	c.wg.Wait()
 
 	if err := c.consumer.Close(); err != nil {
@@ -205,11 +204,9 @@ func (c *simpleConsumer) RemovePartition(topic string, partition int32) error {
 	if !has {
 		return fmt.Errorf("%s/%d was not added", topic, partition)
 	}
-	defer delete(c.partitions, tp) // remove tp from map even in case of errors
-	err := pc.Close()
-	if err != nil {
-		return fmt.Errorf("error closing consumer for %s/%d: %v", topic, partition, err)
-	}
+	delete(c.partitions, tp)
+	pc.AsyncClose()
+
 	return nil
 }
 
