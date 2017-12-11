@@ -9,6 +9,7 @@ import (
 
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
+	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
 
@@ -32,7 +33,7 @@ type Processor struct {
 	dying    chan bool // stop() goroutine asks start() goroutine to exit
 	done     chan bool // start() goroutine is ready to exit
 	dead     chan bool // stop() goroutine exits
-	errors   Errors
+	errors   multierr.Errors
 	stopOnce sync.Once
 }
 
@@ -291,7 +292,7 @@ func (g *Processor) Start() error {
 		topics[lt.Topic()] = -1
 	}
 	if err := g.consumer.Subscribe(topics); err != nil {
-		g.errors.collect(fmt.Errorf("error subscribing topics: %v", err))
+		g.errors.Collect(fmt.Errorf("error subscribing topics: %v", err))
 		close(g.done)
 		return &g.errors
 	}
@@ -299,7 +300,7 @@ func (g *Processor) Start() error {
 
 	close(g.done)
 	<-g.dead // wait for stop goroutine to return from stop() call
-	if g.errors.hasErrors() {
+	if g.errors.HasErrors() {
 		return &g.errors
 	}
 	return nil
@@ -408,7 +409,7 @@ func (g *Processor) run() {
 
 func (g *Processor) fail(err error) {
 	g.opts.log.Printf("failing: %v", err)
-	g.errors.collect(err)
+	g.errors.Collect(err)
 	go g.stop()
 }
 
@@ -420,7 +421,7 @@ func (g *Processor) stop() {
 		g.opts.log.Printf("Processor: wait for main goroutine")
 		<-g.done
 		if err != nil {
-			g.errors.collect(fmt.Errorf("Failed to close consumer: %v", err))
+			g.errors.Collect(fmt.Errorf("Failed to close consumer: %v", err))
 		}
 
 		// remove all partitions first
@@ -436,7 +437,7 @@ func (g *Processor) stop() {
 
 		// close connection to Kafka
 		if err := g.producer.Close(); err != nil {
-			g.errors.collect(fmt.Errorf("Failed to close producer: %v", err))
+			g.errors.Collect(fmt.Errorf("Failed to close producer: %v", err))
 		}
 
 		// release Start() goroutine
