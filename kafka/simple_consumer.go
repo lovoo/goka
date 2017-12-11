@@ -136,8 +136,8 @@ func (c *simpleConsumer) run(pc sarama.PartitionConsumer, topic string, partitio
 		select {
 		case m, ok := <-pc.Messages():
 			if !ok {
-				// Closed, this might happen due to an error. Continue the loop
-				// so we can send the error further down.
+				// Partition was removed. Continue to loop until errors are also
+				// drained.
 				continue
 			}
 			select {
@@ -153,9 +153,6 @@ func (c *simpleConsumer) run(pc sarama.PartitionConsumer, topic string, partitio
 				return
 			}
 
-			// is this EOF?
-			// TODO (franz): check how fast the topic has to be until we don't get an EOF for
-			// *every* message.
 			if m.Offset == pc.HighWaterMarkOffset()-1 {
 				select {
 				case c.events <- &EOF{
@@ -182,10 +179,8 @@ func (c *simpleConsumer) run(pc sarama.PartitionConsumer, topic string, partitio
 			}
 		case err, ok := <-pc.Errors():
 			if !ok {
-				// Closed, this might happend if the error is not recoverable and will
-				// shutdown the partition consumer. Continue the loop and wait for a
-				// dying message.
-				continue
+				// Partition was removed.
+				return
 			}
 			select {
 			case c.events <- &Error{
@@ -196,6 +191,7 @@ func (c *simpleConsumer) run(pc sarama.PartitionConsumer, topic string, partitio
 			}
 			return
 		case <-c.dying:
+			// Only closed when simple_consumer was closed, not when partitions are removed.
 			return
 		}
 	}
