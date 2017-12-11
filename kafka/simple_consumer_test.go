@@ -135,12 +135,7 @@ func TestSimpleConsumer_AddPartition(t *testing.T) {
 
 	doTimed(t, func() {
 		close(messages)
-		pc.EXPECT().Close().Return(errors.New("some error"))
-		c.dying = make(chan bool)
-		err := c.Close()
-		ensure.NotNil(t, err)
-
-		pc.EXPECT().Close().Return(nil)
+		pc.EXPECT().AsyncClose()
 		consumer.EXPECT().Close().Return(errors.New("some error"))
 		c.dying = make(chan bool)
 		err = c.Close()
@@ -204,20 +199,11 @@ func TestSimpleConsumer_RemovePartition(t *testing.T) {
 		topicPartition{topic, partition}: pc,
 	})
 
-	// remove partition even if it returns error
-	pc.EXPECT().Close().Return(errors.New("some error"))
-	err = c.RemovePartition(topic, partition)
-	ensure.NotNil(t, err)
-	ensure.DeepEqual(t, c.partitions, make(map[topicPartition]sarama.PartitionConsumer))
-
 	// add partition again
-	client.EXPECT().GetOffset(topic, partition, sarama.OffsetOldest).Return(oldest, nil)
-	client.EXPECT().GetOffset(topic, partition, sarama.OffsetNewest).Return(hwm, nil)
-	consumer.EXPECT().ConsumePartition(topic, partition, offset).Return(pc, nil)
 	err = c.AddPartition(topic, partition, offset)
-	ensure.Nil(t, err)
+	ensure.NotNil(t, err)
 
-	pc.EXPECT().Close().Return(nil)
+	pc.EXPECT().AsyncClose()
 	err = c.RemovePartition(topic, partition)
 	ensure.Nil(t, err)
 
@@ -301,7 +287,7 @@ func TestSimpleConsumer_ErrorBlocked(t *testing.T) {
 	}
 
 	err = doTimed(t, func() {
-		pc.EXPECT().Close().Return(nil)
+		pc.EXPECT().AsyncClose()
 		consumer.EXPECT().Close().Return(nil)
 		client.EXPECT().Close().Return(nil)
 		err := c.Close()
