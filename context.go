@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
 
@@ -77,7 +78,7 @@ type context struct {
 		dones  int
 		stores int
 	}
-	errors Errors
+	errors multierr.Errors
 	m      sync.Mutex
 	wg     *sync.WaitGroup
 }
@@ -308,7 +309,7 @@ func (ctx *context) start() {
 // if some emit failed.
 func (ctx *context) tryCommit(err error) {
 	if err != nil {
-		ctx.errors.collect(err)
+		ctx.errors.Collect(err)
 	}
 
 	// not all calls are done yet, do not send the ack upstream.
@@ -317,7 +318,7 @@ func (ctx *context) tryCommit(err error) {
 	}
 
 	// commit if no errors, otherwise fail context
-	if ctx.errors.hasErrors() {
+	if ctx.errors.HasErrors() {
 		ctx.failer(fmt.Errorf("error emitting to %s: %v", ctx.graph.GroupTable().Topic(), ctx.errors.Error()))
 	} else {
 		ctx.commit()

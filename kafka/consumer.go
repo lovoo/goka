@@ -4,6 +4,7 @@ import (
 	"time"
 
 	cluster "github.com/bsm/sarama-cluster"
+	"github.com/lovoo/goka/multierr"
 )
 
 const (
@@ -73,12 +74,14 @@ func (c *saramaConsumer) Close() error {
 	// we want to close the events-channel regardless of any errors closing
 	// the consumers
 	defer close(c.events)
-	err1 := c.simpleConsumer.Close()
-	err2 := c.groupConsumer.Close()
-	if err1 != nil {
-		return err1
+	var errs multierr.Errors
+	if err := c.simpleConsumer.Close(); err != nil {
+		errs.Collect(err)
 	}
-	return err2
+	if err := c.groupConsumer.Close(); err != nil {
+		errs.Collect(err)
+	}
+	return errs.NilOrError()
 }
 
 func (c *saramaConsumer) Events() <-chan Event {
