@@ -202,8 +202,10 @@ func (g *Processor) isStateless() bool {
 ///////////////////////////////////////////////////////////////////////////////
 
 // Get returns a read-only copy of a value from the group table if the
-// respective partition is owned by the processor instace. Get can be only
-// used with stateful processors (ie, when group table is enabled).
+// respective partition is owned by the processor instace.
+// Get can be called by multiple goroutines concurrently.
+// Get can be only used with stateful processors (ie, when group table is
+// enabled) and after Recovered returns true.
 func (g *Processor) Get(key string) (interface{}, error) {
 	if g.isStateless() {
 		return nil, fmt.Errorf("can't get a value from stateless processor")
@@ -740,21 +742,49 @@ func (g *Processor) Recovered() bool {
 }
 
 func (g *Processor) Stats() *ProcessorStats {
-	stats := newProcessorStats(len(g.partitions))
+	var (
+		m     sync.Mutex
+		wg    sync.WaitGroup
+		stats = newProcessorStats(len(g.partitions))
+	)
+
 	for i, p := range g.partitions {
-		stats.Group[i] = p.fetchStats()
+		wg.Add(1)
+		go func(pid int32, par *partition) {
+			s := par.fetchStats()
+			m.Lock()
+			stats.Group[pid] = s
+			m.Unlock()
+			wg.Done()
+		}(int32(i), p)
 	}
 	for i, p := range g.partitionViews {
 		if _, ok := stats.Joined[i]; !ok {
 			stats.Joined[i] = make(map[string]*PartitionStats)
 		}
 		for t, tp := range p {
-			stats.Joined[i][t] = tp.fetchStats()
+			wg.Add(1)
+			go func(pid int32, topic string, par *partition) {
+				s := par.fetchStats()
+				m.Lock()
+				stats.Joined[pid][topic] = s
+				m.Unlock()
+				wg.Done()
+			}(int32(i), t, tp)
 		}
 	}
 	for t, v := range g.views {
-		stats.Lookup[t] = v.Stats()
+		wg.Add(1)
+		go func(topic string, vi *View) {
+			s := vi.Stats()
+			m.Lock()
+			stats.Lookup[t] = s
+			m.Unlock()
+			wg.Done()
+		}(t, v)
 	}
+
+	wg.Wait()
 	return stats
 }
 

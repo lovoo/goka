@@ -342,7 +342,7 @@ func (p *partition) markRecovered() (err error) {
 }
 
 func (p *partition) fetchStats() *PartitionStats {
-	timer := time.NewTimer(5 * time.Second)
+	timer := time.NewTimer(100 * time.Millisecond)
 	defer timer.Stop()
 
 	select {

@@ -139,7 +139,7 @@ func (v *View) Start() error {
 }
 
 func (v *View) fail(err error) {
-	v.opts.log.Printf("failing view: %v", err)
+	v.opts.log.Printf("View: failing: %v", err)
 	v.errors.Collect(err)
 	go v.stop()
 }
@@ -149,19 +149,24 @@ func (v *View) stop() {
 		defer close(v.dead)
 		// stop consumer
 		if err := v.consumer.Close(); err != nil {
-			v.errors.Collect(fmt.Errorf("failed to close consumer on stopping the view: %v", err))
+			err = fmt.Errorf("failed to close consumer on stopping the view: %v", err)
+			v.opts.log.Printf("error: %v", err)
+			v.errors.Collect(err)
 		}
 		<-v.done
+		v.opts.log.Printf("View: stopping partitions")
 
 		var wg sync.WaitGroup
-		for _, par := range v.partitions {
+		for i, par := range v.partitions {
 			wg.Add(1)
-			go func(p *partition) {
+			go func(pid int, p *partition) {
 				p.stop()
 				wg.Done()
-			}(par)
+				v.opts.log.Printf("View: partition %d stopped", pid)
+			}(i, par)
 		}
 		wg.Wait()
+		v.opts.log.Printf("View: shutdown complete")
 	})
 }
 
@@ -169,7 +174,6 @@ func (v *View) stop() {
 func (v *View) Stop() {
 	v.opts.log.Printf("View: stopping")
 	v.stop()
-	v.opts.log.Printf("View: shutdown complete")
 }
 
 func (v *View) hash(key string) (int32, error) {
@@ -206,6 +210,8 @@ func (v *View) Topic() string {
 }
 
 // Get returns the value for the key in the view, if exists. Nil if it doesn't.
+// Get can be called by multiple goroutines concurrently.
+// Get can only be called after Recovered returns true.
 func (v *View) Get(key string) (interface{}, error) {
 	// find partition where key is located
 	s, err := v.find(key)
@@ -314,9 +320,22 @@ func (v *View) Recovered() bool {
 }
 
 func (v *View) Stats() *ViewStats {
-	stats := newViewStats()
+	var (
+		m     sync.Mutex
+		wg    sync.WaitGroup
+		stats = newViewStats()
+	)
+
+	wg.Add(len(v.partitions))
 	for i, p := range v.partitions {
-		stats.Partitions[int32(i)] = p.fetchStats()
+		go func(pid int32, par *partition) {
+			s := par.fetchStats()
+			m.Lock()
+			stats.Partitions[pid] = s
+			m.Unlock()
+			wg.Done()
+		}(int32(i), p)
 	}
+	wg.Wait()
 	return stats
 }
