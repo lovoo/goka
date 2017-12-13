@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
@@ -16,9 +17,10 @@ type groupConsumer struct {
 	partitionMap map[int32]bool
 	addPartition chan int32
 
-	events chan Event
-	stop   chan bool
-	done   chan bool
+	events  chan Event
+	stop    chan bool
+	done    chan bool
+	running int64
 }
 
 func newGroupConsumer(brokers []string, group string, events chan Event, config *cluster.Config) (*groupConsumer, error) {
@@ -35,6 +37,10 @@ func newGroupConsumer(brokers []string, group string, events chan Event, config 
 }
 
 func (c *groupConsumer) Close() error {
+	if atomic.LoadInt64(&c.running) == 0 {
+		// not running
+		return nil
+	}
 	close(c.stop)
 	<-c.done
 	if err := c.consumer.Close(); err != nil {
@@ -190,6 +196,7 @@ func (c *groupConsumer) waitForMessages() bool {
 }
 
 func (c *groupConsumer) run() {
+	atomic.AddInt64(&c.running, 1)
 	defer close(c.done)
 
 	if !c.waitForNotification() {

@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,6 +41,14 @@ func TestGroupConsumer_Subscribe(t *testing.T) {
 		c.run()
 		close(wait)
 	}()
+
+	// wait for running
+	for {
+		if atomic.LoadInt64(&c.running) != 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	consumer.EXPECT().Close().Return(nil)
 	err = doTimed(t, func() {
