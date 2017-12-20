@@ -203,7 +203,7 @@ func TestSimpleConsumer_RemovePartition(t *testing.T) {
 	err = c.AddPartition(topic, partition, offset)
 	ensure.NotNil(t, err)
 
-	pc.EXPECT().AsyncClose()
+	pc.EXPECT().Close()
 	err = c.RemovePartition(topic, partition)
 	ensure.Nil(t, err)
 

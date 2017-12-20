@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	brokers             = []string{"127.0.0.1:9092"}
+	brokers             = []string{"localhost:9092"}
 	topic   goka.Stream = "user-click"
 	group   goka.Group  = "mini-group"
 )
@@ -64,7 +64,7 @@ func runEmitter() {
 
 	var i int
 	for range t.C {
-		key := fmt.Sprintf("user-%d", i%20)
+		key := fmt.Sprintf("user-%d", i%50)
 		value := fmt.Sprintf("%s", time.Now())
 		emitter.EmitSync(key, value)
 		i++
@@ -106,9 +106,44 @@ func runStatelessProcessor(monitor *monitor.Server) {
 		fmt.Println("Processor stopped without errors")
 	}
 }
+
+func runJoinProcessor(monitor *monitor.Server) {
+	g := goka.DefineGroup(group+"-join",
+		goka.Input(topic,
+			new(codec.String),
+			func(ctx goka.Context, msg interface{}) {
+				var u *user
+				if val := ctx.Value(); val != nil {
+					u = val.(*user)
+				} else {
+					u = new(user)
+				}
+
+				u.Clicks++
+				ctx.SetValue(u)
+			}),
+		goka.Persist(new(userCodec)),
+	)
+	p, err := goka.NewProcessor(brokers, g)
+	if err != nil {
+		panic(err)
+	}
+
+	// attach the processor to the monitor
+	monitor.AttachProcessor(p)
+
+	err = p.Start()
+	if err != nil {
+		panic(err)
+	} else {
+		fmt.Println("Processor stopped without errors")
+	}
+}
+
 func runProcessor(monitor *monitor.Server, query *query.Server) {
 	g := goka.DefineGroup(group,
 		goka.Input(topic, new(codec.String), process),
+		goka.Join(goka.GroupTable(goka.Group(string(group)+"-join")), new(codec.String)),
 		goka.Persist(new(userCodec)),
 	)
 	p, err := goka.NewProcessor(brokers, g)
@@ -162,5 +197,6 @@ func main() {
 	go runEmitter()
 	go runProcessor(monitorServer, queryServer)
 	go runStatelessProcessor(monitorServer)
+	go runJoinProcessor(monitorServer)
 	runView(root, monitorServer)
 }
