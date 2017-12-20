@@ -31,22 +31,46 @@
           </tbody>
         </table>
       </div>
+    </div>
+
+{{if eq .renderType "processor"}}
+    <div class="panel panel-default">
+      <div class="panel panel-heading">
+        <h3>Co-Joined Tables</h3>
+      </div>
+      <div class="panel-body">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th title="partition number">Partition</th>
+              <th title="Topic being joined">Table</th>
+              <th title="Status of the processor">State</th>
+              <th title="Number of messages lagging behind HWM">Offset-Lag</th>
+              <th title="High water mark (offset of the next message being consumed)" rowspan="2">HWM</th>
+              <th title="Rate of messages written to local state per second">Write-Rate</th>
+            </tr>
+          </thead>
+          <tbody id="joinView">
+          </tbody>
+        </table>
+      </div>
+    </div>
+{{end}}
 
     <script type="text/javascript">
 
-
       var lastPartition = d3.local();
-      
+
       var statusMap = {0: "recovering", 1:"preparing", 2: "running"};
 
-      var renderPartitions = function(partitions){
+      var renderDetails = function(partitions){
 
         var updatePartitionPanel = function(data){
           var partitionId = data[0];
           var stats = data[1];
-          
+
           var status = statusMap[stats.Table.Status];
-          
+
           if(stats.Table.Stalled){
             status = "stalled";
           }
@@ -87,7 +111,6 @@
               };
             }
 
-
             var groupedInput = _.mergeWith(curStats.Input, lastStats.Input, valueDiff);
             inputRate = _.chain(groupedInput).flatMap("Count").sum().value() / timeDiff;
             inputBytes = _.chain(groupedInput).flatMap("Bytes").sum().value() / timeDiff;
@@ -116,22 +139,79 @@
           var group = partitions.Partitions;
         {{end}}
 
+        // Group Table
         var groupList = _.toPairs(group).sort(function(a,b){return parseInt(a[0]) - parseInt(b[0]);});
         // update, enter and remove data
         var d = d3.select("#partitionView").selectAll(".partitionbox").data(groupList, function(d){ return d[0]; });
         d.html(updatePartitionPanel);
         d3.select("#partitionView").selectAll(".partitionbox").data(groupList, function(d){ return d[0]; }).enter().append("tr").classed("partitionbox", true).html(updatePartitionPanel);
         d.exit().remove()
+
+{{if eq .renderType "processor"}}
+        var lastJoinStats = d3.local();
+        var updateJoinPanel = function(data){
+          var partitionId = data[0];
+          var stats = data[3];
+          var status = statusMap[stats.Table.Status];
+
+          if(stats.Table.Stalled){
+            status = "stalled";
+          }
+          var offsetLag = stats.Table.Hwm - stats.Table.Offset - 1;
+
+          var writeRate = 0;
+
+          // let's check if we have a previous dataset and set them to their
+          // correct values
+          var lastStats = lastJoinStats.get(this);
+
+          if(lastStats){
+            // copy the stats to avoid modifying it inplace
+            var curStats = JSON.parse(JSON.stringify(stats));
+            // diff to previous stats in seconds
+            var timeDiff = (new Date(stats.Now) - new Date(lastStats.Now)) / 1000.0;
+            writeRate = (stats.Table.Offset - lastStats.Table.Offset) / timeDiff;
+          }
+          lastJoinStats.set(this, stats);
+
+          return '<td>'+partitionId+'</td>\n'+
+            '<td>'+data[1]+'</td>\n'+
+            '<td>'+status+'</td>\n'+
+            '<td>'+offsetLag+'</td>\n'+
+            '<td>'+stats.Table.Hwm+'</td>\n'+
+            '<td>'+writeRate.toFixed(2)+'</td>\n';
+        };
+        // CoJoined Partitions
+        var joinList = _.flatMap(_.toPairs(partitions.Joined), function(value) {
+          return _.map(value[1], function(innerValue, key) {
+            var idKey = new String(value[0]).concat(key);
+            return [parseInt(value[0]), key, idKey, innerValue];
+          });
+        }).sort(function(a, b) {
+          if(a[0] != b[0]) {
+            return a[0] - b[0];
+          }
+          return a[1].localeCompare(b[1]);
+        });
+
+        // update, enter and remove data
+        var d = d3.select("#joinView").selectAll(".partitionbox").data(joinList, function(d){ return d[2]; });
+        d.html(updateJoinPanel);
+        d3.select("#joinView").selectAll(".partitionbox").data(joinList, function(d){ return d[2]; }).enter().append("tr").classed("partitionbox", true).html(updateJoinPanel);
+        d.exit().remove();
+
+{{end}} // go template end if the component is no processor
+
       };
 
-      window.setInterval(function(){
-        d3.json("{{.base_path}}/data/{{.renderType}}/{{.vars.idx}}", renderPartitions);
+      window.setInterval(function() {
+        d3.json("{{.base_path}}/data/{{.renderType}}/{{.vars.idx}}", renderDetails);
       }, 2000);
 
       // call it initially
-      d3.json("{{.base_path}}/data/{{.renderType}}/{{.vars.idx}}", renderPartitions);
+      d3.json("{{.base_path}}/data/{{.renderType}}/{{.vars.idx}}", renderDetails);
+
     </script>
-    </div>
   </div>
 </div>
 {{end}}
