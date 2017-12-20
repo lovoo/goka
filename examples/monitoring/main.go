@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	brokers             = []string{"127.0.0.1:9092"}
+	brokers             = []string{"localhost:9092"}
 	topic   goka.Stream = "user-click"
 	group   goka.Group  = "mini-group"
 )
@@ -64,7 +64,7 @@ func runEmitter() {
 
 	var i int
 	for range t.C {
-		key := fmt.Sprintf("user-%d", i%20)
+		key := fmt.Sprintf("user-%d", i%50)
 		value := fmt.Sprintf("%s", time.Now())
 		emitter.EmitSync(key, value)
 		i++

@@ -60,7 +60,7 @@
     <script type="text/javascript">
 
       var lastPartition = d3.local();
-
+      var lastJoinStats = d3.local();
       var statusMap = {0: "recovering", 1:"preparing", 2: "running"};
 
       var renderDetails = function(partitions){
@@ -148,7 +148,6 @@
         d.exit().remove()
 
 {{if eq .renderType "processor"}}
-        var lastJoinStats = d3.local();
         var updateJoinPanel = function(data){
           var partitionId = data[0];
           var stats = data[3];
