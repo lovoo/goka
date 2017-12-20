@@ -150,7 +150,7 @@ func (p *partition) run() error {
 			switch ev := ev.(type) {
 			case *kafka.Message:
 				if ev.Topic == p.topic {
-					return fmt.Errorf("received message from group table topic after recovery")
+					return fmt.Errorf("received message from group table topic after recovery: %s", p.topic)
 				}
 
 				updates, err := p.process(newMessage(ev), p.st, &wg, p.stats)

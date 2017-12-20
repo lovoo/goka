@@ -205,7 +205,10 @@ func (c *simpleConsumer) RemovePartition(topic string, partition int32) error {
 		return fmt.Errorf("%s/%d was not added", topic, partition)
 	}
 	delete(c.partitions, tp)
-	pc.AsyncClose()
+
+	if err := pc.Close(); err != nil {
+		return fmt.Errorf("error closing consumer for %s/%d: %v", topic, partition, err)
+	}
 
 	return nil
 }
