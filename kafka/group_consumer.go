@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"fmt"
+	"log"
 	"sync/atomic"
 
 	"github.com/Shopify/sarama"
@@ -65,26 +66,55 @@ func (c *groupConsumer) Subscribe(topics map[string]int64) error {
 	return nil
 }
 
-func (c *groupConsumer) waitForNotification() bool {
+func (c *groupConsumer) waitForRebalanceOK() bool {
 	for {
 		select {
 		case n := <-c.consumer.Notifications():
-			return c.handleNotification(n)
+			if !c.checkRebalance(cluster.RebalanceStart, n.Type) {
+				continue
+			}
 
+			select {
+			case nn := <-c.consumer.Notifications():
+				if !c.checkRebalance(cluster.RebalanceOK, nn.Type) {
+					continue
+				}
+
+				return c.handleRebalanceOK(nn)
+			case <-c.stop:
+				return false
+			}
 		case err := <-c.consumer.Errors():
 			select {
 			case c.events <- &Error{err}:
 			case <-c.stop:
 				return false
 			}
-
 		case <-c.stop:
 			return false
 		}
 	}
 }
 
-func (c *groupConsumer) handleNotification(n *cluster.Notification) bool {
+func (c *groupConsumer) checkRebalance(expected, actual cluster.NotificationType) bool {
+	if actual != expected {
+		select {
+		case c.events <- &Error{fmt.Errorf("expected %s but received %s", expected, actual)}:
+		case <-c.stop:
+		}
+
+		return false
+	}
+
+	return true
+}
+
+func (c *groupConsumer) handleRebalanceOK(n *cluster.Notification) bool {
+	if n.Type != cluster.RebalanceOK {
+		// panic as this is a programming error
+		log.Panicf("GroupConsumer: unsupported notification type in handleRebalanceOK: %v/%s", n.Type, n.Type)
+	}
+
 	// save partition map
 	m := c.partitionMap
 	c.partitionMap = make(map[int32]bool)
@@ -166,8 +196,20 @@ func (c *groupConsumer) waitForMessages() bool {
 	for {
 		select {
 		case n := <-c.consumer.Notifications():
-			return c.handleNotification(n)
+			if !c.checkRebalance(cluster.RebalanceStart, n.Type) {
+				continue
+			}
 
+			select {
+			case nn := <-c.consumer.Notifications():
+				if !c.checkRebalance(cluster.RebalanceOK, nn.Type) {
+					continue
+				}
+
+				return c.handleRebalanceOK(nn)
+			case <-c.stop:
+				return false
+			}
 		case msg := <-c.consumer.Messages():
 			select {
 			case c.events <- &Message{
@@ -199,7 +241,7 @@ func (c *groupConsumer) run() {
 	atomic.AddInt64(&c.running, 1)
 	defer close(c.done)
 
-	if !c.waitForNotification() {
+	if !c.waitForRebalanceOK() {
 		return
 	}
 
