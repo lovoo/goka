@@ -9,7 +9,7 @@ import (
 
 const (
 	// size of sarama buffer for consumer and producer
-	defaultChannelBufferSize = 1024
+	defaultChannelBufferSize = 100
 
 	// time sarama-cluster assumes the processing of an event may take
 	defaultMaxProcessingTime = 1 * time.Second
