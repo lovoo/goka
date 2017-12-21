@@ -70,7 +70,7 @@ func TestGroupConsumer_Group(t *testing.T) {
 
 	notifications := make(chan *cluster.Notification, 1)
 	errs := make(chan error, 1)
-	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Notifications().Return(notifications).Times(2)
 	consumer.EXPECT().Errors().Return(errs)
 
 	wait := make(chan bool)
@@ -88,11 +88,14 @@ func TestGroupConsumer_Group(t *testing.T) {
 	ensure.DeepEqual(t, e.(*Error).Err, err)
 
 	// notification arrives
+	notifications <- &cluster.Notification{Type: cluster.RebalanceStart}
 	notifications <- &cluster.Notification{
+		Type: cluster.RebalanceOK,
 		Current: map[string][]int32{
 			topic1: []int32{0, 1},
 		}}
 	n := <-events
+
 	ensure.DeepEqual(t, n, &Assignment{
 		0: -1,
 		1: -1,
@@ -100,7 +103,6 @@ func TestGroupConsumer_Group(t *testing.T) {
 	ensure.DeepEqual(t, c.partitionMap, map[int32]bool{
 		0: false, 1: false,
 	})
-
 	// add a partition
 	c.AddGroupPartition(0)
 
@@ -128,8 +130,8 @@ func TestGroupConsumer_CloseOnNotifications(t *testing.T) {
 
 	notifications := make(chan *cluster.Notification)
 	errs := make(chan error)
-	consumer.EXPECT().Notifications().Return(notifications)
-	consumer.EXPECT().Errors().Return(errs)
+	consumer.EXPECT().Notifications().Return(notifications).AnyTimes()
+	consumer.EXPECT().Errors().Return(errs).AnyTimes()
 
 	wait := make(chan bool)
 	go func() {
@@ -138,9 +140,6 @@ func TestGroupConsumer_CloseOnNotifications(t *testing.T) {
 	}()
 
 	// close on error
-	consumer.EXPECT().Notifications().Return(notifications)
-	consumer.EXPECT().Errors().Return(errs)
-
 	err = errors.New("some error")
 	errs <- err
 
@@ -163,7 +162,9 @@ func TestGroupConsumer_CloseOnNotifications(t *testing.T) {
 		close(wait)
 	}()
 
+	notifications <- &cluster.Notification{Type: cluster.RebalanceStart}
 	notifications <- &cluster.Notification{
+		Type: cluster.RebalanceOK,
 		Current: map[string][]int32{
 			topic1: []int32{0, 1},
 		}}
@@ -189,7 +190,7 @@ func TestGroupConsumer_GroupConsumeMessages(t *testing.T) {
 
 	notifications := make(chan *cluster.Notification, 1)
 	errs := make(chan error, 1)
-	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Notifications().Return(notifications).Times(2)
 	consumer.EXPECT().Errors().Return(errs)
 
 	wait := make(chan bool)
@@ -198,7 +199,9 @@ func TestGroupConsumer_GroupConsumeMessages(t *testing.T) {
 		close(wait)
 	}()
 
+	notifications <- &cluster.Notification{Type: cluster.RebalanceStart}
 	notifications <- &cluster.Notification{
+		Type: cluster.RebalanceOK,
 		Current: map[string][]int32{
 			topic1: []int32{0, 1},
 		}}
@@ -279,7 +282,7 @@ func TestGroupConsumer_CloseOnMessages(t *testing.T) {
 
 	notifications := make(chan *cluster.Notification)
 	errs := make(chan error)
-	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Notifications().Return(notifications).Times(2)
 	consumer.EXPECT().Errors().Return(errs)
 
 	wait := make(chan bool)
@@ -288,7 +291,9 @@ func TestGroupConsumer_CloseOnMessages(t *testing.T) {
 		close(wait)
 	}()
 
+	notifications <- &cluster.Notification{Type: cluster.RebalanceStart}
 	notifications <- &cluster.Notification{
+		Type: cluster.RebalanceOK,
 		Current: map[string][]int32{
 			topic1: []int32{0, 1},
 		}}
@@ -342,7 +347,7 @@ func TestGroupConsumer_CloseOnMessageErrors(t *testing.T) {
 
 	notifications := make(chan *cluster.Notification)
 	errs := make(chan error)
-	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Notifications().Return(notifications).Times(2)
 	consumer.EXPECT().Errors().Return(errs)
 
 	wait := make(chan bool)
@@ -351,7 +356,9 @@ func TestGroupConsumer_CloseOnMessageErrors(t *testing.T) {
 		close(wait)
 	}()
 
+	notifications <- &cluster.Notification{Type: cluster.RebalanceStart}
 	notifications <- &cluster.Notification{
+		Type: cluster.RebalanceOK,
 		Current: map[string][]int32{
 			topic1: []int32{0, 1},
 		}}
@@ -395,7 +402,7 @@ func TestGroupConsumer_GroupNotificationsAfterMessages(t *testing.T) {
 
 	notifications := make(chan *cluster.Notification, 1)
 	errs := make(chan error, 1)
-	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Notifications().Return(notifications).Times(2)
 	consumer.EXPECT().Errors().Return(errs)
 
 	wait := make(chan bool)
@@ -404,7 +411,9 @@ func TestGroupConsumer_GroupNotificationsAfterMessages(t *testing.T) {
 		close(wait)
 	}()
 
+	notifications <- &cluster.Notification{Type: cluster.RebalanceStart}
 	notifications <- &cluster.Notification{
+		Type: cluster.RebalanceOK,
 		Current: map[string][]int32{
 			topic1: []int32{0, 1},
 		}}
@@ -439,7 +448,7 @@ func TestGroupConsumer_GroupNotificationsAfterMessages(t *testing.T) {
 	}
 
 	// goroutine will loop after we dequeue Events
-	consumer.EXPECT().Notifications().Return(notifications)
+	consumer.EXPECT().Notifications().Return(notifications).Times(2)
 	consumer.EXPECT().Messages().Return(messages)
 	consumer.EXPECT().Errors().Return(errs)
 	m := <-events
@@ -456,7 +465,9 @@ func TestGroupConsumer_GroupNotificationsAfterMessages(t *testing.T) {
 	})
 
 	// new notification
+	notifications <- &cluster.Notification{Type: cluster.RebalanceStart}
 	notifications <- &cluster.Notification{
+		Type: cluster.RebalanceOK,
 		Current: map[string][]int32{
 			topic1: []int32{0, 1, 2},
 		}}
@@ -492,9 +503,9 @@ func TestGroupConsumer_GroupEmptyNotifications(t *testing.T) {
 	notifications := make(chan *cluster.Notification)
 	messages := make(chan *sarama.ConsumerMessage)
 	errs := make(chan error)
-	consumer.EXPECT().Notifications().Return(notifications).Times(2)
-	consumer.EXPECT().Messages().Return(messages)
-	consumer.EXPECT().Errors().Return(errs).Times(2)
+	consumer.EXPECT().Notifications().Return(notifications).AnyTimes()
+	consumer.EXPECT().Messages().Return(messages).AnyTimes()
+	consumer.EXPECT().Errors().Return(errs).AnyTimes()
 
 	wait := make(chan bool)
 	go func() {
@@ -502,14 +513,18 @@ func TestGroupConsumer_GroupEmptyNotifications(t *testing.T) {
 		close(wait)
 	}()
 
+	notifications <- &cluster.Notification{Type: cluster.RebalanceStart}
 	notifications <- &cluster.Notification{
+		Type:    cluster.RebalanceOK,
 		Current: map[string][]int32{},
 	}
 	n := <-events
 	ensure.DeepEqual(t, n, &Assignment{})
 
 	err = doTimed(t, func() {
+		notifications <- &cluster.Notification{Type: cluster.RebalanceStart}
 		notifications <- &cluster.Notification{
+			Type: cluster.RebalanceOK,
 			Current: map[string][]int32{
 				topic1: []int32{0, 1},
 			}}
@@ -525,9 +540,6 @@ func TestGroupConsumer_GroupEmptyNotifications(t *testing.T) {
 	})
 
 	// add partitions (it will start consuming messages channel)
-	consumer.EXPECT().Notifications().Return(notifications)
-	consumer.EXPECT().Messages().Return(messages)
-	consumer.EXPECT().Errors().Return(errs)
 	c.AddGroupPartition(0)
 	c.AddGroupPartition(1)
 
@@ -545,9 +557,6 @@ func TestGroupConsumer_GroupEmptyNotifications(t *testing.T) {
 	}
 
 	// goroutine will loop after we dequeue Events
-	consumer.EXPECT().Notifications().Return(notifications)
-	consumer.EXPECT().Messages().Return(messages)
-	consumer.EXPECT().Errors().Return(errs)
 	m := <-events
 	ensure.DeepEqual(t, m, &Message{
 		Topic:     topic1,
@@ -562,7 +571,9 @@ func TestGroupConsumer_GroupEmptyNotifications(t *testing.T) {
 	})
 
 	// new notification
+	notifications <- &cluster.Notification{Type: cluster.RebalanceStart}
 	notifications <- &cluster.Notification{
+		Type: cluster.RebalanceOK,
 		Current: map[string][]int32{
 			topic1: []int32{0, 1, 2},
 		}}
