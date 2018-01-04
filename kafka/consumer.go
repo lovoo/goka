@@ -9,7 +9,7 @@ import (
 
 const (
 	// size of sarama buffer for consumer and producer
-	defaultChannelBufferSize = 10
+	defaultChannelBufferSize = 256
 
 	// time sarama-cluster assumes the processing of an event may take
 	defaultMaxProcessingTime = 1 * time.Second
@@ -52,7 +52,11 @@ type saramaConsumer struct {
 
 // NewSaramaConsumer creates a new Consumer using sarama
 func NewSaramaConsumer(brokers []string, group string, config *cluster.Config) (Consumer, error) {
-	events := make(chan Event, defaultChannelBufferSize)
+	chsize := config.Config.ChannelBufferSize
+	if chsize == 0 {
+		chsize = defaultChannelBufferSize
+	}
+	events := make(chan Event, chsize)
 
 	g, err := newGroupConsumer(brokers, group, events, config)
 	if err != nil {

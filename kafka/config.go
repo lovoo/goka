@@ -12,7 +12,6 @@ func CreateDefaultSaramaConfig(clientID string, partitioner sarama.PartitionerCo
 
 	config.Version = sarama.V0_10_1_0
 	config.ClientID = clientID
-	config.ChannelBufferSize = defaultChannelBufferSize
 
 	// consumer configuration
 	config.Consumer.Return.Errors = true
