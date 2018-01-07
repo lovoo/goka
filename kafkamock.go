@@ -123,11 +123,15 @@ func (km *KafkaMock) ProcessorOptions() []ProcessorOption {
 		WithStorageBuilder(func(topic string, partition int32) (storage.Storage, error) {
 			return km.storage, nil
 		}),
-		WithConsumer(km.consumerMock),
+		WithConsumerBuilder(km.consumerBuilder),
 		WithProducer(km.producerMock),
 		WithTopicManager(km.topicMgrMock),
 		WithPartitionChannelSize(0),
 	}
+}
+
+func (km *KafkaMock) consumerBuilder(b []string, group, clientID string) (kafka.Consumer, error) {
+	return km.consumerMock, nil
 }
 
 // initProtocol initiates the protocol with the client basically making the KafkaMock

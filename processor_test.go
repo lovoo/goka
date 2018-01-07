@@ -43,7 +43,11 @@ func syncWith(t *testing.T, ch chan kafka.Event, p ...int32) error {
 		ch <- &kafka.NOP{Partition: -1}
 	})
 }
-
+func createConsumerBuilder(c kafka.Consumer) ConsumerBuilder {
+	return func(b []string, g, id string) (kafka.Consumer, error) {
+		return c, nil
+	}
+}
 func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, npar int) *Processor {
 	tm := mock.NewMockTopicManager(ctrl)
 	producer := mock.NewMockProducer(ctrl)
@@ -65,7 +69,7 @@ func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, 
 			Loop(rawCodec, cb),
 		),
 		WithTopicManager(tm),
-		WithConsumer(consumer),
+		WithConsumerBuilder(createConsumerBuilder(consumer)),
 		WithProducer(producer),
 		WithPartitionChannelSize(0),
 	)
@@ -98,7 +102,7 @@ func createProcessor(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consu
 			Persist(new(codec.String)),
 		),
 		WithTopicManager(tm),
-		WithConsumer(consumer),
+		WithConsumerBuilder(createConsumerBuilder(consumer)),
 		WithProducer(producer),
 		WithStorageBuilder(sb),
 		WithPartitionChannelSize(0),
@@ -132,7 +136,7 @@ func createProcessorWithTable(t *testing.T, ctrl *gomock.Controller, consumer ka
 			Persist(rawCodec),
 		),
 		WithTopicManager(tm),
-		WithConsumer(consumer),
+		WithConsumerBuilder(createConsumerBuilder(consumer)),
 		WithProducer(producer),
 		WithStorageBuilder(sb),
 		WithPartitionChannelSize(0),
@@ -381,7 +385,7 @@ func TestNewProcessor(t *testing.T) {
 	_, err = NewProcessor(nil,
 		DefineGroup(group, Input(topic, rawCodec, cb)),
 		WithTopicManager(tm),
-		WithConsumer(nil),
+		WithConsumerBuilder(createConsumerBuilder(nil)),
 		WithProducer(nil),
 	)
 	ensure.NotNil(t, err)
@@ -392,7 +396,7 @@ func TestNewProcessor(t *testing.T) {
 	_, err = NewProcessor(nil,
 		DefineGroup(group, Input(topic, rawCodec, cb)),
 		WithTopicManager(tm),
-		WithConsumer(consumer),
+		WithConsumerBuilder(createConsumerBuilder(consumer)),
 		WithProducer(nil),
 	)
 	ensure.NotNil(t, err)
@@ -411,7 +415,7 @@ func TestNewProcessor(t *testing.T) {
 			Persist(rawCodec),
 		),
 		WithTopicManager(tm),
-		WithConsumer(consumer),
+		WithConsumerBuilder(createConsumerBuilder(consumer)),
 		WithProducer(producer),
 	)
 	ensure.Nil(t, err)
@@ -431,7 +435,7 @@ func TestNewProcessor(t *testing.T) {
 			Input(topic2, rawCodec, cb),
 		),
 		WithTopicManager(tm),
-		WithConsumer(consumer),
+		WithConsumerBuilder(createConsumerBuilder(consumer)),
 		WithProducer(producer),
 	)
 	ensure.Nil(t, err)
@@ -451,7 +455,7 @@ func TestNewProcessor(t *testing.T) {
 			Join(table, rawCodec),
 		),
 		WithTopicManager(tm),
-		WithConsumer(consumer),
+		WithConsumerBuilder(createConsumerBuilder(consumer)),
 		WithProducer(producer),
 	)
 	ensure.Nil(t, err)

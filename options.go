@@ -23,6 +23,9 @@ type UpdateCallback func(s storage.Storage, partition int32, key string, value [
 // table. StorageBuilder creates one storage for each partition of the topic.
 type StorageBuilder func(topic string, partition int32) (storage.Storage, error)
 
+// ConsumerBuilder creates a Kafka consumer.
+type ConsumerBuilder func(brokers []string, group, clientID string) (kafka.Consumer, error)
+
 ///////////////////////////////////////////////////////////////////////////////
 // default values
 ///////////////////////////////////////////////////////////////////////////////
@@ -78,14 +81,14 @@ func DefaultHasher() func() hash.Hash32 {
 
 }
 
-type consumerBuilder func(brokers []string, group string, clientID string) (kafka.Consumer, error)
-type producerBuilder func(brokers []string) (kafka.Producer, error)
-type topicmgrBuilder func(brokers []string) (kafka.TopicManager, error)
-
-func defaultConsumerBuilder(brokers []string, group string, clientID string) (kafka.Consumer, error) {
+// DefaultConsumerBuilder creates Kafka Consumer using the sarama library.
+func DefaultConsumerBuilder(brokers []string, group, clientID string) (kafka.Consumer, error) {
 	config := kafka.CreateDefaultSaramaConfig(clientID, nil, metrics.DefaultRegistry)
 	return kafka.NewSaramaConsumer(brokers, group, config)
 }
+
+type producerBuilder func(brokers []string) (kafka.Producer, error)
+type topicmgrBuilder func(brokers []string) (kafka.TopicManager, error)
 
 func defaultProducerBuilder(clientID string, hasher func() hash.Hash32, log logger.Logger) producerBuilder {
 	return func(brokers []string) (kafka.Producer, error) {
@@ -118,7 +121,7 @@ type poptions struct {
 
 	builders struct {
 		storage  StorageBuilder
-		consumer consumerBuilder
+		consumer ConsumerBuilder
 		producer producerBuilder
 		topicmgr topicmgrBuilder
 	}
@@ -158,15 +161,10 @@ func WithTopicManager(tm kafka.TopicManager) ProcessorOption {
 	}
 }
 
-// WithConsumer replaces goka's default consumer.
-func WithConsumer(c kafka.Consumer) ProcessorOption {
+// WithConsumerBuilder creates a Kafka consumer.
+func WithConsumerBuilder(cb ConsumerBuilder) ProcessorOption {
 	return func(o *poptions) {
-		o.builders.consumer = func(brokers []string, group string, clientID string) (kafka.Consumer, error) {
-			if c == nil {
-				return nil, fmt.Errorf("consumer cannot be nil")
-			}
-			return c, nil
-		}
+		o.builders.consumer = cb
 	}
 }
 
@@ -239,7 +237,7 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 		return fmt.Errorf("StorageBuilder not set")
 	}
 	if opt.builders.consumer == nil {
-		opt.builders.consumer = defaultConsumerBuilder
+		opt.builders.consumer = DefaultConsumerBuilder
 	}
 	if opt.builders.producer == nil {
 		opt.builders.producer = defaultProducerBuilder(opt.clientID, opt.hasher, opt.log)
@@ -268,7 +266,7 @@ type voptions struct {
 
 	builders struct {
 		storage  StorageBuilder
-		consumer consumerBuilder
+		consumer ConsumerBuilder
 		topicmgr topicmgrBuilder
 	}
 }
@@ -297,14 +295,9 @@ func WithViewStorageBuilder(sb StorageBuilder) ViewOption {
 }
 
 // WithViewConsumer replaces goka's default view consumer. Mainly for testing.
-func WithViewConsumer(c kafka.Consumer) ViewOption {
+func WithViewConsumerBuilder(cb ConsumerBuilder) ViewOption {
 	return func(o *voptions) {
-		o.builders.consumer = func(brokers []string, group string, clientID string) (kafka.Consumer, error) {
-			if c == nil {
-				return nil, fmt.Errorf("consumer cannot be nil")
-			}
-			return c, nil
-		}
+		o.builders.consumer = cb
 	}
 }
 
@@ -357,7 +350,7 @@ func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 		return fmt.Errorf("StorageBuilder not set")
 	}
 	if opt.builders.consumer == nil {
-		opt.builders.consumer = defaultConsumerBuilder
+		opt.builders.consumer = DefaultConsumerBuilder
 	}
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = defaultTopicManagerBuilder
