@@ -90,7 +90,7 @@ func (p *partition) start() error {
 			return err
 		}
 	} else {
-		p.markRecovered()
+		p.markRecovered(false)
 	}
 
 	// if stopped, just return
@@ -241,7 +241,7 @@ func (p *partition) load(catchup bool) error {
 
 				if ev.Offset == ev.Hwm {
 					// nothing to recover
-					if err := p.markRecovered(); err != nil {
+					if err := p.markRecovered(false); err != nil {
 						return fmt.Errorf("error setting recovered: %v", err)
 					}
 				}
@@ -250,7 +250,7 @@ func (p *partition) load(catchup bool) error {
 				p.offset = ev.Hwm - 1
 				p.hwm = ev.Hwm
 
-				if err := p.markRecovered(); err != nil {
+				if err := p.markRecovered(catchup); err != nil {
 					return fmt.Errorf("error setting recovered: %v", err)
 				}
 
@@ -270,7 +270,7 @@ func (p *partition) load(catchup bool) error {
 				}
 				p.offset = ev.Offset
 				if p.offset >= p.hwm-1 {
-					if err := p.markRecovered(); err != nil {
+					if err := p.markRecovered(catchup); err != nil {
 						return fmt.Errorf("error setting recovered: %v", err)
 					}
 				}
@@ -326,36 +326,41 @@ func (p *partition) storeEvent(msg *kafka.Message) error {
 }
 
 // mark storage as recovered
-func (p *partition) markRecovered() (err error) {
+func (p *partition) markRecovered(catchup bool) (err error) {
 	p.recoveredOnce.Do(func() {
 		p.lastStats = newPartitionStats().init(p.stats, p.offset, p.hwm)
 		p.lastStats.Table.Status = PartitionPreparing
 
-		// before marking partition as recovered, stop reading from topic
-		p.proxy.Remove(p.topic)
+		if catchup {
+			// if catching up (views), stop reading from topic before marking
+			// partition as recovered to avoid blocking other partitions when
+			// p.ch gets full
+			p.proxy.Remove(p.topic)
 
-		// drain events channel
-		done := make(chan bool)
-		go func() {
-			for {
-				select {
-				case <-p.ch:
-				case <-done:
-					return
+			// drain events channel -- we'll fetch them again later
+			done := make(chan bool)
+			go func() {
+				for {
+					select {
+					case <-p.ch:
+					case <-done:
+						return
 
+					}
 				}
-			}
-		}()
-		defer close(done)
+			}()
+			defer close(done)
+		}
 
-		// while storage is being marked as recovered, we drop all messages
-		// from topic since this may take long
+		// mark storage as recovered -- this may take long
 		if err = p.st.MarkRecovered(); err != nil {
 			return
 		}
 
-		// start reading from topic again
-		p.proxy.Add(p.topic, p.hwm)
+		if catchup {
+			// start reading from topic again if in catchup mode
+			p.proxy.Add(p.topic, p.hwm)
+		}
 
 		// update stats
 		p.stats.Table.Status = PartitionRunning
