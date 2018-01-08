@@ -331,8 +331,33 @@ func (p *partition) markRecovered() (err error) {
 		p.lastStats = newPartitionStats().init(p.stats, p.offset, p.hwm)
 		p.lastStats.Table.Status = PartitionPreparing
 
-		err = p.st.MarkRecovered()
+		// before marking partition as recovered, stop reading from topic
+		p.proxy.Remove(p.topic)
 
+		// drain events channel
+		done := make(chan bool)
+		go func() {
+			for {
+				select {
+				case <-p.ch:
+				case <-done:
+					return
+
+				}
+			}
+		}()
+		defer close(done)
+
+		// while storage is being marked as recovered, we drop all messages
+		// from topic since this may take long
+		if err = p.st.MarkRecovered(); err != nil {
+			return
+		}
+
+		// start reading from topic again
+		p.proxy.Add(p.topic, p.hwm)
+
+		// update stats
 		p.stats.Table.Status = PartitionRunning
 		p.stats.Table.RecoveryTime = time.Now()
 
