@@ -296,7 +296,7 @@ func (c *confluent) rebalance(e rdkafka.AssignedPartitions) *kafka.Assignment {
 	return &as
 }
 
-//go:generate mockgen -package mock -destination ../mock/confluent.go -source=confluent.go confluentConsumer
+//go:generate mockgen -package confluent -destination confluent_mock_test.go -source=confluent.go confluentConsumer
 type confluentConsumer interface {
 	Assign(partitions []rdkafka.TopicPartition) (err error)
 	Close() (err error)

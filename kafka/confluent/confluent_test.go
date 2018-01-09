@@ -4,13 +4,13 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"stash.lvint.de/lab/goka/mock"
+	"github.com/lovoo/goka/kafka"
 )
 
 func newMockConfluent(consumer confluentConsumer) *confluent {
 	return &confluent{
 		consumer: consumer,
-		events:   make(chan Event),
+		events:   make(chan kafka.Event),
 		stop:     make(chan bool),
 		done:     make(chan bool),
 	}
@@ -20,9 +20,9 @@ func TestConfluent1(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	consumer := mock.NewMockconfluentConsumer(ctrl)
+	consumer := NewMockconfluentConsumer(ctrl)
 	c := newMockConfluent(consumer)
 
 	consumer.EXPECT().SubscribeTopics([]string{"t1"}, nil).Return(nil)
-	c.ConnectGroup(map[Topic]Offset{"t1": -1})
+	c.Subscribe(map[string]int64{"t1": -1})
 }
