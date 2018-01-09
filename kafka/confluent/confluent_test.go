@@ -1,3 +1,5 @@
+// +build confluent
+
 package confluent
 
 import (
