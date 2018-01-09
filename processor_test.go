@@ -970,7 +970,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
 	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
 	consumer.EXPECT().AddPartition(table, int32(0), int64(123))
-	consumer.EXPECT().AddPartition(table, int32(1), int64(123))
+	consumer.EXPECT().AddPartition(table, int32(1), int64(123)).Times(2)
 	consumer.EXPECT().AddPartition(table, int32(2), int64(123))
 	// 3. message to group table
 	st.EXPECT().Set("key", value).Return(nil)
@@ -987,7 +987,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	)
 	// 6. rebalance (only keep partition 0)
 	st.EXPECT().Close().Times(4) // close group and other table partitions
-	consumer.EXPECT().RemovePartition(table, int32(1))
+	consumer.EXPECT().RemovePartition(table, int32(1)).Times(2)
 	consumer.EXPECT().RemovePartition(table, int32(2))
 	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
 	// 7. stop processor
@@ -1033,6 +1033,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	ch <- &kafka.EOF{
 		Topic:     table,
 		Partition: 1,
+		Hwm:       123,
 	}
 	err = syncWith(t, ch)
 	ensure.Nil(t, err)

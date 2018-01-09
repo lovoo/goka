@@ -259,21 +259,21 @@ func TestNewView(t *testing.T) {
 		consumer = mock.NewMockConsumer(ctrl)
 		tm       = mock.NewMockTopicManager(ctrl)
 	)
-	_, err := NewView(nil, GroupTable(group), new(codec.Bytes), WithViewConsumer(nil))
+	_, err := NewView(nil, GroupTable(group), new(codec.Bytes), WithViewConsumerBuilder(createConsumerBuilder(nil)))
 	ensure.NotNil(t, err)
 
 	gomock.InOrder(
 		tm.EXPECT().Partitions(tableName(group)).Return(nil, errors.New("some error")),
 		tm.EXPECT().Close(),
 	)
-	_, err = NewView(nil, GroupTable(group), new(codec.Bytes), WithViewConsumer(consumer), WithViewTopicManager(tm))
+	_, err = NewView(nil, GroupTable(group), new(codec.Bytes), WithViewConsumerBuilder(createConsumerBuilder(consumer)), WithViewTopicManager(tm))
 	ensure.NotNil(t, err)
 
 	gomock.InOrder(
 		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1, 2}, nil),
 		tm.EXPECT().Close(),
 	)
-	v, err := NewView(nil, GroupTable(group), new(codec.Bytes), WithViewConsumer(consumer), WithViewTopicManager(tm))
+	v, err := NewView(nil, GroupTable(group), new(codec.Bytes), WithViewConsumerBuilder(createConsumerBuilder(consumer)), WithViewTopicManager(tm))
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, v.topic, tableName(group))
 	ensure.DeepEqual(t, v.consumer, consumer)
