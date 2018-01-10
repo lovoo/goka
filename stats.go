@@ -42,6 +42,7 @@ type PartitionStats struct {
 
 func newPartitionStats() *PartitionStats {
 	return &PartitionStats{
+		Now:    time.Now(),
 		Input:  make(map[string]InputStats),
 		Output: make(map[string]OutputStats),
 	}
