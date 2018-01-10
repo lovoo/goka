@@ -379,7 +379,7 @@ func (p *partition) fetchStats() *PartitionStats {
 	case p.requestStats <- true:
 	case <-p.dying:
 		// if closing, return empty stats
-		return newPartitionStats()
+		return newPartitionStats().init(p.lastStats, p.offset, p.hwm)
 	case <-timer.C:
 		return p.lastStats
 	}
@@ -389,6 +389,6 @@ func (p *partition) fetchStats() *PartitionStats {
 		return s
 	case <-p.dying:
 		// if closing, return empty stats
-		return newPartitionStats()
+		return newPartitionStats().init(p.lastStats, p.offset, p.hwm)
 	}
 }
