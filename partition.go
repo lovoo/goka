@@ -2,6 +2,7 @@ package goka
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -331,6 +332,10 @@ func (p *partition) markRecovered(catchup bool) (err error) {
 		p.lastStats = newPartitionStats().init(p.stats, p.offset, p.hwm)
 		p.lastStats.Table.Status = PartitionPreparing
 
+		var (
+			done = make(chan bool)
+			wg   sync.WaitGroup
+		)
 		if catchup {
 			// if catching up (views), stop reading from topic before marking
 			// partition as recovered to avoid blocking other partitions when
@@ -338,26 +343,29 @@ func (p *partition) markRecovered(catchup bool) (err error) {
 			p.proxy.Remove(p.topic)
 
 			// drain events channel -- we'll fetch them again later
-			done := make(chan bool)
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				for {
 					select {
 					case <-p.ch:
 					case <-done:
 						return
-
 					}
 				}
 			}()
-			defer close(done)
 		}
 
 		// mark storage as recovered -- this may take long
 		if err = p.st.MarkRecovered(); err != nil {
+			close(done)
+			log.Printf("error here")
 			return
 		}
 
 		if catchup {
+			close(done)
+			wg.Wait()
 			// start reading from topic again if in catchup mode
 			p.proxy.Add(p.topic, p.hwm)
 		}
@@ -368,6 +376,10 @@ func (p *partition) markRecovered(catchup bool) (err error) {
 
 		atomic.StoreInt32(&p.recoveredFlag, 1)
 	})
+
+	// Be sure to mark partition as not stalled after EOF arrives, as
+	// this will not be written in the run-method
+	p.stats.Table.Stalled = false
 	return
 }
 
