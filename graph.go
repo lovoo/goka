@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const (
+var (
 	tableSuffix = "-table"
 	loopSuffix  = "-loop"
 )
