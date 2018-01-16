@@ -2,7 +2,6 @@ package goka
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -359,7 +358,6 @@ func (p *partition) markRecovered(catchup bool) (err error) {
 		// mark storage as recovered -- this may take long
 		if err = p.st.MarkRecovered(); err != nil {
 			close(done)
-			log.Printf("error here")
 			return
 		}
 
