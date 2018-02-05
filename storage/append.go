@@ -75,6 +75,10 @@ func (f *file) Iterator() (Iterator, error) {
 	return new(NullIter), nil
 }
 
+func (f *file) IteratorWithRange(start, limit []byte) (Iterator, error) {
+	return new(NullIter), nil
+}
+
 func (f *file) Open() error {
 	return nil
 }

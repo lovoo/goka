@@ -39,3 +39,16 @@ func (m *multiIterator) Release() {
 	m.current = 0
 	m.iters = []Iterator{&NullIter{}}
 }
+
+func (m *multiIterator) Seek(key []byte) bool {
+	m.current = 0
+	iters := []Iterator{}
+	ok := false
+	for i := range m.iters {
+		if m.iters[i].Seek(key) {
+			iters = append(iters, m.iters[i])
+			ok = true
+		}
+	}
+	return ok
+}

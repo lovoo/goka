@@ -9,6 +9,7 @@ type Iterator interface {
 	Key() string
 	Value() (interface{}, error)
 	Release()
+	Seek(key []byte) bool
 }
 
 type iterator struct {
@@ -40,4 +41,8 @@ func (i *iterator) Value() (interface{}, error) {
 // Releases releases the iterator. The iterator is not usable anymore after calling Release.
 func (i *iterator) Release() {
 	i.iter.Release()
+}
+
+func (i *iterator) Seek(key []byte) bool {
+	return i.iter.Seek(key)
 }

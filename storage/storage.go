@@ -26,6 +26,8 @@ type Iterator interface {
 	// Release releases the iterator. After release, the iterator is not usable
 	// anymore.
 	Release()
+	// Seek for a key in the iterator
+	Seek(key []byte) bool
 }
 
 // Storage abstracts the interface for a persistent local storage
@@ -37,6 +39,7 @@ type Storage interface {
 	SetOffset(value int64) error
 	GetOffset(defValue int64) (int64, error)
 	Iterator() (Iterator, error)
+	IteratorWithRange(start, limit []byte) (Iterator, error)
 	MarkRecovered() error
 	Recovered() bool
 	Open() error
@@ -87,6 +90,26 @@ func (s *storage) Iterator() (Iterator, error) {
 		iter: s.store.NewIterator(nil, nil),
 		snap: snap,
 	}, nil
+}
+
+// Iterator returns an iterator that traverses over a snapshot of the storage.
+func (s *storage) IteratorWithRange(start, limit []byte) (Iterator, error) {
+	snap, err := s.db.GetSnapshot()
+	if err != nil {
+		return nil, err
+	}
+
+	if limit != nil && len(limit) > 0 {
+		return &iterator{
+			iter: s.store.NewIterator(&util.Range{Start: start, Limit: limit}, nil),
+			snap: snap,
+		}, nil
+	}
+	return &iterator{
+		iter: s.store.NewIterator(util.BytesPrefix(start), nil),
+		snap: snap,
+	}, nil
+
 }
 
 func (s *storage) Has(key string) (bool, error) {

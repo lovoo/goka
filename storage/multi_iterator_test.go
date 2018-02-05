@@ -39,6 +39,19 @@ func TestMultiIterator(t *testing.T) {
 		ensure.DeepEqual(t, expected[string(iter.Key())], string(val))
 		count++
 	}
-
 	ensure.DeepEqual(t, count, len(expected))
+
+	k := []byte("storage-0")
+	iter = NewMultiIterator(iters)
+	ensure.True(t, iter.Seek(k), "seek return false should return true")
+	ensure.True(t, iter.Next(), "Iterator should have a value")
+	ensure.DeepEqual(t, iter.Key(), k, "key mismatch")
+
+	total := 1
+	for iter.Next() {
+		_, err := iter.Value()
+		ensure.Nil(t, err)
+		total++
+	}
+	ensure.DeepEqual(t, total, 3, "not enough element found in iter seek")
 }
