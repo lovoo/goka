@@ -271,6 +271,29 @@ func (v *View) Iterator() (Iterator, error) {
 	}, nil
 }
 
+// IteratorWithRange returns an iterator that iterates over the state of the View. This iterator is build using the range.
+func (v *View) IteratorWithRange(start, limit []byte) (Iterator, error) {
+	iters := make([]storage.Iterator, 0, len(v.partitions))
+	for i := range v.partitions {
+		iter, err := v.partitions[i].st.IteratorWithRange(start, limit)
+		if err != nil {
+			// release already opened iterators
+			for i := range iters {
+				iters[i].Release()
+			}
+
+			return nil, fmt.Errorf("error opening partition iterator: %v", err)
+		}
+
+		iters = append(iters, iter)
+	}
+
+	return &iterator{
+		iter:  storage.NewMultiIterator(iters),
+		codec: v.opts.tableCodec,
+	}, nil
+}
+
 // Evict removes the given key only from the local cache. In order to delete a
 // key from Kafka and other Views, context.Delete should be used on a Processor.
 func (v *View) Evict(key string) error {
