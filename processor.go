@@ -98,7 +98,14 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	// create views
 	views := make(map[string]*View)
 	for _, t := range gg.LookupTables() {
-		view, err := NewView(brokers, Table(t.Topic()), t.Codec())
+		view, err := NewView(brokers, Table(t.Topic()), t.Codec(),
+			WithViewLogger(opts.log),
+			WithViewHasher(opts.hasher),
+			WithViewPartitionChannelSize(opts.partitionChannelSize),
+			WithViewClientID(opts.clientID),
+			WithViewStorageBuilder(opts.builders.storage),
+			WithViewConsumerBuilder(opts.builders.consumer),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("error creating view: %v", err)
 		}
