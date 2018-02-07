@@ -1207,6 +1207,42 @@ func TestProcessor_HasGetStateless(t *testing.T) {
 	ensure.True(t, value == nil)
 }
 
+func TestProcessor_StatelessContext(t *testing.T) {
+	ctrl := NewMockController(t)
+	defer ctrl.Finish()
+	km := NewKafkaMock(t, "user-reputation").SetCodec(new(codec.Bytes))
+
+	callPersist := func(ctx Context, message interface{}) {
+		// call a random setvalue, this is expected to fail
+		ctx.SetValue("value")
+		t.Errorf("SetValue should panic. We should not have come to that point.")
+	}
+
+	proc, err := NewProcessor(nil,
+		DefineGroup(
+			"stateless-ctx",
+			Input("input-topic", new(codec.Bytes), callPersist),
+		),
+		// add kafkamock options
+		km.ProcessorOptions()...,
+	)
+	ensure.Nil(t, err)
+	done := make(chan bool)
+	go func() {
+		err := proc.Start()
+		ensure.NotNil(t, err)
+		close(done)
+	}()
+	// consume a random key/message, the content doesn't matter as this should fail
+	km.ConsumeString("input-topic", "key", "msg")
+	select {
+	case <-done:
+		// ok
+	case <-time.NewTimer(1 * time.Second).C:
+		t.Errorf("Processor did not fail as expected within timeout.")
+	}
+}
+
 // Example shows how to use a callback. For each partition of the topics, a new
 // goroutine will be created. Topics should be co-partitioned (they should have
 // the same number of partitions and be partitioned by the same key).
