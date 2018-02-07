@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	minMessages = 1000
-	maxRate     = 0.90
+	minMessages = 200
+	maxRate     = 0.5
 )
 
 var (
@@ -40,11 +40,6 @@ func getValue(ctx goka.Context) *Counters {
 	return &Counters{}
 }
 
-func loopToSender(ctx goka.Context, msg interface{}) {
-	m := msg.(*messaging.Message)
-	ctx.Loopback(m.From, m)
-}
-
 func detectSpammer(ctx goka.Context, c *Counters) {
 	var (
 		total = float64(c.Sent + c.Received)
@@ -59,14 +54,19 @@ func Run(brokers []string) {
 	g := goka.DefineGroup(group,
 		goka.Input(messaging.SentStream, new(messaging.MessageCodec), func(ctx goka.Context, msg interface{}) {
 			c := getValue(ctx)
-			c.Received++
+			c.Sent++
 			ctx.SetValue(c)
-			loopToSender(ctx, msg)
+			m := msg.(*messaging.Message)
+			// Loop to receiver
+			ctx.Loopback(m.To, m)
+			// Check if sender is a spammer
+			detectSpammer(ctx, c)
 		}),
 		goka.Loop(new(messaging.MessageCodec), func(ctx goka.Context, msg interface{}) {
 			c := getValue(ctx)
-			c.Sent++
+			c.Received++
 			ctx.SetValue(c)
+			// Check if receiver is a spammer
 			detectSpammer(ctx, c)
 		}),
 		goka.Output(blocker.Stream, new(blocker.BlockEventCodec)),
