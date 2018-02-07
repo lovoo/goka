@@ -84,6 +84,6 @@ examples$ make restart
 
 Then run the monitoring example with:
 
-```bash
+```console
 examples$ go run monitoring/main.go
 ```
