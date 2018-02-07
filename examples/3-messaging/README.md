@@ -43,7 +43,7 @@ type Message struct {
 If Bob wants to send a message to Alice, he would send a request to the send endpoint with the recipient and the content of the message.
 For example:
 
-```bash
+```sh
 curl -X POST                                                   \
     -d '{"to": "Alice", "content": "Hey, how are you doing?"}' \
     http://localhost:8080/Bob/send
@@ -77,13 +77,15 @@ router.HandleFunc("/{user}/send", send(emitter)).Methods("POST")
 Note we are ignoring errors for the sake of readability.
 The complete example in the repository handles them, though.
 
-### `Context.Value()` and `Context.SetValue()`: collecting messages
+### Collecting messages with `Context.Value()` and `Context.SetValue()`
 
 We define the *collector table* to contain the latest 5 messages received by each user.
 The *collector processor* keeps the table up-to-date by consuming `ReceivedStream`.
 The collector callback is defined as [follows](collector/collector.go#L29):
 
 ```go
+// collect callback is called for every message from ReceivedStream.
+// ctx allows access to collector table and msg is the input message.
 func collect(ctx goka.Context, msg interface{}) {
 	var ml []messaging.Message
 	if v := ctx.Value(); v != nil {
@@ -98,13 +100,28 @@ func collect(ctx goka.Context, msg interface{}) {
 	}
 	ctx.SetValue(ml)
 }
+
 ```
 
-The `ctx` is scoped with the key of the message -- we used the receiver as key in the emitter.
-With `ctx.Value()` we fetch the table value for the key.
-The value is a slice of messages.
+The `ctx` is scoped with the key of the input message -- remember we used the receiver as key in the emitter.
+With `ctx.Value()` we fetch the table value for that key.
+In this processor, the value is a slice of messages.
 We then append the received message and cap the length of the slice with the constant `maxMessages`, which is 5.
 Finally, we store the value back in the table with `ctx.SetValue()`.
+
+
+To create the processor, we need to define the group input stream and table persistency:
+```go
+g := goka.DefineGroup(goka.Group("collector"),
+	// the group table ("collector-table") persists message lists
+	goka.Persist(new(MessageListCodec)),
+	// input stream is ReceivedStream with MessageCodec and collect callback
+	goka.Input(messaging.ReceivedStream, new(messaging.MessageCodec), collect),
+)
+p, _ := goka.NewProcessor(brokers, g)
+go p.Start()
+
+```
 
 ### Feed endpoint
 
@@ -117,7 +134,7 @@ Latest messages for Alice
 1    Charlie: See you later.
 ```
 
-The handler employs a view on `collector.Table` to retrieve the messages for alice.
+The handler employs a view on `collector.Table` to retrieve the messages for Alice.
 It gets the user from the URL and tries to get the value from the view.
 If no value is available, the user has received no messages yet.
 Otherwise, the handler loops over the messages in the slice and formats the output.
@@ -163,7 +180,8 @@ In this example, we put the endpoint handlers and, consequently, emitter and vie
 In another Go program, we start the collector processor.
 This solution allows us to start, stop, and scale them independently.
 
-To start the service in a terminal, change directory to `examples/3-messaging` and type:
+Before starting any Go program, run `make start` in `examples` to start Docker containers for ZooKeeper and Kafka.
+Next, to start the service, change directory to `examples/3-messaging` and type:
 
 ```sh
 go run cmd/service/main.go # start endpoint handlers, emitter and view
@@ -175,10 +193,17 @@ In another terminal, start the processor:
 go run cmd/processor/main.go -collector # start collector processor
 ```
 
-After you started both Go programs, you can use `curl` or a browser to see messages sent to users, for example, [http://localhost:8080/Alice/feed](http://localhost:8080/Alice/feed).
+After you started both Go programs, you can use `curl` to see the messages sent to Alice:
+
+```sh
+curl localhost:8080/Alice/feed
+```
+
+or open [http://localhost:8080/Alice/feed](http://localhost:8080/Alice/feed) in the browser.
+
 You can send messages using `curl`, for example,
 
-```bash
+```sh
 curl -X POST                                                   \
     -d '{"to": "Alice", "content": "Hey, how are you doing?"}' \
     http://localhost:8080/Bob/send
@@ -226,7 +251,7 @@ To add or remove a user from the blocker table, we can use the command line tool
 go run cmd/block-user/main.go -user Bob # use -unblock to unblock the user
 ```
 
-### `Context.Join()`: filter out messages from blocked users
+### Filter messages from blocked users with `Context.Join()`
 
 Of course, just adding Bob into `blocker.Table` does not yet guarantee users do not receive messages from him.
 For that we need to add a filter between the send endpoint and the collector, which drops messages from blocked users before forwarding them to `ReceivedStream`.
@@ -245,6 +270,8 @@ Otherwise, the message is forwarded to `ReceivedStream` with the *recipient* as 
 
 ```go
 func filter(ctx goka.Context, msg interface{}) {
+        // messaging.SentStream and blocker.Table are copartitioned;
+	// ctx.Join() gets the value in blocker.Table for key given in ctx.Key()
 	v := ctx.Join(blocker.Table)
 	if v != nil && v.(*blocker.BlockValue).Blocked {
 		return
@@ -269,6 +296,15 @@ _ = p.Start()
 Nothing has to be changed in the collector processor or in the feed endpoint.
 
 ### Restarting the example
+
+At this point, let's make a short recap. So far we have created:
+
+- a [service](service/service.go) with send and feed endpoints;
+- a [collector processor](collector/collector.go) to collect messages sent to users;
+- a [block processor](blocker/blocker.go) to keep a table tracking blocked users;
+- a [filter processor](filter/filter.go) to drop messages from blocked users before they reach the collector processor; and
+- a [block-user tool](cmd/block-user) to add users to the block table.
+
 
 To enable the blocker and filter processors, stop `cmd/processor` and restart it as follows:
 ```sh
@@ -302,7 +338,7 @@ go run cmd/translate-word/main.go -word "lunch" -with "1[_]n<)-("
 go run cmd/translate-word/main.go -word "Hello" -with "H£1|_°"
 ```
 
-### `Context.Lookup()`: querying non-copartitioned tables
+### Querying non-copartitioned tables with `Context.Lookup()`
 
 The keys in the `translator.Table` are words instead of users, so the filter processor cannot join the table with the `SentStream` based on the keys.
 Instead, we should extend add a `Lookup()` edge to the group graph when creating the filter processor as follows:
@@ -353,6 +389,11 @@ In contrast, joined tables are copartitioned with the input streams and the grou
 
 ### Running example
 
+In step three, we have changed and added some components:
+
+- added a [translator processor](translator/translator.go) to keep translations of words to l33tspeak; and
+- changed the [filter processor](filter/filter.go) to not only drop messages from blocked users but also rewrite messages with l33t translations
+
 Start `cmd/processor` with `-translator` flag and translate words using `cmd/translate-word`.
 No further changes are necessary.
 
@@ -378,22 +419,16 @@ Whenever the table value is updated, it should check whether the user is a spamm
 If the number of messages sent is higher than `minMessages` and the sent rate is higher than some `maxRate`, we declare the user to be a spammer and issue a `BlockEvent`.
 
 ```go
-func detectSpammer(ctx goka.Context, c *Counters) {
+func detectSpammer(ctx goka.Context, c *Counters) bool {
 	var (
 		total = float64(c.Sent + c.Received)
 		rate  = float64(c.Sent) / total
 	)
-	if total >= minMessages && rate >= maxRate {
-		ctx.Emit(blocker.Stream, ctx.Key(), new(blocker.BlockEvent))
-	}
+	return total >= minMessages && rate >= maxRate
 }
 ```
 
-Note that detecting spammers is much more complicated.
-Watch [this video](https://tech.lovoo.com/2017/06/16/bbuzz-17-anti-spam-and-machine-learning-at-lovoo/)
-for details.
-
-### `Context.Loopback()`: Counting sent and received messages with one processor
+### Counting sent and received messages with one processor with `Context.Loopback()`
 
 Now, we defined an approach to detect spammers, but we have to keep the values in the group table updated.
 We define the group graph in parts.
@@ -401,13 +436,15 @@ We start with the callback for `SentStream`:
 
 ```go
 input := goka.Input(messaging.SentStream, new(messaging.MessageCodec),
-  func(ctx goka.Context, msg interface{}) {
+	func(ctx goka.Context, msg interface{}) {
 		c := getValue(ctx)
 		c.Sent++
 		ctx.SetValue(c)
+		if detectSpammer(ctx, c) {
+			ctx.Emit(blocker.Stream, ctx.Key(), new(blocker.BlockEvent))
+		}
 		m := msg.(*messaging.Message)
-		ctx.Loopback(m.From, m)
-		detectSpammer(ctx, c)
+		ctx.Loopback(m.To, m)
 	},
 )
 
@@ -434,7 +471,9 @@ loop := goka.Loop(new(messaging.MessageCodec),
 		c := getValue(ctx)
 		c.Received++
 		ctx.SetValue(c)
-		detectSpammer(ctx, c)
+		if detectSpammer(ctx, c) {
+			ctx.Emit(blocker.Stream, ctx.Key(), new(blocker.BlockEvent))
+		}
 	},
 )
 
@@ -459,6 +498,11 @@ _ = p.Start()
 
 ### Running the example
 
-Start `cmd/processor` with `-detector` flag and unblock Bob.
+In this final step, we added a [spam detector](detector/detector.go) which consumes messages from `SentStream` and emits block events into `blocker.Stream` if the sender or receiver of the message seem to be a spammer.
+
+To test the detector, start `cmd/processor` with `-detector` flag and unblock Bob.
 He should be quickly blocked again.
 
+Note that in practice detecting spammers is much more complicated than the naive approach taken here.
+Watch [this video](https://tech.lovoo.com/2017/06/16/bbuzz-17-anti-spam-and-machine-learning-at-lovoo/)
+for details.
