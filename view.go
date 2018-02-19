@@ -272,10 +272,10 @@ func (v *View) Iterator() (Iterator, error) {
 }
 
 // IteratorWithRange returns an iterator that iterates over the state of the View. This iterator is build using the range.
-func (v *View) IteratorWithRange(start, limit []byte) (Iterator, error) {
+func (v *View) IteratorWithRange(start, limit string) (Iterator, error) {
 	iters := make([]storage.Iterator, 0, len(v.partitions))
 	for i := range v.partitions {
-		iter, err := v.partitions[i].st.IteratorWithRange(start, limit)
+		iter, err := v.partitions[i].st.IteratorWithRange([]byte(start), []byte(limit))
 		if err != nil {
 			// release already opened iterators
 			for i := range iters {
