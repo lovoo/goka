@@ -77,6 +77,13 @@ func TestMemIter(t *testing.T) {
 	ensure.True(t, val == nil, "exhausted iterator should return nil value, returned %s", val)
 
 	ensure.DeepEqual(t, found, kv, "found doesn't match kv, iterator probably didn't return all values")
+
+	k := []byte("key-1")
+	iter, err = storage.IteratorWithRange(k, nil)
+
+	ensure.True(t, iter.Next(), "next should return true after a IteratorWithRange")
+	ensure.DeepEqual(t, iter.Key(), k, "the first matching key in IteratorWithRange is not corresponding to the value")
+
 }
 
 func TestGetHas(t *testing.T) {

@@ -93,6 +93,17 @@ func (_mr *_MockStorageRecorder) Iterator() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Iterator")
 }
 
+func (_m *MockStorage) IteratorWithRange(start, limit []byte) (storage.Iterator, error) {
+	ret := _m.ctrl.Call(_m, "Iterator")
+	ret0, _ := ret[0].(storage.Iterator)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockStorageRecorder) IteratorWithRange() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "IteratorWithRange")
+}
+
 func (_m *MockStorage) MarkRecovered() error {
 	ret := _m.ctrl.Call(_m, "MarkRecovered")
 	ret0, _ := ret[0].(error)

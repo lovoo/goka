@@ -1,6 +1,11 @@
 package storage
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+
+	"github.com/syndtr/goleveldb/leveldb/util"
+)
 
 type memiter struct {
 	current int
@@ -41,13 +46,19 @@ func (i *memiter) Release() {
 	i.current = len(i.keys)
 }
 
-func (m *memory) Iterator() (Iterator, error) {
-	keys := make([]string, 0, len(m.storage))
-	for k := range m.storage {
-		keys = append(keys, k)
+func (i *memiter) Seek(key []byte) bool {
+	seek := make(map[string][]byte)
+	keys := []string{}
+	for k, v := range i.storage {
+		if bytes.ContainsAny(key, k) {
+			keys = append(keys, k)
+			seek[k] = v
+		}
 	}
-
-	return &memiter{-1, keys, m.storage}, nil
+	i.current = -1
+	i.storage = seek
+	i.keys = keys
+	return !i.exhausted()
 }
 
 type memory struct {
@@ -85,6 +96,29 @@ func (m *memory) Set(key string, value []byte) error {
 func (m *memory) Delete(key string) error {
 	delete(m.storage, key)
 	return nil
+}
+
+func (m *memory) Iterator() (Iterator, error) {
+	keys := make([]string, 0, len(m.storage))
+	for k := range m.storage {
+		keys = append(keys, k)
+	}
+
+	return &memiter{-1, keys, m.storage}, nil
+}
+
+func (m *memory) IteratorWithRange(start, limit []byte) (Iterator, error) {
+	keys := []string{} // using slice as keys has an unknown size
+	if len(limit) == 0 {
+		limit = util.BytesPrefix(start).Limit
+	}
+	for k := range m.storage {
+		if bytes.Compare([]byte(k), start) > -1 && bytes.Compare([]byte(k), limit) < 1 {
+			keys = append(keys, k)
+		}
+	}
+
+	return &memiter{-1, keys, m.storage}, nil
 }
 
 func (m *memory) MarkRecovered() error {

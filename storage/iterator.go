@@ -43,3 +43,7 @@ func (i *iterator) Release() {
 	i.iter.Release()
 	i.snap.Release()
 }
+
+func (i *iterator) Seek(key []byte) bool {
+	return i.iter.Seek(key)
+}

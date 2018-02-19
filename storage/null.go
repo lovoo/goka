@@ -56,6 +56,11 @@ func (n *Null) Iterator() (Iterator, error) {
 	return new(NullIter), nil
 }
 
+// IteratorWithRange returns an Iterator that is immediately exhausted.
+func (n *Null) IteratorWithRange(start, limit []byte) (Iterator, error) {
+	return new(NullIter), nil
+}
+
 // Open does nothing and doesn't error.
 func (n *Null) Open() error {
 	return nil
@@ -86,3 +91,6 @@ func (ni *NullIter) Value() ([]byte, error) {
 
 // Release does nothing.
 func (ni *NullIter) Release() {}
+
+// Seek do nothing
+func (ni *NullIter) Seek(key []byte) bool { return false }
