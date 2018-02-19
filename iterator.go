@@ -9,7 +9,7 @@ type Iterator interface {
 	Key() string
 	Value() (interface{}, error)
 	Release()
-	Seek(key []byte) bool
+	Seek(key string) bool
 }
 
 type iterator struct {
@@ -43,6 +43,6 @@ func (i *iterator) Release() {
 	i.iter.Release()
 }
 
-func (i *iterator) Seek(key []byte) bool {
-	return i.iter.Seek(key)
+func (i *iterator) Seek(key string) bool {
+	return i.iter.Seek([]byte(key))
 }
