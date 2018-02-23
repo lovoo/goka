@@ -61,7 +61,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 			WithLogger(logger.Default()),
 			WithUpdateCallback(DefaultUpdate),
 			WithPartitionChannelSize(defaultPartitionChannelSize),
-			WithStorageBuilder(DefaultStorageBuilder(DefaultProcessorStoragePath(gg.Group()))),
+			WithStorageBuilder(storage.DefaultStorageBuilder(DefaultProcessorStoragePath(gg.Group()))),
 		},
 
 		// user-defined options (may overwrite default ones)

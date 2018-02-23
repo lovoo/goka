@@ -9,8 +9,6 @@ import (
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
-
-	"github.com/syndtr/goleveldb/leveldb"
 )
 
 // UpdateCallback is invoked upon arrival of a message for a table partition.
@@ -62,20 +60,6 @@ func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte)
 	}
 
 	return s.Set(key, value)
-}
-
-// DefaultStorageBuilder builds a LevelDB storage with default configuration.
-// The database will be stored in the given path.
-func DefaultStorageBuilder(path string) StorageBuilder {
-	return func(topic string, partition int32) (storage.Storage, error) {
-		fp := filepath.Join(path, fmt.Sprintf("%s.%d", topic, partition))
-		db, err := leveldb.OpenFile(fp, nil)
-		if err != nil {
-			return nil, fmt.Errorf("error opening leveldb: %v", err)
-		}
-
-		return storage.New(db)
-	}
 }
 
 // DefaultHasher returns an FNV hasher builder to assign keys to partitions.

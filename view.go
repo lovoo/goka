@@ -35,7 +35,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 			WithViewLogger(logger.Default()),
 			WithViewCallback(DefaultUpdate),
 			WithViewPartitionChannelSize(defaultPartitionChannelSize),
-			WithViewStorageBuilder(DefaultStorageBuilder(DefaultViewStoragePath())),
+			WithViewStorageBuilder(storage.DefaultStorageBuilder(DefaultViewStoragePath())),
 		},
 
 		// then the user passed options
