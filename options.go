@@ -6,12 +6,10 @@ import (
 	"hash/fnv"
 	"path/filepath"
 
-	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 
-	metrics "github.com/rcrowley/go-metrics"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
@@ -86,25 +84,6 @@ func DefaultHasher() func() hash.Hash32 {
 		return fnv.New32a()
 	}
 
-}
-
-// DefaultConsumerBuilder creates a Kafka consumer using the Sarama library.
-func DefaultConsumerBuilder(brokers []string, group, clientID string) (kafka.Consumer, error) {
-	config := kafka.CreateDefaultSaramaConfig(clientID, nil, metrics.DefaultRegistry)
-	return kafka.NewSaramaConsumer(brokers, group, config)
-}
-
-// DefaultProducerBuilder creates a Kafka producer using the Sarama library.
-func DefaultProducerBuilder(brokers []string, clientID string, hasher func() hash.Hash32) (kafka.Producer, error) {
-	partitioner := sarama.NewCustomHashPartitioner(hasher)
-	config := kafka.CreateDefaultSaramaConfig(clientID, partitioner, metrics.DefaultRegistry)
-	return kafka.NewProducer(brokers, &config.Config)
-}
-
-// DefaultTopicManagerBuilder creates TopicManager using the Sarama library.
-// This topic manager cannot create topics.
-func DefaultTopicManagerBuilder(brokers []string) (kafka.TopicManager, error) {
-	return kafka.NewSaramaTopicManager(brokers)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -232,13 +211,13 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 		return fmt.Errorf("StorageBuilder not set")
 	}
 	if opt.builders.consumer == nil {
-		opt.builders.consumer = DefaultConsumerBuilder
+		opt.builders.consumer = kafka.DefaultConsumerBuilder
 	}
 	if opt.builders.producer == nil {
-		opt.builders.producer = DefaultProducerBuilder
+		opt.builders.producer = kafka.DefaultProducerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = DefaultTopicManagerBuilder
+		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
 	}
 
 	return nil
@@ -345,10 +324,10 @@ func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 		return fmt.Errorf("StorageBuilder not set")
 	}
 	if opt.builders.consumer == nil {
-		opt.builders.consumer = DefaultConsumerBuilder
+		opt.builders.consumer = kafka.DefaultConsumerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = DefaultTopicManagerBuilder
+		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
 	}
 
 	return nil
@@ -423,10 +402,10 @@ func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
 
 	// config not set, use default one
 	if opt.builders.producer == nil {
-		opt.builders.producer = DefaultProducerBuilder
+		opt.builders.producer = kafka.DefaultProducerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = DefaultTopicManagerBuilder
+		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
 	}
 
 	return nil
