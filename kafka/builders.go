@@ -35,6 +35,16 @@ func DefaultProducerBuilder(brokers []string, clientID string, hasher func() has
 	return NewProducer(brokers, &config.Config)
 }
 
+// ProducerBuilderWithConfig creates a Kafka consumer using the Sarama library.
+func ProducerBuilderWithConfig(config *cluster.Config) ProducerBuilder {
+	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
+		partitioner := sarama.NewCustomHashPartitioner(hasher)
+		config.ClientID = clientID
+		config.Producer.Partitioner = partitioner
+		return NewProducer(brokers, &config.Config)
+	}
+}
+
 // TopicManagerBuilder creates a TopicManager to check partition counts and
 // create tables.
 type TopicManagerBuilder func(brokers []string) (TopicManager, error)
