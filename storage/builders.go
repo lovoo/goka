@@ -8,9 +8,13 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/opt"
 )
 
-// DefaultStorageBuilder builds a LevelDB storage with default configuration.
+// Builder creates a local storage (a persistent cache) for a topic
+// table. Builder creates one storage for each partition of the topic.
+type Builder func(topic string, partition int32) (Storage, error)
+
+// DefaultBuilder builds a LevelDB storage with default configuration.
 // The database will be stored in the given path.
-func DefaultStorageBuilder(path string) func(topic string, partition int32) (Storage, error) {
+func DefaultBuilder(path string) Builder {
 	return func(topic string, partition int32) (Storage, error) {
 		fp := filepath.Join(path, fmt.Sprintf("%s.%d", topic, partition))
 		db, err := leveldb.OpenFile(fp, nil)
@@ -21,9 +25,9 @@ func DefaultStorageBuilder(path string) func(topic string, partition int32) (Sto
 	}
 }
 
-// StorageBuilderWithOptions builds LevelDB storage with the given options and
+// BuilderWithOptions builds LevelDB storage with the given options and
 // in the given path.
-func StorageBuilderWithOptions(path string, opts *opt.Options) func(topic string, partition int32) (Storage, error) {
+func BuilderWithOptions(path string, opts *opt.Options) Builder {
 	return func(topic string, partition int32) (Storage, error) {
 		fp := filepath.Join(path, fmt.Sprintf("%s.%d", topic, partition))
 		db, err := leveldb.OpenFile(fp, nil)

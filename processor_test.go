@@ -27,7 +27,7 @@ var (
 	rawCodec = new(codec.Bytes)
 )
 
-func nullStorageBuilder() StorageBuilder {
+func nullStorageBuilder() storage.Builder {
 	return func(topic string, partition int32) (storage.Storage, error) {
 		return &storage.Null{}, nil
 	}
@@ -102,7 +102,7 @@ func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, 
 	return p
 }
 
-func createProcessor(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb StorageBuilder) *Processor {
+func createProcessor(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb storage.Builder) *Processor {
 	tm := mock.NewMockTopicManager(ctrl)
 	producer := mock.NewMockProducer(ctrl)
 
@@ -137,7 +137,7 @@ func createProcessor(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consu
 	return p
 }
 
-func createProcessorWithTable(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb StorageBuilder) *Processor {
+func createProcessorWithTable(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb storage.Builder) *Processor {
 	tm := mock.NewMockTopicManager(ctrl)
 	producer := mock.NewMockProducer(ctrl)
 

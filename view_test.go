@@ -20,7 +20,7 @@ var (
 	recoveredMessages int
 )
 
-func createTestView(t *testing.T, consumer kafka.Consumer, sb StorageBuilder, tm kafka.TopicManager) *View {
+func createTestView(t *testing.T, consumer kafka.Consumer, sb storage.Builder, tm kafka.TopicManager) *View {
 	recoveredMessages = 0
 	opts := &voptions{
 		log:        logger.Default(),

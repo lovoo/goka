@@ -15,10 +15,6 @@ import (
 // The partition storage shall be updated in the callback.
 type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte) error
 
-// StorageBuilder creates a local storage (a persistent cache) for a topic
-// table. StorageBuilder creates one storage for each partition of the topic.
-type StorageBuilder func(topic string, partition int32) (storage.Storage, error)
-
 ///////////////////////////////////////////////////////////////////////////////
 // default values
 ///////////////////////////////////////////////////////////////////////////////
@@ -78,7 +74,7 @@ type poptions struct {
 	nilHandling          NilHandling
 
 	builders struct {
-		storage  StorageBuilder
+		storage  storage.Builder
 		consumer kafka.ConsumerBuilder
 		producer kafka.ProducerBuilder
 		topicmgr kafka.TopicManagerBuilder
@@ -101,7 +97,7 @@ func WithClientID(clientID string) ProcessorOption {
 }
 
 // WithStorageBuilder defines a builder for the storage of each partition.
-func WithStorageBuilder(sb StorageBuilder) ProcessorOption {
+func WithStorageBuilder(sb storage.Builder) ProcessorOption {
 	return func(o *poptions) {
 		o.builders.storage = sb
 	}
@@ -213,7 +209,7 @@ type voptions struct {
 	hasher               func() hash.Hash32
 
 	builders struct {
-		storage  StorageBuilder
+		storage  storage.Builder
 		consumer kafka.ConsumerBuilder
 		topicmgr kafka.TopicManagerBuilder
 	}
@@ -236,7 +232,7 @@ func WithViewCallback(cb UpdateCallback) ViewOption {
 }
 
 // WithViewStorageBuilder defines a builder for the storage of each partition.
-func WithViewStorageBuilder(sb StorageBuilder) ViewOption {
+func WithViewStorageBuilder(sb storage.Builder) ViewOption {
 	return func(o *voptions) {
 		o.builders.storage = sb
 	}
