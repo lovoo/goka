@@ -44,31 +44,31 @@ func syncWith(t *testing.T, ch chan kafka.Event, p ...int32) error {
 		ch <- &kafka.NOP{Partition: -1}
 	})
 }
-func createConsumerBuilder(c kafka.Consumer) ConsumerBuilder {
+func createConsumerBuilder(c kafka.Consumer) kafka.ConsumerBuilder {
 	return func(b []string, g, id string) (kafka.Consumer, error) {
 		return c, nil
 	}
 }
 
-func createFailedConsumerBuilder() ConsumerBuilder {
+func createFailedConsumerBuilder() kafka.ConsumerBuilder {
 	return func(b []string, g, id string) (kafka.Consumer, error) {
 		return nil, errors.New("failed creating consumer")
 	}
 }
 
-func createProducerBuilder(p kafka.Producer) ProducerBuilder {
+func createProducerBuilder(p kafka.Producer) kafka.ProducerBuilder {
 	return func(b []string, id string, hasher func() hash.Hash32) (kafka.Producer, error) {
 		return p, nil
 	}
 }
 
-func createFailedProducerBuilder() ProducerBuilder {
+func createFailedProducerBuilder() kafka.ProducerBuilder {
 	return func(b []string, id string, hasher func() hash.Hash32) (kafka.Producer, error) {
 		return nil, errors.New("failed creating producer")
 	}
 }
 
-func createTopicManagerBuilder(tm kafka.TopicManager) TopicManagerBuilder {
+func createTopicManagerBuilder(tm kafka.TopicManager) kafka.TopicManagerBuilder {
 	return func(b []string) (kafka.TopicManager, error) {
 		return tm, nil
 	}

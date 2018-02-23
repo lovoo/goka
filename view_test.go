@@ -266,14 +266,18 @@ func TestNewView(t *testing.T) {
 		tm.EXPECT().Partitions(tableName(group)).Return(nil, errors.New("some error")),
 		tm.EXPECT().Close(),
 	)
-	_, err = NewView(nil, GroupTable(group), new(codec.Bytes), WithViewConsumerBuilder(createConsumerBuilder(consumer)), WithViewTopicManager(tm))
+	_, err = NewView(nil, GroupTable(group), new(codec.Bytes),
+		WithViewConsumerBuilder(createConsumerBuilder(consumer)),
+		WithViewTopicManagerBuilder(createTopicManagerBuilder(tm)))
 	ensure.NotNil(t, err)
 
 	gomock.InOrder(
 		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1, 2}, nil),
 		tm.EXPECT().Close(),
 	)
-	v, err := NewView(nil, GroupTable(group), new(codec.Bytes), WithViewConsumerBuilder(createConsumerBuilder(consumer)), WithViewTopicManager(tm))
+	v, err := NewView(nil, GroupTable(group), new(codec.Bytes),
+		WithViewConsumerBuilder(createConsumerBuilder(consumer)),
+		WithViewTopicManagerBuilder(createTopicManagerBuilder(tm)))
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, v.topic, tableName(group))
 	ensure.DeepEqual(t, v.consumer, consumer)

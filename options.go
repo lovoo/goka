@@ -19,16 +19,6 @@ type UpdateCallback func(s storage.Storage, partition int32, key string, value [
 // table. StorageBuilder creates one storage for each partition of the topic.
 type StorageBuilder func(topic string, partition int32) (storage.Storage, error)
 
-// ConsumerBuilder creates a Kafka consumer.
-type ConsumerBuilder func(brokers []string, group, clientID string) (kafka.Consumer, error)
-
-// ProducerBuilder create a Kafka producer.
-type ProducerBuilder func(brokers []string, clientID string, hasher func() hash.Hash32) (kafka.Producer, error)
-
-// TopicManagerBuilder creates a TopicManager to check partition counts and
-// create tables.
-type TopicManagerBuilder func(brokers []string) (kafka.TopicManager, error)
-
 ///////////////////////////////////////////////////////////////////////////////
 // default values
 ///////////////////////////////////////////////////////////////////////////////
@@ -89,9 +79,9 @@ type poptions struct {
 
 	builders struct {
 		storage  StorageBuilder
-		consumer ConsumerBuilder
-		producer ProducerBuilder
-		topicmgr TopicManagerBuilder
+		consumer kafka.ConsumerBuilder
+		producer kafka.ProducerBuilder
+		topicmgr kafka.TopicManagerBuilder
 	}
 }
 
@@ -118,21 +108,21 @@ func WithStorageBuilder(sb StorageBuilder) ProcessorOption {
 }
 
 // WithTopicManagerBuilder replaces the default topic manager builder.
-func WithTopicManagerBuilder(tmb TopicManagerBuilder) ProcessorOption {
+func WithTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ProcessorOption {
 	return func(o *poptions) {
 		o.builders.topicmgr = tmb
 	}
 }
 
 // WithConsumerBuilder replaces the default consumer builder.
-func WithConsumerBuilder(cb ConsumerBuilder) ProcessorOption {
+func WithConsumerBuilder(cb kafka.ConsumerBuilder) ProcessorOption {
 	return func(o *poptions) {
 		o.builders.consumer = cb
 	}
 }
 
 // WithProducerBuilder replaces the default producer builder.
-func WithProducerBuilder(pb ProducerBuilder) ProcessorOption {
+func WithProducerBuilder(pb kafka.ProducerBuilder) ProcessorOption {
 	return func(o *poptions) {
 		o.builders.producer = pb
 	}
@@ -224,8 +214,8 @@ type voptions struct {
 
 	builders struct {
 		storage  StorageBuilder
-		consumer ConsumerBuilder
-		topicmgr TopicManagerBuilder
+		consumer kafka.ConsumerBuilder
+		topicmgr kafka.TopicManagerBuilder
 	}
 }
 
@@ -252,22 +242,17 @@ func WithViewStorageBuilder(sb StorageBuilder) ViewOption {
 	}
 }
 
-// WithViewConsumer replaces goka's default view consumer. Mainly for testing.
-func WithViewConsumerBuilder(cb ConsumerBuilder) ViewOption {
+// WithViewConsumer replaces default view consumer.
+func WithViewConsumerBuilder(cb kafka.ConsumerBuilder) ViewOption {
 	return func(o *voptions) {
 		o.builders.consumer = cb
 	}
 }
 
-// WithViewTopicManager defines a topic manager.
-func WithViewTopicManager(tm kafka.TopicManager) ViewOption {
+// WithViewTopicManager replaces the default topic manager.
+func WithViewTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ViewOption {
 	return func(o *voptions) {
-		o.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
-			if tm == nil {
-				return nil, fmt.Errorf("TopicManager cannot be nil")
-			}
-			return tm, nil
-		}
+		o.builders.topicmgr = tmb
 	}
 }
 
@@ -334,8 +319,8 @@ type eoptions struct {
 	hasher func() hash.Hash32
 
 	builders struct {
-		topicmgr TopicManagerBuilder
-		producer ProducerBuilder
+		topicmgr kafka.TopicManagerBuilder
+		producer kafka.ProducerBuilder
 	}
 }
 
@@ -355,14 +340,14 @@ func WithEmitterClientID(clientID string) EmitterOption {
 }
 
 // WithEmitterTopicManager defines a topic manager.
-func WithEmitterTopicManagerBuilder(tmb TopicManagerBuilder) EmitterOption {
+func WithEmitterTopicManagerBuilder(tmb kafka.TopicManagerBuilder) EmitterOption {
 	return func(o *eoptions) {
 		o.builders.topicmgr = tmb
 	}
 }
 
 // WithEmitterProducer replaces goka's default producer. Mainly for testing.
-func WithEmitterProducer(pb ProducerBuilder) EmitterOption {
+func WithEmitterProducer(pb kafka.ProducerBuilder) EmitterOption {
 	return func(o *eoptions) {
 		o.builders.producer = pb
 	}
