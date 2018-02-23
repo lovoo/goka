@@ -12,7 +12,8 @@ type ConsumerBuilder func(brokers []string, group, clientID string) (Consumer, e
 
 // DefaultConsumerBuilder creates a Kafka consumer using the Sarama library.
 func DefaultConsumerBuilder(brokers []string, group, clientID string) (Consumer, error) {
-	config := CreateDefaultConfig(clientID)
+	config := NewConfig()
+	config.ClientID = clientID
 	return NewSaramaConsumer(brokers, group, config)
 }
 
@@ -29,7 +30,8 @@ type ProducerBuilder func(brokers []string, clientID string, hasher func() hash.
 
 // DefaultProducerBuilder creates a Kafka producer using the Sarama library.
 func DefaultProducerBuilder(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
-	config := CreateDefaultConfig(clientID)
+	config := NewConfig()
+	config.ClientID = clientID
 	config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
 	return NewProducer(brokers, &config.Config)
 }

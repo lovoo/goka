@@ -5,12 +5,10 @@ import (
 	cluster "github.com/bsm/sarama-cluster"
 )
 
-// CreateDefaultConfig creates a (bsm) sarama configuration with default values.
-func CreateDefaultConfig(clientID string) *cluster.Config {
+// NewConfig creates a (bsm) sarama configuration with default values.
+func NewConfig() *cluster.Config {
 	config := cluster.NewConfig()
-
 	config.Version = sarama.V0_10_1_0
-	config.ClientID = clientID
 
 	// consumer configuration
 	config.Consumer.Return.Errors = true
