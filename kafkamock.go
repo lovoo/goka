@@ -2,6 +2,7 @@ package goka
 
 import (
 	"fmt"
+	"hash"
 	"sync"
 
 	"github.com/facebookgo/ensure"
@@ -124,10 +125,18 @@ func (km *KafkaMock) ProcessorOptions() []ProcessorOption {
 			return km.storage, nil
 		}),
 		WithConsumerBuilder(km.consumerBuilder),
-		WithProducer(km.producerMock),
-		WithTopicManager(km.topicMgrMock),
+		WithProducerBuilder(km.producerBuilder),
+		WithTopicManagerBuilder(km.topicManagerBuilder),
 		WithPartitionChannelSize(0),
 	}
+}
+
+func (km *KafkaMock) topicManagerBuilder(brokers []string) (kafka.TopicManager, error) {
+	return km.topicMgrMock, nil
+}
+
+func (km *KafkaMock) producerBuilder(b []string, cid string, hasher func() hash.Hash32) (kafka.Producer, error) {
+	return km.producerMock, nil
 }
 
 func (km *KafkaMock) consumerBuilder(b []string, group, clientID string) (kafka.Consumer, error) {

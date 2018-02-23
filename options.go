@@ -26,6 +26,13 @@ type StorageBuilder func(topic string, partition int32) (storage.Storage, error)
 // ConsumerBuilder creates a Kafka consumer.
 type ConsumerBuilder func(brokers []string, group, clientID string) (kafka.Consumer, error)
 
+// ProducerBuilder create a Kafka producer.
+type ProducerBuilder func(brokers []string, clientID string, hasher func() hash.Hash32) (kafka.Producer, error)
+
+// TopicManagerBuilder creates a TopicManager to check partition counts and
+// create tables.
+type TopicManagerBuilder func(brokers []string) (kafka.TopicManager, error)
+
 ///////////////////////////////////////////////////////////////////////////////
 // default values
 ///////////////////////////////////////////////////////////////////////////////
@@ -81,24 +88,22 @@ func DefaultHasher() func() hash.Hash32 {
 
 }
 
-// DefaultConsumerBuilder creates Kafka Consumer using the sarama library.
+// DefaultConsumerBuilder creates a Kafka consumer using the Sarama library.
 func DefaultConsumerBuilder(brokers []string, group, clientID string) (kafka.Consumer, error) {
 	config := kafka.CreateDefaultSaramaConfig(clientID, nil, metrics.DefaultRegistry)
 	return kafka.NewSaramaConsumer(brokers, group, config)
 }
 
-type producerBuilder func(brokers []string) (kafka.Producer, error)
-type topicmgrBuilder func(brokers []string) (kafka.TopicManager, error)
-
-func defaultProducerBuilder(clientID string, hasher func() hash.Hash32, log logger.Logger) producerBuilder {
-	return func(brokers []string) (kafka.Producer, error) {
-		partitioner := sarama.NewCustomHashPartitioner(hasher)
-		config := kafka.CreateDefaultSaramaConfig(clientID, partitioner, metrics.DefaultRegistry)
-		return kafka.NewProducer(brokers, &config.Config, log)
-	}
+// DefaultProducerBuilder creates a Kafka producer using the Sarama library.
+func DefaultProducerBuilder(brokers []string, clientID string, hasher func() hash.Hash32) (kafka.Producer, error) {
+	partitioner := sarama.NewCustomHashPartitioner(hasher)
+	config := kafka.CreateDefaultSaramaConfig(clientID, partitioner, metrics.DefaultRegistry)
+	return kafka.NewProducer(brokers, &config.Config)
 }
 
-func defaultTopicManagerBuilder(brokers []string) (kafka.TopicManager, error) {
+// DefaultTopicManagerBuilder creates TopicManager using the Sarama library.
+// This topic manager cannot create topics.
+func DefaultTopicManagerBuilder(brokers []string) (kafka.TopicManager, error) {
 	return kafka.NewSaramaTopicManager(brokers)
 }
 
@@ -122,8 +127,8 @@ type poptions struct {
 	builders struct {
 		storage  StorageBuilder
 		consumer ConsumerBuilder
-		producer producerBuilder
-		topicmgr topicmgrBuilder
+		producer ProducerBuilder
+		topicmgr TopicManagerBuilder
 	}
 }
 
@@ -149,34 +154,24 @@ func WithStorageBuilder(sb StorageBuilder) ProcessorOption {
 	}
 }
 
-// WithTopicManager defines a topic manager.
-func WithTopicManager(tm kafka.TopicManager) ProcessorOption {
+// WithTopicManagerBuilder replaces the default topic manager builder.
+func WithTopicManagerBuilder(tmb TopicManagerBuilder) ProcessorOption {
 	return func(o *poptions) {
-		o.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
-			if tm == nil {
-				return nil, fmt.Errorf("TopicManager cannot be nil")
-			}
-			return tm, nil
-		}
+		o.builders.topicmgr = tmb
 	}
 }
 
-// WithConsumerBuilder creates a Kafka consumer.
+// WithConsumerBuilder replaces the default consumer builder.
 func WithConsumerBuilder(cb ConsumerBuilder) ProcessorOption {
 	return func(o *poptions) {
 		o.builders.consumer = cb
 	}
 }
 
-// WithProducer replaces goka's default producer.
-func WithProducer(p kafka.Producer) ProcessorOption {
+// WithProducerBuilder replaces the default producer builder.
+func WithProducerBuilder(pb ProducerBuilder) ProcessorOption {
 	return func(o *poptions) {
-		o.builders.producer = func(brokers []string) (kafka.Producer, error) {
-			if p == nil {
-				return nil, fmt.Errorf("producer cannot be nil")
-			}
-			return p, nil
-		}
+		o.builders.producer = pb
 	}
 }
 
@@ -240,10 +235,10 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 		opt.builders.consumer = DefaultConsumerBuilder
 	}
 	if opt.builders.producer == nil {
-		opt.builders.producer = defaultProducerBuilder(opt.clientID, opt.hasher, opt.log)
+		opt.builders.producer = DefaultProducerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = defaultTopicManagerBuilder
+		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
 
 	return nil
@@ -267,7 +262,7 @@ type voptions struct {
 	builders struct {
 		storage  StorageBuilder
 		consumer ConsumerBuilder
-		topicmgr topicmgrBuilder
+		topicmgr TopicManagerBuilder
 	}
 }
 
@@ -353,7 +348,7 @@ func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 		opt.builders.consumer = DefaultConsumerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = defaultTopicManagerBuilder
+		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
 
 	return nil
@@ -376,8 +371,8 @@ type eoptions struct {
 	hasher func() hash.Hash32
 
 	builders struct {
-		topicmgr topicmgrBuilder
-		producer producerBuilder
+		topicmgr TopicManagerBuilder
+		producer ProducerBuilder
 	}
 }
 
@@ -397,26 +392,16 @@ func WithEmitterClientID(clientID string) EmitterOption {
 }
 
 // WithEmitterTopicManager defines a topic manager.
-func WithEmitterTopicManager(tm kafka.TopicManager) EmitterOption {
+func WithEmitterTopicManagerBuilder(tmb TopicManagerBuilder) EmitterOption {
 	return func(o *eoptions) {
-		o.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
-			if tm == nil {
-				return nil, fmt.Errorf("TopicManager cannot be nil")
-			}
-			return tm, nil
-		}
+		o.builders.topicmgr = tmb
 	}
 }
 
 // WithEmitterProducer replaces goka's default producer. Mainly for testing.
-func WithEmitterProducer(p kafka.Producer) EmitterOption {
+func WithEmitterProducer(pb ProducerBuilder) EmitterOption {
 	return func(o *eoptions) {
-		o.builders.producer = func(brokers []string) (kafka.Producer, error) {
-			if p == nil {
-				return nil, fmt.Errorf("producer cannot be nil")
-			}
-			return p, nil
-		}
+		o.builders.producer = pb
 	}
 }
 
@@ -438,10 +423,10 @@ func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
 
 	// config not set, use default one
 	if opt.builders.producer == nil {
-		opt.builders.producer = defaultProducerBuilder(opt.clientID, opt.hasher, opt.log)
+		opt.builders.producer = DefaultProducerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = defaultTopicManagerBuilder
+		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
 
 	return nil

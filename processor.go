@@ -90,7 +90,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	}
 
 	// create kafka producer
-	producer, err := opts.builders.producer(brokers)
+	producer, err := opts.builders.producer(brokers, opts.clientID, opts.hasher)
 	if err != nil {
 		return nil, fmt.Errorf(errBuildProducer, err)
 	}
