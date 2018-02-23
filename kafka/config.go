@@ -3,11 +3,10 @@ package kafka
 import (
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
-	metrics "github.com/rcrowley/go-metrics"
 )
 
-// CreateDefaultSaramaConfig creates a (bsm) sarama configuration with default values.
-func CreateDefaultSaramaConfig(clientID string, partitioner sarama.PartitionerConstructor, registry metrics.Registry) *cluster.Config {
+// CreateDefaultConfig creates a (bsm) sarama configuration with default values.
+func CreateDefaultConfig(clientID string) *cluster.Config {
 	config := cluster.NewConfig()
 
 	config.Version = sarama.V0_10_1_0
@@ -30,12 +29,5 @@ func CreateDefaultSaramaConfig(clientID string, partitioner sarama.PartitionerCo
 	// consumer group configuration
 	config.Group.Return.Notifications = true
 
-	// register registry to get kafka metrics
-	config.Config.MetricRegistry = registry
-
-	// set partitioner
-	if partitioner != nil {
-		config.Producer.Partitioner = partitioner
-	}
 	return config
 }
