@@ -506,3 +506,6 @@ He should be quickly blocked again.
 Note that in practice detecting spammers is much more complicated than the naive approach taken here.
 Watch [this video](https://tech.lovoo.com/2017/06/16/bbuzz-17-anti-spam-and-machine-learning-at-lovoo/)
 for details.
+
+Note that tables have to be configured in Kafka with log compaction.
+For details check the [Wiki](https://github.com/lovoo/goka/wiki/Tips#configuring-log-compaction-for-table-topics).

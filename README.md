@@ -28,8 +28,9 @@ Goka extends the concept of Kafka consumer groups by binding a state table to th
 ## Documentation
 
 This README provides a brief, high level overview of the ideas behind Goka.
+A more detailed introduction of the project can be found in this [blog post](https://tech.lovoo.com/2017/05/23/goka/).
 
-Package API documentation is available at [GoDoc].
+Package API documentation is available at [GoDoc] and the [Wiki](https://github.com/lovoo/goka/wiki/Tips#configuring-log-compaction-for-table-topics) provides several tips for configuring, extending, and deploying Goka applications.
 
 ## Installation
 
@@ -45,9 +46,9 @@ Goka relies on Kafka for message passing, fault-tolerant state storage and workl
 
 * **Processor** is a set of callback functions that consume and perform state transformations upon delivery of these emitted messages. *Processor groups* are formed of one or more instances of a processor. Goka distributes the partitions of the input topics across all processor instances in a processor group. This enables effortless scaling and fault-tolerance. If a processor instance fails, its partitions and state are reassigned to the remaining healthy members of the processor group. Processors can also emit further messages into Kafka.
 
-* **Group tables** are partitioned key-value tables stored in Kafka that belong to a single processor group. If a processor instance fails, the remaining instances will take over the group table partitions of the failed instance recovering them from Kafka.
+* **Group table** is the state of a processor group. It is a partitioned key-value table stored in Kafka that belongs to a single processor group. If a processor instance fails, the remaining instances will take over the group table partitions of the failed instance recovering them from Kafka.
 
-* **Views** are local caches of a processor group's complete group table. Views provide read-only access to the group tables and can be used to provide external services for example through a gRPC interface.
+* **Views** are local caches of a complete group table. Views provide read-only access to the group tables and can be used to provide external services for example through a gRPC interface.
 
 
 ## Get Started
@@ -55,7 +56,7 @@ Goka relies on Kafka for message passing, fault-tolerant state storage and workl
 An example Goka application could look like the following.
 An emitter emits a single message with key "some-key" and value "some-value" into the "example-stream" topic.
 A processor processes the "example-stream" topic counting the number of messages delivered for "some-key".
-The counter is persisted in the "example-group-state" topic.
+The counter is persisted in the "example-group-table" topic.
 To locally start a dockerized Zookeeper and Kafka instances, execute `make start` with the `Makefile` in the [examples] folder.
 
 ```go
@@ -111,7 +112,7 @@ func runProcessor() {
 	}
 
 	// Define a new processor group. The group defines all inputs, outputs, and
-	// serialization formats. The group-table topic is "example-group-state".
+	// serialization formats. The group-table topic is "example-group-table".
 	g := goka.DefineGroup(group,
 		goka.Input(topic, new(codec.String), cb),
 		goka.Persist(new(codec.Int64)),
@@ -138,6 +139,9 @@ func main() {
 	runProcessor() // press ctrl-c to stop
 }
 ```
+
+Note that tables have to be configured in Kafka with log compaction.
+For details check the [Wiki](https://github.com/lovoo/goka/wiki/Tips#configuring-log-compaction-for-table-topics).
 
 ## How to contribute
 
