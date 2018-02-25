@@ -6,7 +6,7 @@ This example shows how to:
 
 * Write a processor that consumes data from kafka, counting clicks for a user
 * Write an emitter to push data to kafka
-* Writing a view to query the user state
+* Writing a view to query the user table
 
 To get an introduction into goka, see this [blog post](http://tech.lovoo.com/2017/05/23/goka).
 
@@ -22,7 +22,7 @@ go run main.go
 This should output something like
 
 ```
-2017/05/23 15:09:20 Table mini-group-state has 10 partitions
+2017/05/23 15:09:20 Table mini-group-table has 10 partitions
 2017/05/23 15:09:20 Processor: started
 View opened at http://localhost:9095/
 2017/05/23 15:09:20 View: started
@@ -95,9 +95,9 @@ The consumer of a topic must use the same codec as the writer, otherwise we'll g
 unmarshalling will simply fail.
 
 * `goka.Persist` makes the processor store its group table persistently using kafka. That means on every
-restart (either the same host or somewhere else), the state will be restored.
+restart (either the same host or somewhere else), the group table will be restored.
 This option also makes the processor cache the group table locally using a key-value store.
-That avoids holding the full state in memory and a long-running recovery on every restart.
+That avoids holding the full group table in memory and a long-running recovery on every restart.
 
   To persist the group table, again we need a `Codec` which encodes the user for this case.
   We want to store objects of type `*user`, so we have to implement our own codec. In our example,

@@ -50,7 +50,7 @@ func runProcessor() {
 	}
 
 	// Define a new processor group. The group defines all inputs, outputs, and
-	// serialization formats. The group-table topic is "example-group-state".
+	// serialization formats. The group-table topic is "example-group-table".
 	g := goka.DefineGroup(group,
 		goka.Input(topic, new(codec.String), cb),
 		goka.Persist(new(codec.Int64)),

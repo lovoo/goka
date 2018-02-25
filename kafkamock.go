@@ -379,8 +379,8 @@ func (km *consumerMock) Commit(topic string, partition int32, offset int64) erro
 	return nil
 }
 
-// AddPartition marks the topic as a state topic.
-// The mock has to know the state topic to ignore emit calls (which would never be consumed)
+// AddPartition marks the topic as a table topic.
+// The mock has to know the group table topic to ignore emit calls (which would never be consumed)
 func (km *consumerMock) AddPartition(topic string, partition int32, initialOffset int64) {
 }
 
