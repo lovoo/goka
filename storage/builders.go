@@ -41,6 +41,6 @@ func BuilderWithOptions(path string, opts *opt.Options) Builder {
 // MemoryBuilder builds in-memory storage.
 func MemoryBuilder() Builder {
 	return func(topic string, partition int32) (Storage, error) {
-		return NewMemory()
+		return NewMemory(), nil
 	}
 }
