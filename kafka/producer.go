@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/logger"
 )
 
 // Producer abstracts the kafka producer
@@ -15,21 +14,19 @@ type Producer interface {
 }
 
 type producer struct {
-	log      logger.Logger
 	producer sarama.AsyncProducer
 	stop     chan bool
 	done     chan bool
 }
 
 // NewProducer creates new kafka producer for passed brokers.
-func NewProducer(brokers []string, config *sarama.Config, log logger.Logger) (Producer, error) {
+func NewProducer(brokers []string, config *sarama.Config) (Producer, error) {
 	aprod, err := sarama.NewAsyncProducer(brokers, config)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to start Sarama producer: %v", err)
 	}
 
 	p := producer{
-		log:      log,
 		producer: aprod,
 		stop:     make(chan bool),
 		done:     make(chan bool),
@@ -66,17 +63,11 @@ func (p *producer) run() {
 			return
 
 		case err := <-p.producer.Errors():
-			promise, is := err.Msg.Metadata.(*Promise)
-			if !is {
-				p.log.Panicf("invalid metadata type. expected *Promise, got %T", err.Msg.Metadata)
-			}
+			promise := err.Msg.Metadata.(*Promise)
 			promise.Finish(err.Err)
 
 		case msg := <-p.producer.Successes():
-			promise, is := msg.Metadata.(*Promise)
-			if !is {
-				p.log.Panicf("invalid metadata type. expected *Promise, got %T", msg.Metadata)
-			}
+			promise := msg.Metadata.(*Promise)
 			promise.Finish(nil)
 		}
 	}

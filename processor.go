@@ -61,7 +61,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 			WithLogger(logger.Default()),
 			WithUpdateCallback(DefaultUpdate),
 			WithPartitionChannelSize(defaultPartitionChannelSize),
-			WithStorageBuilder(DefaultStorageBuilder(DefaultProcessorStoragePath(gg.Group()))),
+			WithStorageBuilder(storage.DefaultBuilder(DefaultProcessorStoragePath(gg.Group()))),
 		},
 
 		// user-defined options (may overwrite default ones)
@@ -90,7 +90,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	}
 
 	// create kafka producer
-	producer, err := opts.builders.producer(brokers)
+	producer, err := opts.builders.producer(brokers, opts.clientID, opts.hasher)
 	if err != nil {
 		return nil, fmt.Errorf(errBuildProducer, err)
 	}

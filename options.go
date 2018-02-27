@@ -6,25 +6,14 @@ import (
 	"hash/fnv"
 	"path/filepath"
 
-	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
-
-	metrics "github.com/rcrowley/go-metrics"
-	"github.com/syndtr/goleveldb/leveldb"
 )
 
 // UpdateCallback is invoked upon arrival of a message for a table partition.
 // The partition storage shall be updated in the callback.
 type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte) error
-
-// StorageBuilder creates a local storage (a persistent cache) for a topic
-// table. StorageBuilder creates one storage for each partition of the topic.
-type StorageBuilder func(topic string, partition int32) (storage.Storage, error)
-
-// ConsumerBuilder creates a Kafka consumer.
-type ConsumerBuilder func(brokers []string, group, clientID string) (kafka.Consumer, error)
 
 ///////////////////////////////////////////////////////////////////////////////
 // default values
@@ -59,47 +48,12 @@ func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte)
 	return s.Set(key, value)
 }
 
-// DefaultStorageBuilder builds a LevelDB storage with default configuration.
-// The database will be stored in the given path.
-func DefaultStorageBuilder(path string) StorageBuilder {
-	return func(topic string, partition int32) (storage.Storage, error) {
-		fp := filepath.Join(path, fmt.Sprintf("%s.%d", topic, partition))
-		db, err := leveldb.OpenFile(fp, nil)
-		if err != nil {
-			return nil, fmt.Errorf("error opening leveldb: %v", err)
-		}
-
-		return storage.New(db)
-	}
-}
-
 // DefaultHasher returns an FNV hasher builder to assign keys to partitions.
 func DefaultHasher() func() hash.Hash32 {
 	return func() hash.Hash32 {
 		return fnv.New32a()
 	}
 
-}
-
-// DefaultConsumerBuilder creates Kafka Consumer using the sarama library.
-func DefaultConsumerBuilder(brokers []string, group, clientID string) (kafka.Consumer, error) {
-	config := kafka.CreateDefaultSaramaConfig(clientID, nil, metrics.DefaultRegistry)
-	return kafka.NewSaramaConsumer(brokers, group, config)
-}
-
-type producerBuilder func(brokers []string) (kafka.Producer, error)
-type topicmgrBuilder func(brokers []string) (kafka.TopicManager, error)
-
-func defaultProducerBuilder(clientID string, hasher func() hash.Hash32, log logger.Logger) producerBuilder {
-	return func(brokers []string) (kafka.Producer, error) {
-		partitioner := sarama.NewCustomHashPartitioner(hasher)
-		config := kafka.CreateDefaultSaramaConfig(clientID, partitioner, metrics.DefaultRegistry)
-		return kafka.NewProducer(brokers, &config.Config, log)
-	}
-}
-
-func defaultTopicManagerBuilder(brokers []string) (kafka.TopicManager, error) {
-	return kafka.NewSaramaTopicManager(brokers)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -120,10 +74,10 @@ type poptions struct {
 	nilHandling          NilHandling
 
 	builders struct {
-		storage  StorageBuilder
-		consumer ConsumerBuilder
-		producer producerBuilder
-		topicmgr topicmgrBuilder
+		storage  storage.Builder
+		consumer kafka.ConsumerBuilder
+		producer kafka.ProducerBuilder
+		topicmgr kafka.TopicManagerBuilder
 	}
 }
 
@@ -143,40 +97,30 @@ func WithClientID(clientID string) ProcessorOption {
 }
 
 // WithStorageBuilder defines a builder for the storage of each partition.
-func WithStorageBuilder(sb StorageBuilder) ProcessorOption {
+func WithStorageBuilder(sb storage.Builder) ProcessorOption {
 	return func(o *poptions) {
 		o.builders.storage = sb
 	}
 }
 
-// WithTopicManager defines a topic manager.
-func WithTopicManager(tm kafka.TopicManager) ProcessorOption {
+// WithTopicManagerBuilder replaces the default topic manager builder.
+func WithTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ProcessorOption {
 	return func(o *poptions) {
-		o.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
-			if tm == nil {
-				return nil, fmt.Errorf("TopicManager cannot be nil")
-			}
-			return tm, nil
-		}
+		o.builders.topicmgr = tmb
 	}
 }
 
-// WithConsumerBuilder creates a Kafka consumer.
-func WithConsumerBuilder(cb ConsumerBuilder) ProcessorOption {
+// WithConsumerBuilder replaces the default consumer builder.
+func WithConsumerBuilder(cb kafka.ConsumerBuilder) ProcessorOption {
 	return func(o *poptions) {
 		o.builders.consumer = cb
 	}
 }
 
-// WithProducer replaces goka's default producer.
-func WithProducer(p kafka.Producer) ProcessorOption {
+// WithProducerBuilder replaces the default producer builder.
+func WithProducerBuilder(pb kafka.ProducerBuilder) ProcessorOption {
 	return func(o *poptions) {
-		o.builders.producer = func(brokers []string) (kafka.Producer, error) {
-			if p == nil {
-				return nil, fmt.Errorf("producer cannot be nil")
-			}
-			return p, nil
-		}
+		o.builders.producer = pb
 	}
 }
 
@@ -237,13 +181,13 @@ func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 		return fmt.Errorf("StorageBuilder not set")
 	}
 	if opt.builders.consumer == nil {
-		opt.builders.consumer = DefaultConsumerBuilder
+		opt.builders.consumer = kafka.DefaultConsumerBuilder
 	}
 	if opt.builders.producer == nil {
-		opt.builders.producer = defaultProducerBuilder(opt.clientID, opt.hasher, opt.log)
+		opt.builders.producer = kafka.DefaultProducerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = defaultTopicManagerBuilder
+		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
 	}
 
 	return nil
@@ -265,9 +209,9 @@ type voptions struct {
 	hasher               func() hash.Hash32
 
 	builders struct {
-		storage  StorageBuilder
-		consumer ConsumerBuilder
-		topicmgr topicmgrBuilder
+		storage  storage.Builder
+		consumer kafka.ConsumerBuilder
+		topicmgr kafka.TopicManagerBuilder
 	}
 }
 
@@ -288,28 +232,23 @@ func WithViewCallback(cb UpdateCallback) ViewOption {
 }
 
 // WithViewStorageBuilder defines a builder for the storage of each partition.
-func WithViewStorageBuilder(sb StorageBuilder) ViewOption {
+func WithViewStorageBuilder(sb storage.Builder) ViewOption {
 	return func(o *voptions) {
 		o.builders.storage = sb
 	}
 }
 
-// WithViewConsumer replaces goka's default view consumer. Mainly for testing.
-func WithViewConsumerBuilder(cb ConsumerBuilder) ViewOption {
+// WithViewConsumer replaces default view consumer.
+func WithViewConsumerBuilder(cb kafka.ConsumerBuilder) ViewOption {
 	return func(o *voptions) {
 		o.builders.consumer = cb
 	}
 }
 
-// WithViewTopicManager defines a topic manager.
-func WithViewTopicManager(tm kafka.TopicManager) ViewOption {
+// WithViewTopicManager replaces the default topic manager.
+func WithViewTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ViewOption {
 	return func(o *voptions) {
-		o.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
-			if tm == nil {
-				return nil, fmt.Errorf("TopicManager cannot be nil")
-			}
-			return tm, nil
-		}
+		o.builders.topicmgr = tmb
 	}
 }
 
@@ -350,10 +289,10 @@ func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 		return fmt.Errorf("StorageBuilder not set")
 	}
 	if opt.builders.consumer == nil {
-		opt.builders.consumer = DefaultConsumerBuilder
+		opt.builders.consumer = kafka.DefaultConsumerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = defaultTopicManagerBuilder
+		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
 	}
 
 	return nil
@@ -376,8 +315,8 @@ type eoptions struct {
 	hasher func() hash.Hash32
 
 	builders struct {
-		topicmgr topicmgrBuilder
-		producer producerBuilder
+		topicmgr kafka.TopicManagerBuilder
+		producer kafka.ProducerBuilder
 	}
 }
 
@@ -396,27 +335,17 @@ func WithEmitterClientID(clientID string) EmitterOption {
 	}
 }
 
-// WithEmitterTopicManager defines a topic manager.
-func WithEmitterTopicManager(tm kafka.TopicManager) EmitterOption {
+// WithEmitterTopicManager replaces the default topic manager builder.
+func WithEmitterTopicManagerBuilder(tmb kafka.TopicManagerBuilder) EmitterOption {
 	return func(o *eoptions) {
-		o.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
-			if tm == nil {
-				return nil, fmt.Errorf("TopicManager cannot be nil")
-			}
-			return tm, nil
-		}
+		o.builders.topicmgr = tmb
 	}
 }
 
-// WithEmitterProducer replaces goka's default producer. Mainly for testing.
-func WithEmitterProducer(p kafka.Producer) EmitterOption {
+// WithEmitterProducerBuilder replaces the default producer builder.
+func WithEmitterProducerBuilder(pb kafka.ProducerBuilder) EmitterOption {
 	return func(o *eoptions) {
-		o.builders.producer = func(brokers []string) (kafka.Producer, error) {
-			if p == nil {
-				return nil, fmt.Errorf("producer cannot be nil")
-			}
-			return p, nil
-		}
+		o.builders.producer = pb
 	}
 }
 
@@ -438,10 +367,10 @@ func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
 
 	// config not set, use default one
 	if opt.builders.producer == nil {
-		opt.builders.producer = defaultProducerBuilder(opt.clientID, opt.hasher, opt.log)
+		opt.builders.producer = kafka.DefaultProducerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = defaultTopicManagerBuilder
+		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
 	}
 
 	return nil

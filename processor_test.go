@@ -3,6 +3,7 @@ package goka
 import (
 	"errors"
 	"fmt"
+	"hash"
 	"log"
 	"os"
 	"os/signal"
@@ -26,7 +27,7 @@ var (
 	rawCodec = new(codec.Bytes)
 )
 
-func nullStorageBuilder() StorageBuilder {
+func nullStorageBuilder() storage.Builder {
 	return func(topic string, partition int32) (storage.Storage, error) {
 		return &storage.Null{}, nil
 	}
@@ -43,11 +44,36 @@ func syncWith(t *testing.T, ch chan kafka.Event, p ...int32) error {
 		ch <- &kafka.NOP{Partition: -1}
 	})
 }
-func createConsumerBuilder(c kafka.Consumer) ConsumerBuilder {
+func createConsumerBuilder(c kafka.Consumer) kafka.ConsumerBuilder {
 	return func(b []string, g, id string) (kafka.Consumer, error) {
 		return c, nil
 	}
 }
+
+func createFailedConsumerBuilder() kafka.ConsumerBuilder {
+	return func(b []string, g, id string) (kafka.Consumer, error) {
+		return nil, errors.New("failed creating consumer")
+	}
+}
+
+func createProducerBuilder(p kafka.Producer) kafka.ProducerBuilder {
+	return func(b []string, id string, hasher func() hash.Hash32) (kafka.Producer, error) {
+		return p, nil
+	}
+}
+
+func createFailedProducerBuilder() kafka.ProducerBuilder {
+	return func(b []string, id string, hasher func() hash.Hash32) (kafka.Producer, error) {
+		return nil, errors.New("failed creating producer")
+	}
+}
+
+func createTopicManagerBuilder(tm kafka.TopicManager) kafka.TopicManagerBuilder {
+	return func(b []string) (kafka.TopicManager, error) {
+		return tm, nil
+	}
+}
+
 func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, npar int) *Processor {
 	tm := mock.NewMockTopicManager(ctrl)
 	producer := mock.NewMockProducer(ctrl)
@@ -68,15 +94,15 @@ func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, 
 			Input(topic2, rawCodec, cb),
 			Loop(rawCodec, cb),
 		),
-		WithTopicManager(tm),
+		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
 		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducer(producer),
+		WithProducerBuilder(createProducerBuilder(producer)),
 		WithPartitionChannelSize(0),
 	)
 	return p
 }
 
-func createProcessor(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb StorageBuilder) *Processor {
+func createProcessor(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb storage.Builder) *Processor {
 	tm := mock.NewMockTopicManager(ctrl)
 	producer := mock.NewMockProducer(ctrl)
 
@@ -101,9 +127,9 @@ func createProcessor(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consu
 			Loop(rawCodec, cb),
 			Persist(new(codec.String)),
 		),
-		WithTopicManager(tm),
+		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
 		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducer(producer),
+		WithProducerBuilder(createProducerBuilder(producer)),
 		WithStorageBuilder(sb),
 		WithPartitionChannelSize(0),
 	)
@@ -111,7 +137,7 @@ func createProcessor(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consu
 	return p
 }
 
-func createProcessorWithTable(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb StorageBuilder) *Processor {
+func createProcessorWithTable(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb storage.Builder) *Processor {
 	tm := mock.NewMockTopicManager(ctrl)
 	producer := mock.NewMockProducer(ctrl)
 
@@ -135,9 +161,9 @@ func createProcessorWithTable(t *testing.T, ctrl *gomock.Controller, consumer ka
 			Join(table, rawCodec),
 			Persist(rawCodec),
 		),
-		WithTopicManager(tm),
+		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
 		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducer(producer),
+		WithProducerBuilder(createProducerBuilder(producer)),
 		WithStorageBuilder(sb),
 		WithPartitionChannelSize(0),
 	)
@@ -375,7 +401,7 @@ func TestNewProcessor(t *testing.T) {
 	tm.EXPECT().Close().Return(nil)
 	_, err = NewProcessor(nil,
 		DefineGroup(group, Input(topic, rawCodec, cb)),
-		WithTopicManager(tm),
+		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
 	)
 	ensure.NotNil(t, err)
 
@@ -384,9 +410,9 @@ func TestNewProcessor(t *testing.T) {
 	tm.EXPECT().Close().Return(nil)
 	_, err = NewProcessor(nil,
 		DefineGroup(group, Input(topic, rawCodec, cb)),
-		WithTopicManager(tm),
-		WithConsumerBuilder(createConsumerBuilder(nil)),
-		WithProducer(nil),
+		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
+		WithConsumerBuilder(createFailedConsumerBuilder()),
+		WithProducerBuilder(createProducerBuilder(nil)),
 	)
 	ensure.NotNil(t, err)
 
@@ -395,9 +421,9 @@ func TestNewProcessor(t *testing.T) {
 	tm.EXPECT().Close().Return(nil)
 	_, err = NewProcessor(nil,
 		DefineGroup(group, Input(topic, rawCodec, cb)),
-		WithTopicManager(tm),
+		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
 		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducer(nil),
+		WithProducerBuilder(createFailedProducerBuilder()),
 	)
 	ensure.NotNil(t, err)
 
@@ -414,9 +440,9 @@ func TestNewProcessor(t *testing.T) {
 			Loop(rawCodec, cb),
 			Persist(rawCodec),
 		),
-		WithTopicManager(tm),
+		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
 		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducer(producer),
+		WithProducerBuilder(createProducerBuilder(producer)),
 	)
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, p.graph.GroupTable().Topic(), tableName(group))
@@ -434,9 +460,9 @@ func TestNewProcessor(t *testing.T) {
 			Input(topic, rawCodec, cb),
 			Input(topic2, rawCodec, cb),
 		),
-		WithTopicManager(tm),
+		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
 		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducer(producer),
+		WithProducerBuilder(createProducerBuilder(producer)),
 	)
 	ensure.Nil(t, err)
 	ensure.True(t, p.graph.GroupTable() == nil)
@@ -454,9 +480,9 @@ func TestNewProcessor(t *testing.T) {
 			Input(topic, rawCodec, cb),
 			Join(table, rawCodec),
 		),
-		WithTopicManager(tm),
+		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
 		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducer(producer),
+		WithProducerBuilder(createProducerBuilder(producer)),
 	)
 	ensure.Nil(t, err)
 	ensure.True(t, p.graph.GroupTable() == nil)
