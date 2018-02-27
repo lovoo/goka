@@ -335,15 +335,15 @@ func WithEmitterClientID(clientID string) EmitterOption {
 	}
 }
 
-// WithEmitterTopicManager defines a topic manager.
+// WithEmitterTopicManager replaces the default topic manager builder.
 func WithEmitterTopicManagerBuilder(tmb kafka.TopicManagerBuilder) EmitterOption {
 	return func(o *eoptions) {
 		o.builders.topicmgr = tmb
 	}
 }
 
-// WithEmitterProducer replaces goka's default producer. Mainly for testing.
-func WithEmitterProducer(pb kafka.ProducerBuilder) EmitterOption {
+// WithEmitterProducerBuilder replaces the default producer builder.
+func WithEmitterProducerBuilder(pb kafka.ProducerBuilder) EmitterOption {
 	return func(o *eoptions) {
 		o.builders.producer = pb
 	}
