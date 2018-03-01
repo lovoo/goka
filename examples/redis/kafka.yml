@@ -1,0 +1,39 @@
+version: '2'
+services:
+
+# zookeeper ==========================
+  zookeeper:
+    container_name: zookeeper
+    image: confluent/zookeeper
+    ports:
+      - "2181:2181"
+
+# kafka ==============================
+  kafka:
+    container_name: kafka
+    image: wurstmeister/kafka
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - zookeeper
+      - redis
+    ports:
+      - "9092:9092"
+      - "9997:9997"
+    environment:
+      KAFKA_PORT: 9092
+      KAFKA_ADVERTISED_PORT: 9092
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_NUM_PARTITIONS: 10
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_REPLICATION_FACTOR: 1
+
+# redis =======================================
+  redis:
+    container_name: redis
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    expose:
+      - "6379"

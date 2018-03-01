@@ -1,0 +1,7 @@
+
+kafka:
+  brokers:
+    - "127.0.0.1:9092"
+  group: "examples"
+  stream: "events"
+  redis: "127.0.0.1:6379"
