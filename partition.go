@@ -45,8 +45,8 @@ type partition struct {
 }
 
 type kafkaProxy interface {
-	Add(string, int64)
-	Remove(string)
+	Add(string, int64) error
+	Remove(string) error
 	AddGroup()
 	Stop()
 }
@@ -210,14 +210,22 @@ func (p *partition) recovered() bool {
 	return atomic.LoadInt32(&p.recoveredFlag) == 1
 }
 
-func (p *partition) load(catchup bool) error {
+func (p *partition) load(catchup bool) (err error) {
 	// fetch local offset
 	local, err := p.st.GetOffset(sarama.OffsetOldest)
 	if err != nil {
 		return fmt.Errorf("Error reading local offset: %v", err)
 	}
-	p.proxy.Add(p.topic, local)
-	defer p.proxy.Remove(p.topic)
+	err = p.proxy.Add(p.topic, local)
+	if err != nil {
+		return fmt.Errorf("Error adding partition: %v", err)
+	}
+	defer func() {
+		err = p.proxy.Remove(p.topic)
+		if err != nil {
+			err = fmt.Errorf("Error removing partition: %v", err)
+		}
+	}()
 
 	stallTicker := time.NewTicker(stallPeriod)
 	defer stallTicker.Stop()
@@ -339,7 +347,11 @@ func (p *partition) markRecovered(catchup bool) (err error) {
 			// if catching up (views), stop reading from topic before marking
 			// partition as recovered to avoid blocking other partitions when
 			// p.ch gets full
-			p.proxy.Remove(p.topic)
+			err = p.proxy.Remove(p.topic)
+			if err != nil {
+				err = fmt.Errorf("Error removing partition: %v", err)
+				return
+			}
 
 			// drain events channel -- we'll fetch them again later
 			wg.Add(1)
@@ -365,7 +377,11 @@ func (p *partition) markRecovered(catchup bool) (err error) {
 			close(done)
 			wg.Wait()
 			// start reading from topic again if in catchup mode
-			p.proxy.Add(p.topic, p.hwm)
+			err := p.proxy.Add(p.topic, p.hwm)
+			if err != nil {
+				err = fmt.Errorf("Error adding partition: %v", err)
+				return
+			}
 		}
 
 		// update stats

@@ -17,12 +17,12 @@ type proxy struct {
 	consumer  kafka.Consumer
 }
 
-func (p *proxy) Add(topic string, offset int64) {
-	p.consumer.AddPartition(topic, p.partition, offset)
+func (p *proxy) Add(topic string, offset int64) error {
+	return p.consumer.AddPartition(topic, p.partition, offset)
 }
 
-func (p *proxy) Remove(topic string) {
-	p.consumer.RemovePartition(topic, p.partition)
+func (p *proxy) Remove(topic string) error {
+	return p.consumer.RemovePartition(topic, p.partition)
 }
 
 func (p *proxy) AddGroup() {
@@ -39,12 +39,12 @@ type delayProxy struct {
 	wait      []func() bool
 }
 
-func (p *delayProxy) Add(topic string, offset int64) {
-	p.consumer.AddPartition(topic, p.partition, offset)
+func (p *delayProxy) Add(topic string, offset int64) error {
+	return p.consumer.AddPartition(topic, p.partition, offset)
 }
 
-func (p *delayProxy) Remove(topic string) {
-	p.consumer.RemovePartition(topic, p.partition)
+func (p *delayProxy) Remove(topic string) error {
+	return p.consumer.RemovePartition(topic, p.partition)
 }
 func (p *delayProxy) waitersDone() bool {
 	for _, r := range p.wait {
@@ -88,10 +88,10 @@ func (p *delayProxy) Stop() {
 
 type nullProxy struct{}
 
-func (p *nullProxy) Add(topic string, offset int64) {}
-func (p *nullProxy) Remove(topic string)            {}
-func (p *nullProxy) AddGroup()                      {}
-func (p *nullProxy) Stop()                          {}
+func (p *nullProxy) Add(topic string, offset int64) error { return nil }
+func (p *nullProxy) Remove(topic string) error            { return nil }
+func (p *nullProxy) AddGroup()                            {}
+func (p *nullProxy) Stop()                                {}
 
 type storageProxy struct {
 	storage.Storage
