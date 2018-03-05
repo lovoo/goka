@@ -28,16 +28,20 @@ func (_m *MockkafkaProxy) EXPECT() *_MockkafkaProxyRecorder {
 	return _m.recorder
 }
 
-func (_m *MockkafkaProxy) Add(_param0 string, _param1 int64) {
-	_m.ctrl.Call(_m, "Add", _param0, _param1)
+func (_m *MockkafkaProxy) Add(_param0 string, _param1 int64) error {
+	ret := _m.ctrl.Call(_m, "Add", _param0, _param1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 func (_mr *_MockkafkaProxyRecorder) Add(arg0, arg1 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Add", arg0, arg1)
 }
 
-func (_m *MockkafkaProxy) Remove(_param0 string) {
-	_m.ctrl.Call(_m, "Remove", _param0)
+func (_m *MockkafkaProxy) Remove(_param0 string) error {
+	ret := _m.ctrl.Call(_m, "Remove", _param0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 func (_mr *_MockkafkaProxyRecorder) Remove(arg0 interface{}) *gomock.Call {

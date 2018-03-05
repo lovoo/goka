@@ -14,6 +14,9 @@ type Errors struct {
 }
 
 func (e *Errors) Collect(err error) {
+	if err == nil {
+		return
+	}
 	e.m.Lock()
 	e.errs = append(e.errs, err)
 	e.m.Unlock()
@@ -24,9 +27,15 @@ func (e *Errors) HasErrors() bool {
 }
 
 func (e *Errors) Error() string {
+	if !e.HasErrors() {
+		return ""
+	}
+	if len(e.errs) == 1 {
+		return e.errs[0].Error()
+	}
 	str := "Errors:\n"
 	for _, err := range e.errs {
-		str += fmt.Sprintf("\t%s\n", err.Error())
+		str += fmt.Sprintf("\t* %s\n", err.Error())
 	}
 	return str
 }

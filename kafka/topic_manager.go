@@ -134,10 +134,7 @@ func (m *topicManager) EnsureTableExists(topic string, npar int) error {
 		return err
 	}
 	// check number of partitions
-	if err = m.checkPartitions(topic, npar); err != nil {
-		return err
-	}
-	return nil
+	return m.checkPartitions(topic, npar)
 }
 
 func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
@@ -150,10 +147,7 @@ func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
 	if err != nil {
 		return err
 	}
-	if err = m.checkPartitions(topic, npar); err != nil {
-		return err
-	}
-	return nil
+	return m.checkPartitions(topic, npar)
 }
 
 func (m *topicManager) Partitions(topic string) ([]int32, error) {

@@ -37,8 +37,10 @@ func (_mr *_MockConsumerRecorder) AddGroupPartition(arg0 interface{}) *gomock.Ca
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "AddGroupPartition", arg0)
 }
 
-func (_m *MockConsumer) AddPartition(_param0 string, _param1 int32, _param2 int64) {
-	_m.ctrl.Call(_m, "AddPartition", _param0, _param1, _param2)
+func (_m *MockConsumer) AddPartition(_param0 string, _param1 int32, _param2 int64) error {
+	ret := _m.ctrl.Call(_m, "AddPartition", _param0, _param1, _param2)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 func (_mr *_MockConsumerRecorder) AddPartition(arg0, arg1, arg2 interface{}) *gomock.Call {
@@ -75,8 +77,10 @@ func (_mr *_MockConsumerRecorder) Events() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Events")
 }
 
-func (_m *MockConsumer) RemovePartition(_param0 string, _param1 int32) {
-	_m.ctrl.Call(_m, "RemovePartition", _param0, _param1)
+func (_m *MockConsumer) RemovePartition(_param0 string, _param1 int32) error {
+	ret := _m.ctrl.Call(_m, "RemovePartition", _param0, _param1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 func (_mr *_MockConsumerRecorder) RemovePartition(arg0, arg1 interface{}) *gomock.Call {

@@ -406,7 +406,7 @@ func (g *Processor) run() {
 			}
 
 		case *kafka.Error:
-			g.fail(ev.Err)
+			g.fail(fmt.Errorf("kafka error: %v", ev.Err))
 			failed = true
 
 		default:
@@ -568,7 +568,7 @@ func (g *Processor) createPartition(id int32) error {
 	g.partitions[id] = newPartition(
 		g.opts.log,
 		groupTable,
-		g.process, st, &delayProxy{partition: id, consumer: g.consumer, wait: wait},
+		g.process, st, &delayProxy{proxy: proxy{partition: id, consumer: g.consumer}, wait: wait},
 		g.opts.partitionChannelSize,
 	)
 

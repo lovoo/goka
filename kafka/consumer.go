@@ -37,8 +37,8 @@ type Consumer interface {
 	Commit(topic string, partition int32, offset int64) error
 
 	// consume individual topic/partitions
-	AddPartition(topic string, partition int32, initialOffset int64)
-	RemovePartition(topic string, partition int32)
+	AddPartition(topic string, partition int32, initialOffset int64) error
+	RemovePartition(topic string, partition int32) error
 
 	// Close stops closes the events channel
 	Close() error
@@ -103,9 +103,9 @@ func (c *saramaConsumer) Commit(topic string, partition int32, offset int64) err
 	return c.groupConsumer.Commit(topic, partition, offset)
 }
 
-func (c *saramaConsumer) AddPartition(topic string, partition int32, initialOffset int64) {
-	c.simpleConsumer.AddPartition(topic, partition, int64(initialOffset))
+func (c *saramaConsumer) AddPartition(topic string, partition int32, initialOffset int64) error {
+	return c.simpleConsumer.AddPartition(topic, partition, int64(initialOffset))
 }
-func (c *saramaConsumer) RemovePartition(topic string, partition int32) {
-	c.simpleConsumer.RemovePartition(topic, partition)
+func (c *saramaConsumer) RemovePartition(topic string, partition int32) error {
+	return c.simpleConsumer.RemovePartition(topic, partition)
 }
