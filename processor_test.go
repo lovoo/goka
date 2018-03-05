@@ -651,7 +651,6 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 		st.EXPECT().SetOffset(int64(1)),
 		st.EXPECT().MarkRecovered(),
 	)
-
 	// 4. error
 	consumer.EXPECT().Close().Do(func() { close(ch) })
 	consumer.EXPECT().RemovePartition(tableName(group), int32(0))

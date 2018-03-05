@@ -8,6 +8,7 @@ import (
 
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
+	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 
 	"github.com/Shopify/sarama"
@@ -214,17 +215,18 @@ func (p *partition) load(catchup bool) (err error) {
 	// fetch local offset
 	local, err := p.st.GetOffset(sarama.OffsetOldest)
 	if err != nil {
-		return fmt.Errorf("Error reading local offset: %v", err)
+		return fmt.Errorf("error reading local offset: %v", err)
 	}
-	err = p.proxy.Add(p.topic, local)
-	if err != nil {
-		return fmt.Errorf("Error adding partition: %v", err)
+	if err = p.proxy.Add(p.topic, local); err != nil {
+		return err
 	}
 	defer func() {
-		err = p.proxy.Remove(p.topic)
-		if err != nil {
-			err = fmt.Errorf("Error removing partition: %v", err)
+		var derr multierr.Errors
+		derr.Collect(err)
+		if e := p.proxy.Remove(p.topic); e != nil {
+			derr.Collect(e)
 		}
+		err = derr.NilOrError()
 	}()
 
 	stallTicker := time.NewTicker(stallPeriod)
@@ -249,7 +251,7 @@ func (p *partition) load(catchup bool) (err error) {
 
 				if ev.Offset == ev.Hwm {
 					// nothing to recover
-					if err := p.markRecovered(false); err != nil {
+					if err = p.markRecovered(false); err != nil {
 						return fmt.Errorf("error setting recovered: %v", err)
 					}
 				}
@@ -258,7 +260,7 @@ func (p *partition) load(catchup bool) (err error) {
 				p.offset = ev.Hwm - 1
 				p.hwm = ev.Hwm
 
-				if err := p.markRecovered(catchup); err != nil {
+				if err = p.markRecovered(catchup); err != nil {
 					return fmt.Errorf("error setting recovered: %v", err)
 				}
 
@@ -272,13 +274,12 @@ func (p *partition) load(catchup bool) (err error) {
 				if ev.Topic != p.topic {
 					return fmt.Errorf("load: wrong topic = %s", ev.Topic)
 				}
-				err := p.storeEvent(ev)
-				if err != nil {
+				if err = p.storeEvent(ev); err != nil {
 					return fmt.Errorf("load: error updating storage: %v", err)
 				}
 				p.offset = ev.Offset
 				if p.offset >= p.hwm-1 {
-					if err := p.markRecovered(catchup); err != nil {
+					if err = p.markRecovered(catchup); err != nil {
 						return fmt.Errorf("error setting recovered: %v", err)
 					}
 				}
@@ -347,9 +348,7 @@ func (p *partition) markRecovered(catchup bool) (err error) {
 			// if catching up (views), stop reading from topic before marking
 			// partition as recovered to avoid blocking other partitions when
 			// p.ch gets full
-			err = p.proxy.Remove(p.topic)
-			if err != nil {
-				err = fmt.Errorf("Error removing partition: %v", err)
+			if err = p.proxy.Remove(p.topic); err != nil {
 				return
 			}
 
@@ -377,9 +376,7 @@ func (p *partition) markRecovered(catchup bool) (err error) {
 			close(done)
 			wg.Wait()
 			// start reading from topic again if in catchup mode
-			err := p.proxy.Add(p.topic, p.hwm)
-			if err != nil {
-				err = fmt.Errorf("Error adding partition: %v", err)
+			if err = p.proxy.Add(p.topic, p.hwm); err != nil {
 				return
 			}
 		}

@@ -587,6 +587,84 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	ensure.Nil(t, err)
 }
 
+func TestPartition_loadStatefulWithErrorAddRemovePartition(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var (
+		proxy        = mock.NewMockkafkaProxy(ctrl)
+		st           = mock.NewMockStorage(ctrl)
+		key          = "key"
+		par    int32 = 1
+		offset int64 = 4
+		value        = []byte("value")
+		wait   chan bool
+		count  int64
+	)
+
+	// error in AddPartitionError
+	wait = make(chan bool)
+	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, DefaultUpdate), proxy, 0)
+
+	gomock.InOrder(
+		st.EXPECT().Open().Return(nil),
+		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
+		proxy.EXPECT().Add(topic, offset).Return(errors.New("some error adding partition")),
+		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
+	)
+
+	go func() {
+		err := p.start()
+		ensure.NotNil(t, err)
+		ensure.StringContains(t, err.Error(), "some error")
+		close(wait)
+	}()
+	ensure.Nil(t, doTimed(t, func() { <-wait }))
+
+	// error in RemovePartition
+	update := func(st storage.Storage, p int32, k string, v []byte) error {
+		atomic.AddInt64(&count, 1)
+		return errors.New("some error")
+	}
+
+	wait = make(chan bool)
+	p = newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, 0)
+
+	gomock.InOrder(
+		st.EXPECT().Open().Return(nil),
+		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
+		proxy.EXPECT().Add(topic, offset).Return(nil),
+		proxy.EXPECT().Remove(topic).Return(errors.New("error while removing partition")),
+		st.EXPECT().Close().Return(nil),
+		proxy.EXPECT().Stop(),
+	)
+
+	go func() {
+		err := p.start()
+		ensure.NotNil(t, err)
+		ensure.StringContains(t, err.Error(), "some error")
+		ensure.StringContains(t, err.Error(), "error while removing partition")
+		log.Printf("%v", err)
+		close(wait)
+	}()
+
+	p.ch <- &kafka.Message{
+		Key:       key,
+		Offset:    offset,
+		Partition: par,
+		Topic:     topic,
+		Value:     value,
+	}
+
+	err := doTimed(t, func() {
+		p.stop()
+		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
+		<-wait
+	})
+	ensure.Nil(t, err)
+}
+
 func TestPartition_catchupStateful(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
