@@ -390,12 +390,14 @@ func (km *consumerMock) Commit(topic string, partition int32, offset int64) erro
 
 // AddPartition marks the topic as a table topic.
 // The mock has to know the group table topic to ignore emit calls (which would never be consumed)
-func (km *consumerMock) AddPartition(topic string, partition int32, initialOffset int64) {
+func (km *consumerMock) AddPartition(topic string, partition int32, initialOffset int64) error {
+	return nil
 }
 
 // RemovePartition removes a partition from a topic.
 // No action required in the mock.
-func (km *consumerMock) RemovePartition(topic string, partition int32) {
+func (km *consumerMock) RemovePartition(topic string, partition int32) error {
+	return nil
 }
 
 // Close closes the consumer.
