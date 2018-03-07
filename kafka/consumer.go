@@ -3,6 +3,7 @@ package kafka
 import (
 	"time"
 
+	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/lovoo/goka/multierr"
 )
@@ -62,7 +63,11 @@ func NewSaramaConsumer(brokers []string, group string, config *cluster.Config) (
 	if err != nil {
 		return nil, err
 	}
-	c, err := newSimpleConsumer(brokers, events, &config.Config)
+
+	// since simple consumer only handle tables, be sure to start from oldest
+	simpleConfig := config.Config // copy config
+	simpleConfig.Consumer.Offsets.Initial = sarama.OffsetOldest
+	c, err := newSimpleConsumer(brokers, events, &simpleConfig)
 	if err != nil {
 		return nil, err
 	}

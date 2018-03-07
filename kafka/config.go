@@ -12,8 +12,10 @@ func NewConfig() *cluster.Config {
 
 	// consumer configuration
 	config.Consumer.Return.Errors = true
-	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	config.Consumer.MaxProcessingTime = defaultMaxProcessingTime
+	// this configures the initial offset for streams. Tables are always
+	// consumed from OffsetOldest.
+	config.Consumer.Offsets.Initial = sarama.OffsetNewest
 
 	// producer configuration
 	config.Producer.RequiredAcks = sarama.WaitForLocal
