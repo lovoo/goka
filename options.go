@@ -207,6 +207,7 @@ type voptions struct {
 	updateCallback       UpdateCallback
 	partitionChannelSize int
 	hasher               func() hash.Hash32
+	restartable          bool
 
 	builders struct {
 		storage  storage.Builder
@@ -272,6 +273,15 @@ func WithViewHasher(hasher func() hash.Hash32) ViewOption {
 func WithViewClientID(clientID string) ViewOption {
 	return func(o *voptions) {
 		o.clientID = clientID
+	}
+}
+
+// WithViewRestartable defines the view can be restarted, even when Start()
+// returns errors. If the view is restartable, the client must call Stop() to
+// release all resources.
+func WithViewRestartable() ViewOption {
+	return func(o *voptions) {
+		o.restartable = true
 	}
 }
 

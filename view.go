@@ -16,6 +16,7 @@ type Getter func(string) (interface{}, error)
 
 // View is a materialized (i.e. persistent) cache of a group table.
 type View struct {
+	brokers    []string
 	topic      string
 	opts       *voptions
 	partitions []*partition
@@ -51,17 +52,10 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 
 	opts.tableCodec = codec
 
-	consumer, err := opts.builders.consumer(brokers, "goka-view", opts.clientID)
-	if err != nil {
-		return nil, fmt.Errorf("view: cannot create Kafka consumer: %v", err)
-	}
-
 	v := &View{
-		topic:    string(topic),
-		opts:     opts,
-		consumer: consumer,
-		done:     make(chan bool),
-		dead:     make(chan bool),
+		brokers: brokers,
+		topic:   string(topic),
+		opts:    opts,
 	}
 
 	if err = v.createPartitions(brokers); err != nil {
@@ -105,7 +99,7 @@ func (v *View) createPartitions(brokers []string) (err error) {
 
 		po := newPartition(v.opts.log, v.topic, nil,
 			&storageProxy{Storage: st, partition: p, update: v.opts.updateCallback},
-			&proxy{p, v.consumer},
+			&proxy{p, nil},
 			v.opts.partitionChannelSize,
 		)
 		v.partitions = append(v.partitions, po)
@@ -114,8 +108,29 @@ func (v *View) createPartitions(brokers []string) (err error) {
 	return nil
 }
 
+// reinit (re)initializes the view and its partitions to connect to Kafka
+func (v *View) reinit() error {
+	consumer, err := v.opts.builders.consumer(v.brokers, "goka-view", v.opts.clientID)
+	if err != nil {
+		return fmt.Errorf("view: cannot create Kafka consumer: %v", err)
+	}
+	v.consumer = consumer
+	v.done = make(chan bool)
+	v.dead = make(chan bool)
+	v.errors = multierr.Errors{}
+
+	for i, p := range v.partitions {
+		p.reinit(&proxy{int32(i), v.consumer})
+	}
+	return nil
+}
+
 // Start starts consuming the view's topic.
 func (v *View) Start() error {
+
+	if err := v.reinit(); err != nil {
+		return err
+	}
 	go v.run()
 
 	var wg sync.WaitGroup
@@ -123,8 +138,10 @@ func (v *View) Start() error {
 	for id, p := range v.partitions {
 		go func(id int32, p *partition) {
 			defer wg.Done()
-			err := p.startCatchup()
-			if err != nil {
+			if err := p.st.Open(); err != nil {
+				v.fail(fmt.Errorf("view: error opening storage partition %d: %v", id, err))
+			}
+			if err := p.startCatchup(); err != nil {
 				v.fail(fmt.Errorf("view: error opening partition %d: %v", id, err))
 			}
 		}(int32(id), p)
@@ -132,6 +149,14 @@ func (v *View) Start() error {
 	wg.Wait()
 
 	<-v.dead
+
+	if v.opts.restartable {
+		// At this point, stop() has finished and goroutines exited,
+		// except for start and stop goroutines. Prepare the once object for a
+		// subsequent start().
+		defer func() { v.stopOnce = sync.Once{} }()
+	}
+
 	if v.errors.HasErrors() {
 		return &v.errors
 	}
@@ -166,14 +191,29 @@ func (v *View) stop() {
 			}(i, par)
 		}
 		wg.Wait()
+
+		if !v.opts.restartable {
+			v.close()
+		}
 		v.opts.log.Printf("View: shutdown complete")
 	})
 }
 
-// Stop stops the view, frees any resources + connections to kafka
+// close closes all storage partitions
+func (v *View) close() {
+	for _, p := range v.partitions {
+		v.errors.Collect(p.st.Close())
+	}
+}
+
+// Stop stops the view, closes storage partitions, and frees resources
 func (v *View) Stop() {
 	v.opts.log.Printf("View: stopping")
 	v.stop()
+
+	if v.opts.restartable {
+		v.close()
+	}
 }
 
 func (v *View) hash(key string) (int32, error) {

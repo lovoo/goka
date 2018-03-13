@@ -85,11 +85,9 @@ func TestPartition_startStateful(t *testing.T) {
 	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, nil), proxy, defaultPartitionChannelSize)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(offset, nil),
 		proxy.EXPECT().Add(topic, int64(offset)),
 		proxy.EXPECT().Remove(topic),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 	go func() {
@@ -254,13 +252,11 @@ func TestPartition_runStateful(t *testing.T) {
 	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, nil), proxy, 0)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset),
 		st.EXPECT().MarkRecovered(),
 		proxy.EXPECT().Remove(topic),
 		proxy.EXPECT().AddGroup(),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 
@@ -337,13 +333,11 @@ func TestPartition_runStatefulWithError(t *testing.T) {
 	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, nil), proxy, defaultPartitionChannelSize)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset),
 		st.EXPECT().MarkRecovered(),
 		proxy.EXPECT().Remove(topic),
 		proxy.EXPECT().AddGroup(),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 
@@ -415,7 +409,6 @@ func TestPartition_loadStateful(t *testing.T) {
 	p := newPartition(logger.Default(), topic, consume, newStorageProxy(st, 0, DefaultUpdate), proxy, defaultPartitionChannelSize)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset),
 		st.EXPECT().Set(key, value),
@@ -423,7 +416,6 @@ func TestPartition_loadStateful(t *testing.T) {
 		st.EXPECT().MarkRecovered(),
 		proxy.EXPECT().Remove(topic),
 		proxy.EXPECT().AddGroup(),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 
@@ -497,11 +489,9 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, 0)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset),
 		proxy.EXPECT().Remove(topic),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 
@@ -531,13 +521,11 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	p = newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, DefaultUpdate), proxy, 0)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset),
 		st.EXPECT().Set(key, value),
 		st.EXPECT().SetOffset(int64(offset)).Return(errors.New("some error")),
 		proxy.EXPECT().Remove(topic),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 
@@ -567,9 +555,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	p = newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, nil), proxy, 0)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(0), errors.New("some error")),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 
@@ -607,10 +593,8 @@ func TestPartition_loadStatefulWithErrorAddRemovePartition(t *testing.T) {
 	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, DefaultUpdate), proxy, 0)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset).Return(errors.New("some error adding partition")),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 
@@ -632,11 +616,9 @@ func TestPartition_loadStatefulWithErrorAddRemovePartition(t *testing.T) {
 	p = newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, 0)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset).Return(nil),
 		proxy.EXPECT().Remove(topic).Return(errors.New("error while removing partition")),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 
@@ -690,7 +672,6 @@ func TestPartition_catchupStateful(t *testing.T) {
 	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, 0)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset),
 		st.EXPECT().Set(key, value),
@@ -703,7 +684,6 @@ func TestPartition_catchupStateful(t *testing.T) {
 		st.EXPECT().Set(key, value),
 		st.EXPECT().SetOffset(offset+2).Return(nil),
 		proxy.EXPECT().Remove(topic),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 
@@ -809,7 +789,6 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), proxy, 0)
 
 	gomock.InOrder(
-		st.EXPECT().Open().Return(nil),
 		st.EXPECT().GetOffset(int64(-2)).Return(int64(offset), nil),
 		proxy.EXPECT().Add(topic, offset),
 		st.EXPECT().Set(key, value),
@@ -820,7 +799,6 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 		st.EXPECT().MarkRecovered(),
 		proxy.EXPECT().Add(topic, offset+2),
 		proxy.EXPECT().Remove(topic),
-		st.EXPECT().Close().Return(nil),
 		proxy.EXPECT().Stop(),
 	)
 
