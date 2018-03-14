@@ -38,14 +38,11 @@ func createTestView(t *testing.T, consumer kafka.Consumer, sb storage.Builder, t
 	opts.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
 		return tm, nil
 	}
-
-	reader := &View{
-		topic:    tableName(group),
-		opts:     opts,
-		consumer: consumer,
-		done:     make(chan bool),
-		dead:     make(chan bool),
+	opts.builders.consumer = func(brokers []string, topic, id string) (kafka.Consumer, error) {
+		return consumer, nil
 	}
+
+	reader := &View{topic: tableName(group), opts: opts}
 	return reader
 }
 
@@ -133,12 +130,14 @@ func TestView_StartStop(t *testing.T) {
 		sb = func(topic string, partition int32) (storage.Storage, error) {
 			return st, nil
 		}
-		consumer = mock.NewMockConsumer(ctrl)
-		tm       = mock.NewMockTopicManager(ctrl)
-		v        = createTestView(t, consumer, sb, tm)
-		final    = make(chan bool)
-		ch       = make(chan kafka.Event)
-		chClose  = func() { close(ch) }
+		consumer     = mock.NewMockConsumer(ctrl)
+		tm           = mock.NewMockTopicManager(ctrl)
+		v            = createTestView(t, consumer, sb, tm)
+		initial      = make(chan bool)
+		final        = make(chan bool)
+		ch           = make(chan kafka.Event)
+		chClose      = func() { close(ch) }
+		initialClose = func() { close(initial) }
 
 		offset = int64(123)
 		par    = int32(0)
@@ -147,7 +146,7 @@ func TestView_StartStop(t *testing.T) {
 	gomock.InOrder(
 		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0}, nil),
 		tm.EXPECT().Close(),
-		consumer.EXPECT().Events().Return(ch),
+		consumer.EXPECT().Events().Do(initialClose).Return(ch),
 	)
 	gomock.InOrder(
 		st.EXPECT().Open(),
@@ -170,6 +169,7 @@ func TestView_StartStop(t *testing.T) {
 	}()
 
 	err = doTimed(t, func() {
+		<-initial
 		v.Stop()
 		<-final
 	})
@@ -280,7 +280,7 @@ func TestNewView(t *testing.T) {
 		WithViewTopicManagerBuilder(createTopicManagerBuilder(tm)))
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, v.topic, tableName(group))
-	ensure.DeepEqual(t, v.consumer, consumer)
+	ensure.DeepEqual(t, v.consumer, nil) // is set first upon start
 	ensure.True(t, len(v.partitions) == 3)
 }
 

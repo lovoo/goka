@@ -286,8 +286,7 @@ func (g *Processor) Start() error {
 	// start all views
 	for t, v := range g.views {
 		go func(t string, v *View) {
-			err := v.Start()
-			if err != nil {
+			if err := v.Start(); err != nil {
 				g.fail(fmt.Errorf("error in view %s: %v", t, err))
 			}
 		}(t, v)
@@ -530,8 +529,10 @@ func (g *Processor) createPartitionViews(id int32) error {
 				}
 			}()
 
-			err := par.startCatchup()
-			if err != nil {
+			if err := par.st.Open(); err != nil {
+				g.fail(fmt.Errorf("error opening storage %s/%d: %v", par.topic, pid, err))
+			}
+			if err := par.startCatchup(); err != nil {
 				g.fail(fmt.Errorf("error in partition view %s/%d: %v", par.topic, pid, err))
 			}
 			g.opts.log.Printf("partition view %s/%d: exit", par.topic, pid)
@@ -580,8 +581,10 @@ func (g *Processor) createPartition(id int32) error {
 					par.topic, id, err, string(debug.Stack())))
 			}
 		}()
-		err := par.start()
-		if err != nil {
+		if err := par.st.Open(); err != nil {
+			g.fail(fmt.Errorf("error opening storage partition %d: %v", id, err))
+		}
+		if err := par.start(); err != nil {
 			g.fail(fmt.Errorf("error in partition %d: %v", id, err))
 		}
 		g.opts.log.Printf("partition %s/%d: exit", par.topic, id)
@@ -617,6 +620,9 @@ func (g *Processor) removePartition(partition int32) {
 
 	// remove partition processor
 	g.partitions[partition].stop()
+	if err := g.partitions[partition].st.Close(); err != nil {
+		g.opts.log.Printf("error closing storage partition %d: %v", partition, err)
+	}
 	delete(g.partitions, partition)
 
 	// remove partition views
@@ -625,8 +631,11 @@ func (g *Processor) removePartition(partition int32) {
 		return
 	}
 
-	for _, p := range pv {
+	for topic, p := range pv {
 		p.stop()
+		if err := p.st.Close(); err != nil {
+			g.opts.log.Printf("error closing storage %s/%d: %v", topic, partition, err)
+		}
 	}
 	delete(g.partitionViews, partition)
 }

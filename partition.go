@@ -20,6 +20,22 @@ const (
 	stalledTimeout              = 2 * time.Minute
 )
 
+// partition represents one partition of a group table and handles the updates to
+// this table via UpdateCallback and ProcessCallback.
+//
+// partition can be started in two modes:
+// - catchup-mode: used by views, starts with startCatchup(), only UpdateCallback called
+// - processing-mode: used by processors, starts with start(),
+//                    recovers table with UpdateCallback
+//                    processes input streams with ProcessCallback
+//
+// The partition should never be called with a closed storage proxy.
+// - Before starting the partition in either way, the client must open the storage proxy.
+// - A partition may be restarted even if it returned errors. Before restarting
+//   it, the client must call reinit().
+// - To release all resources, after stopping the partition, the client must
+//   close the storage proxy.
+//
 type partition struct {
 	log   logger.Logger
 	topic string
@@ -63,10 +79,9 @@ func newPartition(log logger.Logger, topic string, cb processCallback, st *stora
 		dying: make(chan bool),
 		done:  make(chan bool),
 
-		st:            st,
-		recoveredOnce: sync.Once{},
-		proxy:         proxy,
-		process:       cb,
+		st:      st,
+		proxy:   proxy,
+		process: cb,
 
 		stats:         newPartitionStats(),
 		lastStats:     newPartitionStats(),
@@ -75,23 +90,27 @@ func newPartition(log logger.Logger, topic string, cb processCallback, st *stora
 	}
 }
 
+// reinit reinitialzes the partition to connect to Kafka and start its goroutine
+func (p *partition) reinit(proxy kafkaProxy) {
+	if proxy != nil {
+		p.proxy = proxy
+	}
+	p.ch = make(chan kafka.Event, len(p.ch))
+	p.dying = make(chan bool)
+	p.done = make(chan bool)
+	atomic.StoreInt64(&p.stopFlag, 0)
+}
+
+// start loads the table partition up to HWM and then consumes streams
 func (p *partition) start() error {
 	defer close(p.done)
 	defer p.proxy.Stop()
 	p.stats.Table.StartTime = time.Now()
 
-	if !p.st.Stateless() {
-		err := p.st.Open()
-		if err != nil {
-			return err
-		}
-		defer p.st.Close()
-
-		if err := p.recover(); err != nil {
-			return err
-		}
-	} else {
+	if p.st.Stateless() {
 		p.markRecovered(false)
+	} else if err := p.recover(); err != nil {
+		return err
 	}
 
 	// if stopped, just return
@@ -101,16 +120,11 @@ func (p *partition) start() error {
 	return p.run()
 }
 
+// startCatchup continually loads the table partition
 func (p *partition) startCatchup() error {
 	defer close(p.done)
 	defer p.proxy.Stop()
 	p.stats.Table.StartTime = time.Now()
-
-	err := p.st.Open()
-	if err != nil {
-		return err
-	}
-	defer p.st.Close()
 
 	return p.catchup()
 }
