@@ -28,6 +28,7 @@ type View struct {
 	stopOnce   sync.Once
 	mInit      sync.Mutex
 	terminated bool
+	wg         sync.WaitGroup
 }
 
 // NewView creates a new View object from a group.
@@ -140,11 +141,10 @@ func (v *View) Start() error {
 	}
 	go v.run()
 
-	var wg sync.WaitGroup
-	wg.Add(len(v.partitions))
+	v.wg.Add(len(v.partitions))
 	for id, p := range v.partitions {
 		go func(id int32, p *partition) {
-			defer wg.Done()
+			defer v.wg.Done()
 			if err := p.st.Open(); err != nil {
 				v.fail(fmt.Errorf("view: error opening storage partition %d: %v", id, err))
 			}
@@ -153,7 +153,8 @@ func (v *View) Start() error {
 			}
 		}(int32(id), p)
 	}
-	wg.Wait()
+	// wait for partition goroutines to return
+	v.wg.Wait()
 
 	<-v.dead
 
@@ -188,16 +189,14 @@ func (v *View) stop() {
 		<-v.done
 		v.opts.log.Printf("View: stopping partitions")
 
-		var wg sync.WaitGroup
 		for i, par := range v.partitions {
-			wg.Add(1)
 			go func(pid int, p *partition) {
 				p.stop()
-				wg.Done()
 				v.opts.log.Printf("View: partition %d stopped", pid)
 			}(i, par)
 		}
-		wg.Wait()
+		// wait for partition goroutines to return
+		v.wg.Wait()
 
 		if !v.opts.restartable {
 			v.close()
