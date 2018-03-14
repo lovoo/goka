@@ -220,8 +220,8 @@ func (v *View) Stop() {
 	// do not allow any reinitialization
 	v.mInit.Lock()
 	if v.terminated {
-		return
 		v.mInit.Unlock()
+		return
 	}
 	v.terminated = true
 	v.mInit.Unlock()
