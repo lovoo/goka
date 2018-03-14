@@ -5,3 +5,4 @@ kafka:
   group: "examples"
   stream: "events"
   redis: "127.0.0.1:6379"
+  namespace: "producer"

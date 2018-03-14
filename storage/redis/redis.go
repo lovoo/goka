@@ -1,21 +1,26 @@
-package storage
+package redis
 
 import (
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
+
+	"github.com/lovoo/goka/storage"
 
 	redis "gopkg.in/redis.v5"
 )
 
+const (
+	offsetKey = "__offset"
+)
+
 type redisStorage struct {
-	client    *redis.Client
-	retention time.Duration
+	client *redis.Client
+	hash   string
 }
 
-// NewRedis creates a new Storage backed by Redis.
-func NewRedis(client *redis.Client, retention time.Duration) (Storage, error) {
+// New creates a new Storage backed by Redis.
+func New(client *redis.Client, hash string) (storage.Storage, error) {
 	if client == nil {
 		return nil, errors.New("invalid redis client")
 	}
@@ -23,27 +28,27 @@ func NewRedis(client *redis.Client, retention time.Duration) (Storage, error) {
 		return nil, err
 	}
 	return &redisStorage{
-		client:    client,
-		retention: retention,
+		client: client,
+		hash:   hash,
 	}, nil
 }
 
 func (s *redisStorage) Has(key string) (bool, error) {
-	return s.client.Exists(key).Result()
+	return s.client.HExists(s.hash, key).Result()
 }
 
 func (s *redisStorage) Get(key string) ([]byte, error) {
-	has := s.client.Exists(key)
-	if err := has.Err(); err != nil {
+	has, err := s.client.HExists(s.hash, key).Result()
+	if err != nil {
 		return nil, fmt.Errorf("error checking for existence in redis (key %s): %v", key, err)
-	} else if !has.Val() {
+	} else if !has {
 		return nil, nil
 	}
-	resp := s.client.Get(key)
-	if err := resp.Err(); err != nil {
+	value, err := s.client.HGet(s.hash, key).Bytes()
+	if err != nil {
 		return nil, fmt.Errorf("error getting from redis (key %s): %v", key, err)
 	}
-	return resp.Bytes()
+	return value, nil
 }
 
 func (s *redisStorage) GetOffset(defValue int64) (int64, error) {
@@ -63,8 +68,8 @@ func (s *redisStorage) GetOffset(defValue int64) (int64, error) {
 }
 
 func (s *redisStorage) Set(key string, value []byte) error {
-	resp := s.client.Set(key, value, s.retention)
-	if err := resp.Err(); err != nil {
+	err := s.client.HSet(s.hash, key, value).Err()
+	if err != nil {
 		return fmt.Errorf("error setting to redis (key %s): %v", key, err)
 	}
 	return nil
@@ -75,15 +80,15 @@ func (s *redisStorage) SetOffset(offset int64) error {
 }
 
 func (s *redisStorage) Delete(key string) error {
-	return s.client.Del(key).Err()
+	return s.client.HDel(s.hash, key).Err()
 }
 
-func (s *redisStorage) Iterator() (Iterator, error) {
+func (s *redisStorage) Iterator() (storage.Iterator, error) {
 	var current uint64
 	var keys []string
 	var err error
 
-	keys, current, err = s.client.Scan(current, "", 0).Result()
+	keys, current, err = s.client.HScan(s.hash, current, "", 0).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -91,15 +96,16 @@ func (s *redisStorage) Iterator() (Iterator, error) {
 		current: current,
 		keys:    keys,
 		client:  s.client,
+		hash:    s.hash,
 	}, nil
 }
 
-func (s *redisStorage) IteratorWithRange(start, limit []byte) (Iterator, error) {
+func (s *redisStorage) IteratorWithRange(start, limit []byte) (storage.Iterator, error) {
 	var current uint64
 	var keys []string
 	var err error
 
-	keys, current, err = s.client.Scan(current, string(start), 0).Result()
+	keys, current, err = s.client.HScan(s.hash, current, string(start), 0).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +113,7 @@ func (s *redisStorage) IteratorWithRange(start, limit []byte) (Iterator, error) 
 		current: current,
 		keys:    keys,
 		client:  s.client,
+		hash:    s.hash,
 	}, nil
 }
 
@@ -123,13 +130,14 @@ func (s *redisStorage) Open() error {
 }
 
 func (s *redisStorage) Close() error {
-	return s.client.Close()
+	return nil
 }
 
 type redisIterator struct {
 	current uint64
 	keys    []string
 	client  *redis.Client
+	hash    string
 }
 
 func (i *redisIterator) exhausted() bool {
@@ -157,7 +165,7 @@ func (i *redisIterator) Value() ([]byte, error) {
 		return nil, nil
 	}
 	key := i.keys[i.current]
-	return i.client.Get(key).Bytes()
+	return i.client.HGet(i.hash, key).Bytes()
 }
 
 func (i *redisIterator) Release() {

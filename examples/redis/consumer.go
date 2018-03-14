@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"time"
 
 	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/storage"
+	storage "github.com/lovoo/goka/storage/redis"
+
 	redis "gopkg.in/redis.v5"
 )
 
@@ -16,7 +16,7 @@ type Publisher interface {
 }
 
 // Consume starts goka events consumer.
-func Consume(pub Publisher, brokers []string, group string, stream string, store string) error {
+func Consume(pub Publisher, brokers []string, group string, stream string, store string, namespace string) error {
 	codec := new(Codec)
 
 	input := goka.Input(goka.Stream(stream), codec, func(ctx goka.Context, msg interface{}) {
@@ -30,11 +30,11 @@ func Consume(pub Publisher, brokers []string, group string, stream string, store
 	opts := []goka.ProcessorOption{}
 	switch {
 	case store != "":
-		var retention time.Duration
 		client := redis.NewClient(&redis.Options{
 			Addr: store,
 		})
-		opts = append(opts, goka.WithStorageBuilder(storage.RedisBuilder(client, retention)))
+		opts = append(opts, goka.WithStorageBuilder(storage.RedisBuilder(client, namespace)))
+		defer client.Close()
 	}
 	processor, err := goka.NewProcessor(brokers, graph, opts...)
 	if err != nil {

@@ -41,7 +41,15 @@ It's easy to configures this example.
       group: "examples"
       stream: "events"
       redis: "127.0.0.1:6379"
+      namespace: "producer"
   ```
+
+  Where:
+    * **brokers** : slice of kafka brokers hosts.
+    * **group** : group name of this example belongs.
+    * **stream**: stream name of this example belongs.
+    * **redis**: address of redis (`localhost:6379`).
+    * **namespace**: namespace distinguish applications that write to the same keys on Redis.
 
   3. Fetch the go [redis](gopkg.in/redis.v5) client package:
 

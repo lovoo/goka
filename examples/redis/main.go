@@ -15,10 +15,11 @@ import (
 
 type Config struct {
 	Kafka struct {
-		Brokers []string `yaml:"brokers"`
-		Group   string   `yaml:"group"`
-		Stream  string   `yaml:"stream"`
-		Redis   string   `yaml:"redis"`
+		Brokers   []string `yaml:"brokers"`
+		Group     string   `yaml:"group"`
+		Stream    string   `yaml:"stream"`
+		Redis     string   `yaml:"redis"`
+		Namespace string   `yaml:"namespace"`
 	} `yaml:"kafka"`
 }
 
@@ -36,7 +37,8 @@ func main() {
 
 	// consuming
 	go func() {
-		err := Consume(new(nopPublisher), conf.Kafka.Brokers, conf.Kafka.Group, conf.Kafka.Stream, conf.Kafka.Redis)
+		err := Consume(new(nopPublisher), conf.Kafka.Brokers, conf.Kafka.Group,
+			conf.Kafka.Stream, conf.Kafka.Redis, conf.Kafka.Namespace)
 		if err != nil {
 			log.Fatal(err)
 		}
