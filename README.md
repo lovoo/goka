@@ -50,6 +50,8 @@ Goka relies on Kafka for message passing, fault-tolerant state storage and workl
 
 * **Views** are local caches of a complete group table. Views provide read-only access to the group tables and can be used to provide external services for example through a gRPC interface.
 
+* **Local storage** keeps a local copy of the group table partitions to speedup recovery and reduce memory utilization. By default, the local storage uses [LevelDB](https://github.com/syndtr/goleveldb), but in-memory map and [Redis-based storage](tree/master/storage/redis) are also available.
+
 
 ## Get Started
 

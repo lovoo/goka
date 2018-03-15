@@ -14,6 +14,7 @@ type file struct {
 	bytesWritten int64
 }
 
+// NewFile retuns a new on-disk storage.
 func NewFile(path string, part int32) (Storage, error) {
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("error creating storage directory: %v", err)
