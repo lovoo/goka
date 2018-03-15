@@ -72,6 +72,11 @@ func (gg *GroupGraph) inputs() Edges {
 	return append(append(gg.inputStreams, gg.inputTables...), gg.crossTables...)
 }
 
+// copartitioned returns all copartitioned topics (joint tables and input streams)
+func (gg *GroupGraph) copartitioned() Edges {
+	return append(gg.inputStreams, gg.inputTables...)
+}
+
 func (gg *GroupGraph) codec(topic string) Codec {
 	return gg.codecs[topic]
 }

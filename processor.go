@@ -148,7 +148,7 @@ func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, 
 	}()
 
 	// check co-partitioned (external) topics have the same number of partitions
-	npar, err = copartitioned(tm, gg.inputs().Topics())
+	npar, err = ensureCopartitioned(tm, gg.copartitioned().Topics())
 	if err != nil {
 		return 0, err
 	}
@@ -174,7 +174,7 @@ func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, 
 
 // returns the number of partitions the topics have, and an error if topics are
 // not copartitionea.
-func copartitioned(tm kafka.TopicManager, topics []string) (int, error) {
+func ensureCopartitioned(tm kafka.TopicManager, topics []string) (int, error) {
 	var npar int
 	for _, topic := range topics {
 		partitions, err := tm.Partitions(topic)
