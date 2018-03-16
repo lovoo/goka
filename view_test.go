@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"context"
 	"errors"
 	"hash"
 	"testing"
@@ -138,6 +139,7 @@ func TestView_StartStop(t *testing.T) {
 		ch           = make(chan kafka.Event)
 		chClose      = func() { close(ch) }
 		initialClose = func() { close(initial) }
+		ctx, cancel  = context.WithCancel(context.Background())
 
 		offset = int64(123)
 		par    = int32(0)
@@ -154,8 +156,8 @@ func TestView_StartStop(t *testing.T) {
 		consumer.EXPECT().AddPartition(tableName(group), int32(par), int64(offset)),
 	)
 	gomock.InOrder(
-		consumer.EXPECT().Close().Do(chClose).Return(nil),
 		consumer.EXPECT().RemovePartition(tableName(group), int32(par)),
+		consumer.EXPECT().Close().Do(chClose).Return(nil),
 		st.EXPECT().Close(),
 	)
 
@@ -163,14 +165,14 @@ func TestView_StartStop(t *testing.T) {
 	ensure.Nil(t, err)
 
 	go func() {
-		errs := v.Start()
+		errs := v.Start(ctx)
 		ensure.Nil(t, errs)
 		close(final)
 	}()
 
 	err = doTimed(t, func() {
 		<-initial
-		v.Stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -188,7 +190,6 @@ func TestView_StartStopWithError(t *testing.T) {
 		consumer = mock.NewMockConsumer(ctrl)
 		tm       = mock.NewMockTopicManager(ctrl)
 		v        = createTestView(t, consumer, sb, tm)
-		wait     = make(chan bool)
 		final    = make(chan bool)
 		ch       = make(chan kafka.Event)
 	)
@@ -198,22 +199,20 @@ func TestView_StartStopWithError(t *testing.T) {
 	err := v.createPartitions(nil)
 	ensure.Nil(t, err)
 
-	consumer.EXPECT().Events().Return(ch).Do(func() { wait <- true })
+	consumer.EXPECT().Events().Return(ch)
 	st.EXPECT().Open()
 	st.EXPECT().GetOffset(int64(-2)).Return(int64(0), errors.New("some error1"))
-	consumer.EXPECT().Close().Return(errors.New("some error2")).Do(func() { close(ch) })
 	st.EXPECT().Close()
+	consumer.EXPECT().Close().Return(errors.New("some error2")).Do(func() { close(ch) })
 
 	go func() {
-		viewErrs := v.Start()
+		viewErrs := v.Start(context.Background())
 		ensure.StringContains(t, viewErrs.Error(), "error1")
 		ensure.StringContains(t, viewErrs.Error(), "error2")
 		close(final)
 	}()
 
 	err = doTimed(t, func() {
-		<-wait // wait partition goroutine
-		v.Stop()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -342,7 +341,7 @@ func ExampleView_simple() {
 	if err != nil {
 		panic(err)
 	}
-	errs := sr.Start()
+	errs := sr.Start(context.Background())
 	if errs != nil {
 		panic(errs)
 	}

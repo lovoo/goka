@@ -89,7 +89,6 @@ func (p *partition) reinit(proxy kafkaProxy) {
 	if proxy != nil {
 		p.proxy = proxy
 	}
-	p.ch = make(chan kafka.Event, len(p.ch))
 }
 
 // start loads the table partition up to HWM and then consumes streams
