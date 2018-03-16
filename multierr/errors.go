@@ -22,6 +22,23 @@ func (e *Errors) Collect(err error) {
 	e.m.Unlock()
 }
 
+func (e *Errors) Merge(o *Errors) *Errors {
+	if o == nil {
+		return e
+	}
+
+	n := new(Errors)
+	// lock base
+	e.m.Lock()
+	defer e.m.Unlock()
+	// lock other
+	o.m.Lock()
+	defer o.m.Unlock()
+
+	n.errs = append(e.errs, o.errs...)
+	return n
+}
+
 func (e *Errors) HasErrors() bool {
 	return len(e.errs) > 0
 }
