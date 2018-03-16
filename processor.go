@@ -649,7 +649,7 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	views := g.partitionViews[msg.Partition]
 	g.m.RUnlock()
 
-	ctx := &context{
+	ctx := &cbContext{
 		graph: g.graph,
 
 		pstats: pstats,

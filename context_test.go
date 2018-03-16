@@ -55,7 +55,7 @@ func TestContext_Emit(t *testing.T) {
 	ack := 0
 	emitted := 0
 
-	ctx := &context{
+	ctx := &cbContext{
 		graph:  DefineGroup(group),
 		commit: func() { ack++ },
 		wg:     &sync.WaitGroup{},
@@ -84,7 +84,7 @@ func TestContext_Emit(t *testing.T) {
 func TestContext_Timestamp(t *testing.T) {
 	ts := time.Now()
 
-	ctx := &context{
+	ctx := &cbContext{
 		msg: &message{
 			Timestamp: ts,
 		},
@@ -99,7 +99,7 @@ func TestContext_EmitError(t *testing.T) {
 	errToEmit := errors.New("some error")
 
 	// test error case
-	ctx := &context{
+	ctx := &cbContext{
 		graph:  DefineGroup(group, Persist(new(codec.String))),
 		commit: func() { ack++ },
 		wg:     &sync.WaitGroup{},
@@ -131,7 +131,7 @@ func TestContext_EmitError(t *testing.T) {
 }
 
 func TestContext_EmitToStateTopic(t *testing.T) {
-	ctx := &context{graph: DefineGroup(group, Persist(c), Loop(c, cb))}
+	ctx := &cbContext{graph: DefineGroup(group, Persist(c), Loop(c, cb))}
 	func() {
 		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to table topic, use SetValue() instead."))
 		ctx.Emit(Stream(tableName(group)), "key", []byte("value"))
@@ -159,7 +159,7 @@ func PanicStringContains(t *testing.T, s string) {
 
 func TestContext_GetSetStateless(t *testing.T) {
 	// ctx stateless since no storage passed
-	ctx := &context{graph: DefineGroup("group"), msg: new(message)}
+	ctx := &cbContext{graph: DefineGroup("group"), msg: new(message)}
 	func() {
 		defer PanicStringContains(t, "stateless")
 		_ = ctx.Value()
@@ -179,7 +179,7 @@ func TestContext_Delete(t *testing.T) {
 	ack := 0
 	key := "key"
 
-	ctx := &context{
+	ctx := &cbContext{
 		graph:   DefineGroup(group, Persist(new(codec.String))),
 		storage: storage,
 		wg:      new(sync.WaitGroup),
@@ -213,7 +213,7 @@ func TestContext_DeleteStateless(t *testing.T) {
 	offset := int64(123)
 	key := "key"
 
-	ctx := &context{
+	ctx := &cbContext{
 		graph: DefineGroup(group),
 		wg:    new(sync.WaitGroup),
 		msg:   &message{Offset: offset},
@@ -232,7 +232,7 @@ func TestContext_DeleteStorageError(t *testing.T) {
 	offset := int64(123)
 	key := "key"
 
-	ctx := &context{
+	ctx := &cbContext{
 		graph:   DefineGroup(group, Persist(new(codec.String))),
 		storage: storage,
 		wg:      new(sync.WaitGroup),
@@ -258,7 +258,7 @@ func TestContext_Set(t *testing.T) {
 	key := "key"
 	value := "value"
 
-	ctx := &context{
+	ctx := &cbContext{
 		graph:   DefineGroup(group, Persist(new(codec.String))),
 		storage: storage,
 		wg:      new(sync.WaitGroup),
@@ -299,7 +299,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 		wg      = new(sync.WaitGroup)
 	)
 	graph := DefineGroup(group, Persist(new(codec.String)))
-	ctx := &context{
+	ctx := &cbContext{
 		pstats:  newPartitionStats(),
 		wg:      wg,
 		graph:   graph,
@@ -339,7 +339,7 @@ func TestContext_SetErrors(t *testing.T) {
 		failed  error
 	)
 
-	ctx := &context{
+	ctx := &cbContext{
 		pstats:  newPartitionStats(),
 		wg:      wg,
 		graph:   DefineGroup(group, Persist(new(codec.String))),
@@ -373,7 +373,7 @@ func TestContext_SetErrors(t *testing.T) {
 
 func TestContext_LoopbackNoLoop(t *testing.T) {
 	// ctx has no loop set
-	ctx := &context{graph: DefineGroup("group", Persist(c)), msg: new(message)}
+	ctx := &cbContext{graph: DefineGroup("group", Persist(c)), msg: new(message)}
 	func() {
 		defer PanicStringContains(t, "loop")
 		ctx.Loopback("some-key", "whatever")
@@ -392,7 +392,7 @@ func TestContext_Loopback(t *testing.T) {
 	)
 
 	graph := DefineGroup("group", Persist(c), Loop(c, cb))
-	ctx := &context{
+	ctx := &cbContext{
 		graph:  graph,
 		msg:    new(message),
 		pstats: newPartitionStats(),
@@ -420,7 +420,7 @@ func TestContext_Join(t *testing.T) {
 		st          = mock.NewMockStorage(ctrl)
 	)
 
-	ctx := &context{
+	ctx := &cbContext{
 		graph: DefineGroup("group", Persist(c), Loop(c, cb), Join(table, c)),
 		msg:   &message{Key: key},
 		pviews: map[string]*partition{
@@ -466,7 +466,7 @@ func TestContext_Lookup(t *testing.T) {
 		st          = mock.NewMockStorage(ctrl)
 	)
 
-	ctx := &context{
+	ctx := &cbContext{
 		graph: DefineGroup("group", Persist(c), Loop(c, cb)),
 		msg:   &message{Key: key},
 		views: map[string]*View{
@@ -509,7 +509,7 @@ func TestContext_Lookup(t *testing.T) {
 }
 
 func TestContext_Fail(t *testing.T) {
-	ctx := new(context)
+	ctx := new(cbContext)
 
 	defer func() {
 		err := recover()
