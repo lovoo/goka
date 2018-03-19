@@ -23,6 +23,7 @@ type View struct {
 	opts       *voptions
 	partitions []*partition
 	consumer   kafka.Consumer
+	cancel     func()
 	terminated bool
 }
 
@@ -125,7 +126,19 @@ func (v *View) reinit() error {
 }
 
 // Start starts consuming the view's topic.
-func (v *View) Start(ctx context.Context) error {
+func (v *View) Start() error {
+	ctx := context.Background()
+	ctx, v.cancel = context.WithCancel(ctx)
+	return v.startWithContext(ctx)
+}
+
+func (v *View) Stop() {
+	if v.cancel != nil {
+		v.cancel()
+	}
+}
+
+func (v *View) startWithContext(ctx context.Context) error {
 	if err := v.reinit(); err != nil {
 		return err
 	}

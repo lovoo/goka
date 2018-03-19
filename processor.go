@@ -313,7 +313,7 @@ func (g *Processor) Start() (rerr error) {
 	for t, v := range g.views {
 		t, v := t, v
 		g.errg.Go(func() error {
-			if err := v.Start(ctx); err != nil {
+			if err := v.startWithContext(ctx); err != nil {
 				return fmt.Errorf("error starting lookup table %s: %v", t, err)
 			}
 			return nil

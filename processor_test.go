@@ -526,6 +526,7 @@ func TestNewProcessor(t *testing.T) {
 			Input(topic, rawCodec, cb),
 			Lookup(table, rawCodec)),
 		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
+		WithStorageBuilder(storage.MemoryBuilder()),
 	)
 	ensure.NotNil(t, err)
 
@@ -586,6 +587,7 @@ func TestNewProcessor(t *testing.T) {
 		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
 		WithConsumerBuilder(createConsumerBuilder(consumer)),
 		WithProducerBuilder(createProducerBuilder(producer)),
+		WithStorageBuilder(storage.MemoryBuilder()),
 	)
 	ensure.Nil(t, err)
 	ensure.True(t, p.graph.GroupTable() == nil)

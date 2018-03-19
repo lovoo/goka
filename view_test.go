@@ -1,7 +1,6 @@
 package goka
 
 import (
-	"context"
 	"errors"
 	"hash"
 	"testing"
@@ -139,7 +138,6 @@ func TestView_StartStop(t *testing.T) {
 		ch           = make(chan kafka.Event)
 		chClose      = func() { close(ch) }
 		initialClose = func() { close(initial) }
-		ctx, cancel  = context.WithCancel(context.Background())
 
 		offset = int64(123)
 		par    = int32(0)
@@ -165,14 +163,14 @@ func TestView_StartStop(t *testing.T) {
 	ensure.Nil(t, err)
 
 	go func() {
-		errs := v.Start(ctx)
+		errs := v.Start()
 		ensure.Nil(t, errs)
 		close(final)
 	}()
 
 	err = doTimed(t, func() {
 		<-initial
-		cancel()
+		v.Stop()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -206,7 +204,7 @@ func TestView_StartStopWithError(t *testing.T) {
 	consumer.EXPECT().Close().Return(errors.New("some error2")).Do(func() { close(ch) })
 
 	go func() {
-		viewErrs := v.Start(context.Background())
+		viewErrs := v.Start()
 		ensure.StringContains(t, viewErrs.Error(), "error1")
 		ensure.StringContains(t, viewErrs.Error(), "error2")
 		close(final)
@@ -341,8 +339,7 @@ func ExampleView_simple() {
 	if err != nil {
 		panic(err)
 	}
-	errs := sr.Start(context.Background())
-	if errs != nil {
-		panic(errs)
+	if err = sr.Start(); err != nil {
+		panic(err)
 	}
 }
