@@ -760,7 +760,11 @@ func (g *Processor) Recovered() bool {
 	return true
 }
 
-func (g *Processor) Stats(ctx context.Context) *ProcessorStats {
+func (g *Processor) Stats() *ProcessorStats {
+	return g.statsWithContext(context.Background())
+}
+
+func (g *Processor) statsWithContext(ctx context.Context) *ProcessorStats {
 	var (
 		m     sync.Mutex
 		wg    sync.WaitGroup
@@ -795,7 +799,7 @@ func (g *Processor) Stats(ctx context.Context) *ProcessorStats {
 	for t, v := range g.views {
 		wg.Add(1)
 		go func(topic string, vi *View) {
-			s := vi.Stats(ctx)
+			s := vi.statsWithContext(ctx)
 			m.Lock()
 			stats.Lookup[t] = s
 			m.Unlock()

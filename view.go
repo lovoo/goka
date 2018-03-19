@@ -371,7 +371,11 @@ func (v *View) Recovered() bool {
 	return true
 }
 
-func (v *View) Stats(ctx context.Context) *ViewStats {
+func (v *View) Stats() *ViewStats {
+	return v.statsWithContext(context.Background())
+}
+
+func (v *View) statsWithContext(ctx context.Context) *ViewStats {
 	var (
 		m     sync.Mutex
 		wg    sync.WaitGroup
