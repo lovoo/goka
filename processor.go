@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -337,10 +336,7 @@ func (g *Processor) Start() (rerr error) {
 	}
 
 	// start processor dispatcher
-	g.errg.Go(func() error {
-		defer log.Println("terminating run")
-		return g.run(ctx)
-	})
+	g.errg.Go(func() error { return g.run(ctx) })
 
 	// wait for goroutines to return
 	g.errors.Merge(g.errg.Wait())
@@ -524,10 +520,10 @@ func (g *Processor) createPartitionViews(ctx context.Context, id int32) error {
 
 		g.errg.Go(func() (err error) {
 			defer func() {
-				if err := recover(); err != nil {
+				if rerr := recover(); rerr != nil {
 					g.opts.log.Printf("partition view %s/%d: panic", p.topic, id)
 					err = fmt.Errorf("panic partition view %s/%d: %v\nstack:%v",
-						p.topic, id, err, string(debug.Stack()))
+						p.topic, id, rerr, string(debug.Stack()))
 				}
 			}()
 
@@ -578,10 +574,10 @@ func (g *Processor) createPartition(ctx context.Context, id int32) error {
 	par := g.partitions[id]
 	g.errg.Go(func() (err error) {
 		defer func() {
-			if err := recover(); err != nil {
+			if rerr := recover(); rerr != nil {
 				g.opts.log.Printf("partition %s/%d: panic", par.topic, id)
-				err = fmt.Errorf("panic partition %s/%d: %v\nstack:%v",
-					par.topic, id, err, string(debug.Stack()))
+				err = fmt.Errorf("partition %s/%d: panic: %v\nstack:%v",
+					par.topic, id, rerr, string(debug.Stack()))
 			}
 		}()
 		if err = par.st.Open(); err != nil {

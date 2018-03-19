@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -1388,13 +1389,17 @@ func TestProcessor_HasGetStateless(t *testing.T) {
 	ensure.True(t, value == nil)
 }
 
-/*
 func TestProcessor_StatelessContext(t *testing.T) {
 	ctrl := NewMockController(t)
 	defer ctrl.Finish()
-	km := NewKafkaMock(t, "user-reputation").SetCodec(new(codec.Bytes))
+	var (
+		km = NewKafkaMock(t, "user-reputation").SetCodec(new(codec.Bytes))
+		//count int64
+		//wait  = make(chan bool)
+	)
 
 	callPersist := func(ctx Context, message interface{}) {
+		log.Println("processing")
 		// call a random setvalue, this is expected to fail
 		ctx.SetValue("value")
 		t.Errorf("SetValue should panic. We should not have come to that point.")
@@ -1454,7 +1459,6 @@ func TestProcessor_ProducerError(t *testing.T) {
 		}()
 
 		km.ConsumeString("topic", "key", "world")
-
 		proc.Stop()
 		<-done
 		ensure.True(t, processorErrors != nil)
@@ -1534,6 +1538,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 	})
 
 }
+
 func TestProcessor_consumeFail(t *testing.T) {
 	km := NewKafkaMock(t, "test")
 
@@ -1731,7 +1736,7 @@ func TestProcessor_failOnRecover(t *testing.T) {
 	// make sure the recovery was aborted
 	ensure.True(t, recovered < msgToRecover)
 }
-*/
+
 // Example shows how to use a callback. For each partition of the topics, a new
 // goroutine will be created. Topics should be co-partitioned (they should have
 // the same number of partitions and be partitioned by the same key).

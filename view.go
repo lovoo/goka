@@ -66,7 +66,6 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 func (v *View) createPartitions(brokers []string) (rerr error) {
 	tm, err := v.opts.builders.topicmgr(brokers)
 	if err != nil {
-		log.Printf("erro creating: %v", err)
 		return fmt.Errorf("Error creating topic manager: %v", err)
 	}
 	defer func() {

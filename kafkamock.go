@@ -3,6 +3,7 @@ package goka
 import (
 	"fmt"
 	"hash"
+	"log"
 	"sync"
 
 	"github.com/facebookgo/ensure"
@@ -148,7 +149,7 @@ func (km *KafkaMock) consumerBuilder(b []string, group, clientID string) (kafka.
 func (km *KafkaMock) initProtocol() {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("recovered from panic")
+			log.Printf("tester: panic initProtocol: %+v", r)
 		}
 	}()
 	km.consumerEvents <- &kafka.Assignment{
@@ -180,34 +181,29 @@ func (km *KafkaMock) initProtocol() {
 // ConsumeProto simulates a message on kafka in a topic with a key.
 func (km *KafkaMock) ConsumeProto(topic string, key string, msg proto.Message) {
 	data, err := proto.Marshal(msg)
-	if err != nil {
-		if km.t != nil {
-			km.t.Errorf("Error marshaling message for consume: %v", err)
-		}
+	if err != nil && km.t != nil {
+		km.t.Errorf("Error marshaling message for consume: %v", err)
 	}
-
-	km.consumeData(topic, key, data)
-	km.makeCalls()
+	km.ConsumeData(topic, key, data)
 }
 
 func (km *KafkaMock) ConsumeString(topic string, key string, msg string) {
-	km.consumeData(topic, key, []byte(msg))
-	km.makeCalls()
+	km.ConsumeData(topic, key, []byte(msg))
 }
 
 func (km *KafkaMock) Consume(topic string, key string, msg []byte) {
-	km.consumeData(topic, key, msg)
-	km.makeCalls()
+	km.ConsumeData(topic, key, msg)
 }
 
 // Helper function consuming marshalled data. This function is used by ConsumeProto by the test case
 // as well as any emit calls of the processor being tested.
-func (km *KafkaMock) consumeData(topic string, key string, data []byte) {
+func (km *KafkaMock) ConsumeData(topic string, key string, data []byte) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("recovered from panic: %+v\n", r)
+			log.Printf("tester: panic ConsumeData: %+v\n", r)
 		}
 	}()
+	defer km.makeCalls()
 	km.offset++
 	kafkaMsg := &kafka.Message{
 		Topic:     topic,
@@ -316,7 +312,7 @@ func (km *KafkaMock) handleEmit(topic string, key string, value []byte) *kafka.P
 	}
 	if _, hasTopic := km.handledTopics[topic]; hasTopic {
 		km.newCall(func() {
-			km.consumeData(topic, key, value)
+			km.ConsumeData(topic, key, value)
 		})
 	} else {
 		km.offset++
@@ -433,7 +429,6 @@ func (tm *topicMgrMock) Partitions(topic string) ([]int32, error) {
 // Close closes the topic manager.
 // No action required in the mock.
 func (tm *topicMgrMock) Close() error {
-	fmt.Println("closing topic manager")
 	return nil
 }
 
