@@ -86,13 +86,13 @@ type cbContext struct {
 // Emit sends a message asynchronously to a topic.
 func (ctx *cbContext) Emit(topic Stream, key string, value interface{}) {
 	if topic == "" {
-		ctx.Fail(errors.New("Cannot emit to empty topic"))
+		ctx.Fail(errors.New("cannot emit to empty topic"))
 	}
 	if loopName(ctx.graph.Group()) == string(topic) {
-		ctx.Fail(errors.New("Cannot emit to loop topic, use Loopback() instead."))
+		ctx.Fail(errors.New("cannot emit to loop topic (use Loopback instead)"))
 	}
 	if tableName(ctx.graph.Group()) == string(topic) {
-		ctx.Fail(errors.New("Cannot emit to table topic, use SetValue() instead."))
+		ctx.Fail(errors.New("cannot emit to table topic (use SetValue instead)"))
 	}
 	c := ctx.graph.codec(string(topic))
 	if c == nil {
@@ -115,12 +115,12 @@ func (ctx *cbContext) Emit(topic Stream, key string, value interface{}) {
 func (ctx *cbContext) Loopback(key string, value interface{}) {
 	l := ctx.graph.LoopStream()
 	if l == nil {
-		ctx.Fail(errors.New("No loop topic configured"))
+		ctx.Fail(errors.New("no loop topic configured"))
 	}
 
 	data, err := l.Codec().Encode(value)
 	if err != nil {
-		ctx.Fail(fmt.Errorf("Error encoding message for key %s: %v", key, err))
+		ctx.Fail(fmt.Errorf("error encoding message for key %s: %v", key, err))
 	}
 
 	ctx.emit(l.Topic(), key, data)
@@ -158,7 +158,7 @@ func (ctx *cbContext) Value() interface{} {
 
 // SetValue updates the value of the key in the group table.
 func (ctx *cbContext) SetValue(value interface{}) {
-	if err := ctx.setValueForKey(string(ctx.msg.Key), value); err != nil {
+	if err := ctx.setValueForKey(ctx.msg.Key, value); err != nil {
 		ctx.Fail(err)
 	}
 }
@@ -169,7 +169,7 @@ func (ctx *cbContext) Timestamp() time.Time {
 }
 
 func (ctx *cbContext) Key() string {
-	return string(ctx.msg.Key)
+	return ctx.msg.Key
 }
 
 func (ctx *cbContext) Topic() Stream {
@@ -258,7 +258,7 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 	}
 
 	if value == nil {
-		return fmt.Errorf("Cannot set nil as value.")
+		return fmt.Errorf("cannot set nil as value")
 	}
 
 	encodedValue, err := ctx.graph.GroupTable().Codec().Encode(value)
@@ -309,7 +309,7 @@ func (ctx *cbContext) start() {
 // if some emit failed.
 func (ctx *cbContext) tryCommit(err error) {
 	if err != nil {
-		ctx.errors.Collect(err)
+		_ = ctx.errors.Collect(err)
 	}
 
 	// not all calls are done yet, do not send the ack upstream.

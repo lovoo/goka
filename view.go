@@ -151,14 +151,14 @@ func (v *View) startWithContext(ctx context.Context) error {
 	errg.Go(func() error { return v.run(ctx) })
 
 	for id, p := range v.partitions {
-		pid, p := int32(id), p
+		pid, par := int32(id), p
 		errg.Go(func() error {
 			v.opts.log.Printf("view: partition %d started", pid)
 			defer v.opts.log.Printf("view: partition %d stopped", pid)
-			if err := p.st.Open(); err != nil {
+			if err := par.st.Open(); err != nil {
 				return fmt.Errorf("view: error opening storage partition %d: %v", pid, err)
 			}
-			if err := p.startCatchup(ctx); err != nil {
+			if err := par.startCatchup(ctx); err != nil {
 				return fmt.Errorf("view: error running partition %d: %v", pid, err)
 			}
 			return nil
@@ -170,7 +170,7 @@ func (v *View) startWithContext(ctx context.Context) error {
 
 	log.Println("view: closing consumer")
 	if err := v.consumer.Close(); err != nil {
-		errs.Collect(fmt.Errorf("view: failed closing consumer: %v", err))
+		_ = errs.Collect(fmt.Errorf("view: failed closing consumer: %v", err))
 	}
 
 	if !v.opts.restartable {
@@ -185,13 +185,13 @@ func (v *View) startWithContext(ctx context.Context) error {
 func (v *View) close() *multierr.Errors {
 	errs := new(multierr.Errors)
 	for _, p := range v.partitions {
-		errs.Collect(p.st.Close())
+		_ = errs.Collect(p.st.Close())
 	}
 	v.partitions = nil
 	return errs
 }
 
-// Terminate closes storage partitions. Close must be called only if the view is
+// Terminate closes storage partitions. It must be called only if the view is
 // restartable (see WithViewRestartable() option). Once Terminate() is called,
 // the view cannot be restarted anymore.
 func (v *View) Terminate() error {
@@ -227,7 +227,7 @@ func (v *View) hash(key string) (int32, error) {
 		hash = -hash
 	}
 	if len(v.partitions) == 0 {
-		return 0, errors.New("No partitions found.")
+		return 0, errors.New("no partitions found")
 	}
 	return hash % int32(len(v.partitions)), nil
 }
@@ -258,7 +258,7 @@ func (v *View) Get(key string) (interface{}, error) {
 	// get key and return
 	data, err := s.Get(key)
 	if err != nil {
-		return nil, fmt.Errorf("error getting value (key %s): err", key, err)
+		return nil, fmt.Errorf("error getting value (key %s): %v", key, err)
 	} else if data == nil {
 		return nil, nil
 	}
@@ -266,7 +266,7 @@ func (v *View) Get(key string) (interface{}, error) {
 	// decode value
 	value, err := v.opts.tableCodec.Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("error decoding value (key %s): err", key, err)
+		return nil, fmt.Errorf("error decoding value (key %s): %v", key, err)
 	}
 
 	// if the key does not exist the return value is nil
@@ -389,6 +389,7 @@ func (v *View) Recovered() bool {
 	return true
 }
 
+// Stats returns a set of performance metrics of the view.
 func (v *View) Stats() *ViewStats {
 	return v.statsWithContext(context.Background())
 }

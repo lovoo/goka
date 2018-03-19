@@ -18,18 +18,6 @@ import (
 	"github.com/golang/mock/gomock"
 )
 
-func waitForValue(t *testing.T, value *int, targetValue int, timeout time.Duration) {
-	maxTries := 25
-	for i := 0; i < maxTries; i++ {
-		if *value == targetValue {
-			return
-		}
-
-		time.Sleep(time.Duration(int64(timeout) / int64(maxTries)))
-	}
-	t.Fatal("Timeout")
-}
-
 func newEmitter(err error, done func(err error)) emitter {
 	return func(topic string, key string, value []byte) *kafka.Promise {
 		p := kafka.NewPromise()
@@ -133,15 +121,15 @@ func TestContext_EmitError(t *testing.T) {
 func TestContext_EmitToStateTopic(t *testing.T) {
 	ctx := &cbContext{graph: DefineGroup(group, Persist(c), Loop(c, cb))}
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to table topic, use SetValue() instead."))
+		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to table topic (use SetValue instead)"))
 		ctx.Emit(Stream(tableName(group)), "key", []byte("value"))
 	}()
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to loop topic, use Loopback() instead."))
+		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to loop topic (use Loopback instead)"))
 		ctx.Emit(Stream(loopName(group)), "key", []byte("value"))
 	}()
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("Cannot emit to empty topic"))
+		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to empty topic"))
 		ctx.Emit("", "key", []byte("value"))
 	}()
 }
@@ -337,6 +325,7 @@ func TestContext_SetErrors(t *testing.T) {
 		offset  int64 = 123
 		wg            = new(sync.WaitGroup)
 		failed  error
+		_       = failed // make linter happy
 	)
 
 	ctx := &cbContext{
@@ -350,7 +339,7 @@ func TestContext_SetErrors(t *testing.T) {
 
 	err := ctx.setValueForKey(key, nil)
 	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "Cannot set nil")
+	ensure.StringContains(t, err.Error(), "cannot set nil")
 
 	err = ctx.setValueForKey(key, 123) // cannot encode 123 as string
 	ensure.NotNil(t, err)

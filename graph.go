@@ -11,11 +11,26 @@ var (
 	loopSuffix  = "-loop"
 )
 
+// Stream is the name of an event stream topic in Kafka, ie, a topic with
+// cleanup.policy=delete
 type Stream string
+
+// Streams is a slice of Stream names.
 type Streams []Stream
+
+// Table is the name of a table topic in Kafka, ie, a topic with
+// cleanup.policy=compact
 type Table string
+
+// Group is the name of a consumer group in Kafka and represents a processor
+// group in Goka. A processor group may have a group table and a group loopback
+// stream. By default, the group table is named <group>-table and the loopback
+// stream <group>-loop.
 type Group string
 
+// GroupGraph is the specification of a processor group. It contains all input,
+// output, and any other topic from which and into which the processor group
+// may consume or produce events. Each of these links to Kafka is called Edge.
 type GroupGraph struct {
 	group         string
 	inputTables   []Edge
@@ -31,22 +46,27 @@ type GroupGraph struct {
 	joinCheck map[string]bool
 }
 
+// Group returns the group name.
 func (gg *GroupGraph) Group() Group {
 	return Group(gg.group)
 }
 
+// InputStreams returns all input stream edges of the group.
 func (gg *GroupGraph) InputStreams() Edges {
 	return gg.inputStreams
 }
 
+// JointTables retuns all joint table edges of the group.
 func (gg *GroupGraph) JointTables() Edges {
 	return gg.inputTables
 }
 
+// LookupTables retuns all lookup table edges  of the group.
 func (gg *GroupGraph) LookupTables() Edges {
 	return gg.crossTables
 }
 
+// LoopStream returns the loopback edge of the group.
 func (gg *GroupGraph) LoopStream() Edge {
 	// only 1 loop stream is valid
 	if len(gg.loopStream) > 0 {
@@ -55,6 +75,7 @@ func (gg *GroupGraph) LoopStream() Edge {
 	return nil
 }
 
+// GroupTable returns the group table edge of the group.
 func (gg *GroupGraph) GroupTable() Edge {
 	// only 1 group table is valid
 	if len(gg.groupTable) > 0 {
@@ -63,6 +84,7 @@ func (gg *GroupGraph) GroupTable() Edge {
 	return nil
 }
 
+// OutputStreams returns the output stream edges of the group.
 func (gg *GroupGraph) OutputStreams() Edges {
 	return gg.outputStreams
 }
@@ -89,6 +111,8 @@ func (gg *GroupGraph) joint(topic string) bool {
 	return gg.joinCheck[topic]
 }
 
+// DefineGroup creates a group graph with a given group name and a list of
+// edges.
 func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 	gg := GroupGraph{group: string(group),
 		codecs:    make(map[string]Codec),
@@ -133,6 +157,12 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 	return &gg
 }
 
+// Validate validates the group graph and returns an error if invalid.
+// Main validation checks are:
+// - at most one loopback stream edge is allowed
+// - at most one group table edge is allowed
+// - at least one input stream is required
+// - table and loopback topics cannot be used in any other edge.
 func (gg *GroupGraph) Validate() error {
 	if len(gg.loopStream) > 1 {
 		return errors.New("more than one loop stream in group graph")
@@ -155,14 +185,18 @@ func (gg *GroupGraph) Validate() error {
 	return nil
 }
 
+// Edge represents a topic in Kafka and the corresponding codec to encode and
+// decode the messages of that topic.
 type Edge interface {
 	String() string
 	Topic() string
 	Codec() Codec
 }
 
+// Edges is a slice of edge objects.
 type Edges []Edge
 
+// Topics returns the names of the topics of the edges.
 func (e Edges) Topics() []string {
 	var t []string
 	for _, i := range e {
@@ -193,9 +227,11 @@ type inputStream struct {
 	cb ProcessCallback
 }
 
-// Stream returns a subscription for a co-partitioned topic. The processor
-// subscribing for a stream topic will start reading from the newest offset of
-// the partition.
+// Input represents an edge of an input stream topic. The edge
+// specifies the topic name, its codec and the ProcessorCallback used to
+// process it. The topic has to be copartitioned with any other input stream of
+// the group and with the group table.
+// The group starts reading the topic from the newest offset.
 func Input(topic Stream, c Codec, cb ProcessCallback) Edge {
 	return &inputStream{&topicDef{string(topic), c}, cb}
 }
@@ -229,7 +265,7 @@ func (is inputStreams) Codec() Codec {
 	return is[0].Codec()
 }
 
-// Inputs creates Edges for multiple input streams sharing the same
+// Inputs creates edges of multiple input streams sharing the same
 // codec and callback.
 func Inputs(topics Streams, c Codec, cb ProcessCallback) Edge {
 	if len(topics) == 0 {
@@ -244,22 +280,27 @@ func Inputs(topics Streams, c Codec, cb ProcessCallback) Edge {
 
 type loopStream inputStream
 
-// Loop defines a consume callback on the loop topic
+// Loop represents the edge of the loopback topic of the group. The edge
+// specifies the codec of the messages in the topic and ProcesCallback to
+// process the messages of the topic. Context.Loopback() is used to write
+// messages into this topic from any callback of the group.
 func Loop(c Codec, cb ProcessCallback) Edge {
 	return &loopStream{&topicDef{codec: c}, cb}
 }
 
 func (s *loopStream) setGroup(group Group) {
-	s.topicDef.name = string(loopName(group))
+	s.topicDef.name = loopName(group)
 }
 
 type inputTable struct {
 	*topicDef
 }
 
-// Table is one or more co-partitioned, log-compacted topic. The processor
-// subscribing for a table topic will start reading from the oldest offset
-// of the partition.
+// Join represents an edge of a copartitioned, log-compacted table topic. The
+// edge specifies the topic name and the codec of the messages of the topic.
+// The group starts reading the topic from the oldest offset.
+// The processing of input streams is blocked until all partitions of the table
+// are recovered.
 func Join(topic Table, c Codec) Edge {
 	return &inputTable{&topicDef{string(topic), c}}
 }
@@ -268,6 +309,11 @@ type crossTable struct {
 	*topicDef
 }
 
+// Lookup represents an edge of a non-copartitioned, log-compacted table
+// topic. The edge specifies the topic name and the codec of the messages of
+// the topic.  The group starts reading the topic from the oldest offset.
+// The processing of input streams is blocked until the table is fully
+// recovered.
 func Lookup(topic Table, c Codec) Edge {
 	return &crossTable{&topicDef{string(topic), c}}
 }
@@ -276,6 +322,11 @@ type groupTable struct {
 	*topicDef
 }
 
+// Persist represents the edge of the group table, which is log-compacted and
+// copartitioned with the input streams. This edge specifies the codec of the
+// messages in the topic, ie, the codec of the values of the table.
+// The processing of input streams is blocked until all partitions of the group
+// table are recovered.
 func Persist(c Codec) Edge {
 	return &groupTable{&topicDef{codec: c}}
 }
@@ -288,6 +339,11 @@ type outputStream struct {
 	*topicDef
 }
 
+// Output represents an edge of an output stream topic. The edge
+// specifies the topic name and the codec of the messages of the topic.
+// Context.Emit() only emits messages into Output edges defined in the group
+// graph.
+// The topic does not have to be copartitioned with the input streams.
 func Output(topic Stream, c Codec) Edge {
 	return &outputStream{&topicDef{string(topic), c}}
 }

@@ -97,7 +97,9 @@ func (p *partition) start(ctx context.Context) error {
 	p.stats.Table.StartTime = time.Now()
 
 	if p.st.Stateless() {
-		p.markRecovered(false)
+		if err := p.markRecovered(false); err != nil {
+			return fmt.Errorf("error marking stateless partition as recovered: %v", err)
+		}
 	} else if err := p.recover(ctx); err != nil {
 		return err
 	}
@@ -125,12 +127,12 @@ func (p *partition) startCatchup(ctx context.Context) error {
 ///////////////////////////////////////////////////////////////////////////////
 func newMessage(ev *kafka.Message) *message {
 	return &message{
-		Topic:     string(ev.Topic),
-		Partition: int32(ev.Partition),
-		Offset:    int64(ev.Offset),
+		Topic:     ev.Topic,
+		Partition: ev.Partition,
+		Offset:    ev.Offset,
 		Timestamp: ev.Timestamp,
 		Data:      ev.Value,
-		Key:       string(ev.Key),
+		Key:       ev.Key,
 	}
 }
 
@@ -209,23 +211,21 @@ func (p *partition) recovered() bool {
 	return atomic.LoadInt32(&p.recoveredFlag) == 1
 }
 
-func (p *partition) load(ctx context.Context, catchup bool) (err error) {
+func (p *partition) load(ctx context.Context, catchup bool) (rerr error) {
 	// fetch local offset
-	local, err := p.st.GetOffset(sarama.OffsetOldest)
-	if err != nil {
+	if local, err := p.st.GetOffset(sarama.OffsetOldest); err != nil {
 		return fmt.Errorf("error reading local offset: %v", err)
-	}
-	if err = p.proxy.Add(p.topic, local); err != nil {
+	} else if err = p.proxy.Add(p.topic, local); err != nil {
 		return err
 	}
 
 	defer func() {
 		var derr multierr.Errors
-		derr.Collect(err)
+		_ = derr.Collect(rerr)
 		if e := p.proxy.Remove(p.topic); e != nil {
-			derr.Collect(e)
+			_ = derr.Collect(e)
 		}
-		err = derr.NilOrError()
+		rerr = derr.NilOrError()
 	}()
 
 	stallTicker := time.NewTicker(stallPeriod)
@@ -250,7 +250,7 @@ func (p *partition) load(ctx context.Context, catchup bool) (err error) {
 
 				if ev.Offset == ev.Hwm {
 					// nothing to recover
-					if err = p.markRecovered(false); err != nil {
+					if err := p.markRecovered(false); err != nil {
 						return fmt.Errorf("error setting recovered: %v", err)
 					}
 				}
@@ -259,7 +259,7 @@ func (p *partition) load(ctx context.Context, catchup bool) (err error) {
 				p.offset = ev.Hwm - 1
 				p.hwm = ev.Hwm
 
-				if err = p.markRecovered(catchup); err != nil {
+				if err := p.markRecovered(catchup); err != nil {
 					return fmt.Errorf("error setting recovered: %v", err)
 				}
 
@@ -273,12 +273,12 @@ func (p *partition) load(ctx context.Context, catchup bool) (err error) {
 				if ev.Topic != p.topic {
 					return fmt.Errorf("load: wrong topic = %s", ev.Topic)
 				}
-				if err = p.storeEvent(ev); err != nil {
+				if err := p.storeEvent(ev); err != nil {
 					return fmt.Errorf("load: error updating storage: %v", err)
 				}
 				p.offset = ev.Offset
 				if p.offset >= p.hwm-1 {
-					if err = p.markRecovered(catchup); err != nil {
+					if err := p.markRecovered(catchup); err != nil {
 						return fmt.Errorf("error setting recovered: %v", err)
 					}
 				}
@@ -326,7 +326,7 @@ func (p *partition) storeEvent(msg *kafka.Message) error {
 	if err != nil {
 		return fmt.Errorf("Error from the update callback while recovering from the log: %v", err)
 	}
-	err = p.st.SetOffset(int64(msg.Offset))
+	err = p.st.SetOffset(msg.Offset)
 	if err != nil {
 		return fmt.Errorf("Error updating offset in local storage while recovering from the log: %v", err)
 	}

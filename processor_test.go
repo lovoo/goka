@@ -768,7 +768,7 @@ func TestProcessor_StartWithErrorBeforeRebalance(t *testing.T) {
 				consumer.EXPECT().Close().Do(func() { close(ch) }),
 			)
 			go func() {
-				err := p.Start()
+				err = p.Start()
 				ensure.NotNil(t, err)
 				close(final)
 			}()
@@ -827,7 +827,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 	// -- test --
 	// 1. start
 	go func() {
-		err := p.Start()
+		err = p.Start()
 		log.Println(err)
 		ensure.NotNil(t, err)
 		close(final)
@@ -918,7 +918,7 @@ func TestProcessor_StartWithTableWithErrorAfterRebalance(t *testing.T) {
 	// -- test --
 	// 1. start
 	go func() {
-		err := p.Start()
+		err = p.Start()
 		ensure.NotNil(t, err)
 		close(final)
 	}()
@@ -1022,14 +1022,14 @@ func TestProcessor_Start(t *testing.T) {
 	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
 	st.EXPECT().Close() // partition 2 close
 	// 7. stop processor
-	consumer.EXPECT().Close().Do(func() { close(ch) })
+	consumer.EXPECT().Close() //.Do(func() { close(ch) })
 	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
 	st.EXPECT().Close()
 
 	// -- test --
 	// 1. start
 	go func() {
-		err := p.Start()
+		err = p.Start()
 		ensure.Nil(t, err)
 		close(final)
 	}()
@@ -1195,7 +1195,8 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	// 2. rebalance
 	ensure.True(t, len(p.partitions) == 0)
 	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1, 1: -1, 2: -1})
-	syncWith(t, ch)
+	err = syncWith(t, ch)
+	ensure.Nil(t, err)
 	ensure.True(t, len(p.partitions) == 3)
 
 	// 3. message to group table
@@ -1418,7 +1419,7 @@ func TestProcessor_StatelessContext(t *testing.T) {
 	ensure.Nil(t, err)
 	done := make(chan bool)
 	go func() {
-		err := proc.Start()
+		err = proc.Start()
 		ensure.NotNil(t, err)
 		close(done)
 	}()
@@ -1691,6 +1692,7 @@ func TestProcessor_failOnRecover(t *testing.T) {
 	var (
 		recovered       int
 		processorErrors error
+		_               = processorErrors // make linter happy
 		done            = make(chan struct{})
 		msgToRecover    = 100
 	)

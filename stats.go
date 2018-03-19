@@ -2,27 +2,37 @@ package goka
 
 import "time"
 
-// Input Streams/Table
+// InputStats represents the number of messages and the number of bytes consumed
+// from a stream or table topic since the process started.
 type InputStats struct {
 	Count uint
 	Bytes int
 	Delay time.Duration
 }
 
-// Output Streams/Table
+// OutputStats represents the number of messages and the number of bytes emitted
+// into a stream or table since the process started.
 type OutputStats struct {
 	Count uint
 	Bytes int
 }
 
+// PartitionStatus is the status of the partition of a table (group table or joined table).
 type PartitionStatus int
 
 const (
+	// PartitionRecovering indicates the partition is recovering and the storage
+	// is writing updates in bulk-mode (if the storage implementation supports it).
 	PartitionRecovering PartitionStatus = iota
+	// PartitionPreparing indicates the end of the bulk-mode. Depending on the storage
+	// implementation, the Preparing phase may take long because the storage compacts its logs.
 	PartitionPreparing
+	// PartitionRunning indicates the partition is recovered and processing updates
+	// in normal operation.
 	PartitionRunning
 )
 
+// PartitionStats represents metrics and measurements of a partition.
 type PartitionStats struct {
 	Now time.Time
 
@@ -70,6 +80,7 @@ func (s *PartitionStats) reset() {
 	s.Output = make(map[string]OutputStats)
 }
 
+// ViewStats represents the metrics of all partitions of a view.
 type ViewStats struct {
 	Partitions map[int32]*PartitionStats
 }
@@ -80,6 +91,8 @@ func newViewStats() *ViewStats {
 	}
 }
 
+// ProcessorStats represents the metrics of all partitions of the processor,
+// including its group, joined tables and lookup tables.
 type ProcessorStats struct {
 	Group  map[int32]*PartitionStats
 	Joined map[int32]map[string]*PartitionStats

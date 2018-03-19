@@ -4,6 +4,7 @@ import (
 	"github.com/lovoo/goka/storage"
 )
 
+// Iterator allows one to iterate over the keys of a view.
 type Iterator interface {
 	Next() bool
 	Key() string
