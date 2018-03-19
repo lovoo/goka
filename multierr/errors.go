@@ -13,13 +13,14 @@ type Errors struct {
 	m    sync.Mutex
 }
 
-func (e *Errors) Collect(err error) {
+func (e *Errors) Collect(err error) *Errors {
 	if err == nil {
-		return
+		return e
 	}
 	e.m.Lock()
 	e.errs = append(e.errs, err)
 	e.m.Unlock()
+	return e
 }
 
 func (e *Errors) Merge(o *Errors) *Errors {
@@ -27,7 +28,6 @@ func (e *Errors) Merge(o *Errors) *Errors {
 		return e
 	}
 
-	n := new(Errors)
 	// lock base
 	e.m.Lock()
 	defer e.m.Unlock()
@@ -35,8 +35,8 @@ func (e *Errors) Merge(o *Errors) *Errors {
 	o.m.Lock()
 	defer o.m.Unlock()
 
-	n.errs = append(e.errs, o.errs...)
-	return n
+	e.errs = append(e.errs, o.errs...)
+	return e
 }
 
 func (e *Errors) HasErrors() bool {

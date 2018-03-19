@@ -63,15 +63,16 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	return v, err
 }
 
-func (v *View) createPartitions(brokers []string) (err error) {
+func (v *View) createPartitions(brokers []string) (rerr error) {
 	tm, err := v.opts.builders.topicmgr(brokers)
 	if err != nil {
+		log.Printf("erro creating: %v", err)
 		return fmt.Errorf("Error creating topic manager: %v", err)
 	}
 	defer func() {
 		e := tm.Close()
-		if e != nil && err == nil {
-			err = fmt.Errorf("Error closing topic manager: %v", e)
+		if e != nil && rerr == nil {
+			rerr = fmt.Errorf("Error closing topic manager: %v", e)
 		}
 	}()
 
@@ -138,10 +139,10 @@ func (v *View) Start(ctx context.Context) error {
 			v.opts.log.Printf("view: partition %d started", pid)
 			defer v.opts.log.Printf("view: partition %d stopped", pid)
 			if err := p.st.Open(); err != nil {
-				return fmt.Errorf("view: error opening storage partition %d: %v", id, err)
+				return fmt.Errorf("view: error opening storage partition %d: %v", pid, err)
 			}
 			if err := p.startCatchup(ctx); err != nil {
-				return fmt.Errorf("view: error running partition %d: %v", id, err)
+				return fmt.Errorf("view: error running partition %d: %v", pid, err)
 			}
 			return nil
 		})
@@ -161,10 +162,7 @@ func (v *View) Start(ctx context.Context) error {
 	}
 	v.opts.log.Printf("view: shutdown complete")
 
-	if errs.HasErrors() {
-		return errs
-	}
-	return nil
+	return errs.NilOrError()
 }
 
 // close closes all storage partitions
