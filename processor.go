@@ -271,7 +271,6 @@ func (g *Processor) Start() (rerr error) {
 	ctx := context.Background()
 	ctx, g.cancel = context.WithCancel(ctx)
 	g.errg, ctx = multierr.NewErrGroup(ctx)
-	g.cancel = funcOnce(g.cancel)
 	defer g.cancel()
 
 	// collect all errors before leaving

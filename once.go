@@ -12,10 +12,3 @@ func (o *once) Do(f func() error) error {
 	o.once.Do(func() { o.err = f() })
 	return o.err
 }
-
-func funcOnce(f func()) func() {
-	var o sync.Once
-	return func() {
-		o.Do(f)
-	}
-}
