@@ -132,6 +132,7 @@ func (v *View) Start() error {
 	return v.startWithContext(ctx)
 }
 
+// Stop stops the view.
 func (v *View) Stop() {
 	if v.cancel != nil {
 		v.cancel()
@@ -139,9 +140,13 @@ func (v *View) Stop() {
 }
 
 func (v *View) startWithContext(ctx context.Context) error {
+	v.opts.log.Printf("view: starting")
+	defer v.opts.log.Printf("view: stopped")
+
 	if err := v.reinit(); err != nil {
 		return err
 	}
+
 	errg, ctx := multierr.NewErrGroup(ctx)
 	errg.Go(func() error { return v.run(ctx) })
 
@@ -172,7 +177,6 @@ func (v *View) startWithContext(ctx context.Context) error {
 		v.terminated = true
 		errs = errs.Merge(v.close())
 	}
-	v.opts.log.Printf("view: shutdown complete")
 
 	return errs.NilOrError()
 }
@@ -183,13 +187,18 @@ func (v *View) close() *multierr.Errors {
 	for _, p := range v.partitions {
 		errs.Collect(p.st.Close())
 	}
-	return nil
+	v.partitions = nil
+	return errs
 }
 
-// Close closes storage partitions. Close should only be called if the view is
-// restartable. Once Close is called, the view cannot be restarted anymore.
-func (v *View) Close() error {
-	v.opts.log.Printf("View: stopping")
+// Terminate closes storage partitions. Close must be called only if the view is
+// restartable (see WithViewRestartable() option). Once Terminate() is called,
+// the view cannot be restarted anymore.
+func (v *View) Terminate() error {
+	if !v.opts.restartable {
+		return nil
+	}
+	v.opts.log.Printf("View: closing")
 
 	// do not allow any reinitialization
 	if v.terminated {
@@ -333,9 +342,6 @@ func (v *View) Evict(key string) error {
 }
 
 func (v *View) run(ctx context.Context) error {
-	v.opts.log.Printf("View: started")
-	defer v.opts.log.Printf("View: stopped")
-
 	for {
 		select {
 		case ev := <-v.consumer.Events():

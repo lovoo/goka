@@ -318,7 +318,7 @@ func (g *Processor) Start() (rerr error) {
 			}
 			return nil
 		})
-		defer func() { g.errors.Collect(v.Close()) }()
+		defer func() { g.errors.Collect(v.Terminate()) }()
 	}
 
 	// subscribe for streams
