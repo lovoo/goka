@@ -1,8 +1,10 @@
 package goka
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/lovoo/goka/kafka"
@@ -21,14 +23,8 @@ type View struct {
 	opts       *voptions
 	partitions []*partition
 	consumer   kafka.Consumer
-	done       chan bool
-	dead       chan bool
-
-	errors     multierr.Errors
-	stopOnce   sync.Once
-	mInit      sync.Mutex
+	cancel     func()
 	terminated bool
-	wg         sync.WaitGroup
 }
 
 // NewView creates a new View object from a group.
@@ -68,15 +64,15 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	return v, err
 }
 
-func (v *View) createPartitions(brokers []string) (err error) {
+func (v *View) createPartitions(brokers []string) (rerr error) {
 	tm, err := v.opts.builders.topicmgr(brokers)
 	if err != nil {
 		return fmt.Errorf("Error creating topic manager: %v", err)
 	}
 	defer func() {
 		e := tm.Close()
-		if e != nil && err == nil {
-			err = fmt.Errorf("Error closing topic manager: %v", e)
+		if e != nil && rerr == nil {
+			rerr = fmt.Errorf("Error closing topic manager: %v", e)
 		}
 	}()
 
@@ -113,8 +109,6 @@ func (v *View) createPartitions(brokers []string) (err error) {
 
 // reinit (re)initializes the view and its partitions to connect to Kafka
 func (v *View) reinit() error {
-	v.mInit.Lock()
-	defer v.mInit.Unlock()
 	if v.terminated {
 		return fmt.Errorf("view: cannot reinitialize terminated view")
 	}
@@ -124,9 +118,6 @@ func (v *View) reinit() error {
 		return fmt.Errorf("view: cannot create Kafka consumer: %v", err)
 	}
 	v.consumer = consumer
-	v.done = make(chan bool)
-	v.dead = make(chan bool)
-	v.errors = multierr.Errors{}
 
 	for i, p := range v.partitions {
 		p.reinit(&proxy{int32(i), v.consumer})
@@ -136,100 +127,89 @@ func (v *View) reinit() error {
 
 // Start starts consuming the view's topic.
 func (v *View) Start() error {
+	ctx := context.Background()
+	ctx, v.cancel = context.WithCancel(ctx)
+	return v.startWithContext(ctx)
+}
+
+// Stop stops the view.
+func (v *View) Stop() {
+	if v.cancel != nil {
+		v.cancel()
+	}
+}
+
+func (v *View) startWithContext(ctx context.Context) error {
+	v.opts.log.Printf("view: starting")
+	defer v.opts.log.Printf("view: stopped")
+
 	if err := v.reinit(); err != nil {
 		return err
 	}
-	go v.run()
 
-	v.wg.Add(len(v.partitions))
+	errg, ctx := multierr.NewErrGroup(ctx)
+	errg.Go(func() error { return v.run(ctx) })
+
 	for id, p := range v.partitions {
-		go func(id int32, p *partition) {
-			defer v.wg.Done()
+		pid, p := int32(id), p
+		errg.Go(func() error {
+			v.opts.log.Printf("view: partition %d started", pid)
+			defer v.opts.log.Printf("view: partition %d stopped", pid)
 			if err := p.st.Open(); err != nil {
-				v.fail(fmt.Errorf("view: error opening storage partition %d: %v", id, err))
+				return fmt.Errorf("view: error opening storage partition %d: %v", pid, err)
 			}
-			if err := p.startCatchup(); err != nil {
-				v.fail(fmt.Errorf("view: error opening partition %d: %v", id, err))
+			if err := p.startCatchup(ctx); err != nil {
+				return fmt.Errorf("view: error running partition %d: %v", pid, err)
 			}
-		}(int32(id), p)
-	}
-	// wait for partition goroutines to return
-	v.wg.Wait()
-
-	<-v.dead
-
-	if v.opts.restartable {
-		// At this point, stop() has finished and goroutines exited,
-		// except for start and stop goroutines. Prepare the once object for a
-		// subsequent start().
-		defer func() { v.stopOnce = sync.Once{} }()
+			return nil
+		})
 	}
 
-	if v.errors.HasErrors() {
-		return &v.errors
+	// wait for partition goroutines and shutdown
+	errs := errg.Wait()
+
+	log.Println("view: closing consumer")
+	if err := v.consumer.Close(); err != nil {
+		errs.Collect(fmt.Errorf("view: failed closing consumer: %v", err))
 	}
-	return nil
-}
 
-func (v *View) fail(err error) {
-	v.opts.log.Printf("View: failing: %v", err)
-	v.errors.Collect(err)
-	go v.stop()
-}
+	if !v.opts.restartable {
+		v.terminated = true
+		errs = errs.Merge(v.close())
+	}
 
-func (v *View) stop() {
-	v.stopOnce.Do(func() {
-		defer close(v.dead)
-		// stop consumer
-		if err := v.consumer.Close(); err != nil {
-			err = fmt.Errorf("failed to close consumer on stopping the view: %v", err)
-			v.opts.log.Printf("error: %v", err)
-			v.errors.Collect(err)
-		}
-		<-v.done
-		v.opts.log.Printf("View: stopping partitions")
-
-		for i, par := range v.partitions {
-			go func(pid int, p *partition) {
-				p.stop()
-				v.opts.log.Printf("View: partition %d stopped", pid)
-			}(i, par)
-		}
-		// wait for partition goroutines to return
-		v.wg.Wait()
-
-		if !v.opts.restartable {
-			v.close()
-		}
-		v.opts.log.Printf("View: shutdown complete")
-	})
+	return errs.NilOrError()
 }
 
 // close closes all storage partitions
-func (v *View) close() {
+func (v *View) close() *multierr.Errors {
+	errs := new(multierr.Errors)
 	for _, p := range v.partitions {
-		v.errors.Collect(p.st.Close())
+		errs.Collect(p.st.Close())
 	}
+	v.partitions = nil
+	return errs
 }
 
-// Stop stops the view, closes storage partitions, and frees resources
-func (v *View) Stop() {
-	v.opts.log.Printf("View: stopping")
+// Terminate closes storage partitions. Close must be called only if the view is
+// restartable (see WithViewRestartable() option). Once Terminate() is called,
+// the view cannot be restarted anymore.
+func (v *View) Terminate() error {
+	if !v.opts.restartable {
+		return nil
+	}
+	v.opts.log.Printf("View: closing")
 
 	// do not allow any reinitialization
-	v.mInit.Lock()
 	if v.terminated {
-		v.mInit.Unlock()
-		return
+		return nil
 	}
 	v.terminated = true
-	v.mInit.Unlock()
-
-	v.stop()
 
 	if v.opts.restartable {
-		v.close()
+		return v.close().NilOrError()
 	}
+	return nil
 }
 
 func (v *View) hash(key string) (int32, error) {
@@ -361,28 +341,39 @@ func (v *View) Evict(key string) error {
 	return s.Delete(key)
 }
 
-func (v *View) run() {
-	defer close(v.done)
-	v.opts.log.Printf("View: started")
-	defer v.opts.log.Printf("View: stopped")
-
-	for ev := range v.consumer.Events() {
-		switch ev := ev.(type) {
-		case *kafka.Message:
-			partition := v.partitions[int(ev.Partition)]
-			partition.ch <- ev
-		case *kafka.BOF:
-			partition := v.partitions[int(ev.Partition)]
-			partition.ch <- ev
-		case *kafka.EOF:
-			partition := v.partitions[int(ev.Partition)]
-			partition.ch <- ev
-		case *kafka.Error:
-			v.fail(fmt.Errorf("view: error from kafka consumer: %v", ev))
-			return
-		default:
-			v.fail(fmt.Errorf("view: cannot handle %T = %v", ev, ev))
-			return
+func (v *View) run(ctx context.Context) error {
+	for {
+		select {
+		case ev := <-v.consumer.Events():
+			switch ev := ev.(type) {
+			case *kafka.Message:
+				partition := v.partitions[int(ev.Partition)]
+				select {
+				case partition.ch <- ev:
+				case <-ctx.Done():
+					return nil
+				}
+			case *kafka.BOF:
+				partition := v.partitions[int(ev.Partition)]
+				select {
+				case partition.ch <- ev:
+				case <-ctx.Done():
+					return nil
+				}
+			case *kafka.EOF:
+				partition := v.partitions[int(ev.Partition)]
+				select {
+				case partition.ch <- ev:
+				case <-ctx.Done():
+					return nil
+				}
+			case *kafka.Error:
+				return fmt.Errorf("view: error from kafka consumer: %v", ev)
+			default:
+				return fmt.Errorf("view: cannot handle %T = %v", ev, ev)
+			}
+		case <-ctx.Done():
+			return nil
 		}
 	}
 }
@@ -399,6 +390,10 @@ func (v *View) Recovered() bool {
 }
 
 func (v *View) Stats() *ViewStats {
+	return v.statsWithContext(context.Background())
+}
+
+func (v *View) statsWithContext(ctx context.Context) *ViewStats {
 	var (
 		m     sync.Mutex
 		wg    sync.WaitGroup
@@ -408,7 +403,7 @@ func (v *View) Stats() *ViewStats {
 	wg.Add(len(v.partitions))
 	for i, p := range v.partitions {
 		go func(pid int32, par *partition) {
-			s := par.fetchStats()
+			s := par.fetchStats(ctx)
 			m.Lock()
 			stats.Partitions[pid] = s
 			m.Unlock()

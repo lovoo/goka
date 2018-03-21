@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -45,10 +46,6 @@ type partition struct {
 	proxy   kafkaProxy
 	process processCallback
 
-	dying    chan bool
-	done     chan bool
-	stopFlag int64
-
 	recoveredFlag int32
 	hwm           int64
 	offset        int64
@@ -75,10 +72,7 @@ func newPartition(log logger.Logger, topic string, cb processCallback, st *stora
 		log:   log,
 		topic: topic,
 
-		ch:    make(chan kafka.Event, channelSize),
-		dying: make(chan bool),
-		done:  make(chan bool),
-
+		ch:      make(chan kafka.Event, channelSize),
 		st:      st,
 		proxy:   proxy,
 		process: cb,
@@ -95,45 +89,35 @@ func (p *partition) reinit(proxy kafkaProxy) {
 	if proxy != nil {
 		p.proxy = proxy
 	}
-	p.ch = make(chan kafka.Event, len(p.ch))
-	p.dying = make(chan bool)
-	p.done = make(chan bool)
-	atomic.StoreInt64(&p.stopFlag, 0)
 }
 
 // start loads the table partition up to HWM and then consumes streams
-func (p *partition) start() error {
-	defer close(p.done)
+func (p *partition) start(ctx context.Context) error {
 	defer p.proxy.Stop()
 	p.stats.Table.StartTime = time.Now()
 
 	if p.st.Stateless() {
 		p.markRecovered(false)
-	} else if err := p.recover(); err != nil {
+	} else if err := p.recover(ctx); err != nil {
 		return err
 	}
 
 	// if stopped, just return
-	if atomic.LoadInt64(&p.stopFlag) == 1 {
+	select {
+	case <-ctx.Done():
 		return nil
+	default:
 	}
-	return p.run()
+
+	return p.run(ctx)
 }
 
 // startCatchup continually loads the table partition
-func (p *partition) startCatchup() error {
-	defer close(p.done)
+func (p *partition) startCatchup(ctx context.Context) error {
 	defer p.proxy.Stop()
 	p.stats.Table.StartTime = time.Now()
 
-	return p.catchup()
-}
-
-func (p *partition) stop() {
-	atomic.StoreInt64(&p.stopFlag, 1)
-	close(p.dying)
-	<-p.done
-	close(p.ch)
+	return p.catchup(ctx)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -150,7 +134,7 @@ func newMessage(ev *kafka.Message) *message {
 	}
 }
 
-func (p *partition) run() error {
+func (p *partition) run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	p.proxy.AddGroup()
 	defer wg.Wait()
@@ -198,11 +182,11 @@ func (p *partition) run() error {
 			p.lastStats = newPartitionStats().init(p.stats, p.offset, p.hwm)
 			select {
 			case p.responseStats <- p.lastStats:
-			case <-p.dying:
+			case <-ctx.Done():
 				return nil
 			}
 
-		case <-p.dying:
+		case <-ctx.Done():
 			return nil
 		}
 
@@ -213,19 +197,19 @@ func (p *partition) run() error {
 // loading storage
 ///////////////////////////////////////////////////////////////////////////////
 
-func (p *partition) catchup() error {
-	return p.load(true)
+func (p *partition) catchup(ctx context.Context) error {
+	return p.load(ctx, true)
 }
 
-func (p *partition) recover() error {
-	return p.load(false)
+func (p *partition) recover(ctx context.Context) error {
+	return p.load(ctx, false)
 }
 
 func (p *partition) recovered() bool {
 	return atomic.LoadInt32(&p.recoveredFlag) == 1
 }
 
-func (p *partition) load(catchup bool) (err error) {
+func (p *partition) load(ctx context.Context, catchup bool) (err error) {
 	// fetch local offset
 	local, err := p.st.GetOffset(sarama.OffsetOldest)
 	if err != nil {
@@ -234,6 +218,7 @@ func (p *partition) load(catchup bool) (err error) {
 	if err = p.proxy.Add(p.topic, local); err != nil {
 		return err
 	}
+
 	defer func() {
 		var derr multierr.Errors
 		derr.Collect(err)
@@ -326,11 +311,11 @@ func (p *partition) load(catchup bool) (err error) {
 			p.lastStats = newPartitionStats().init(p.stats, p.offset, p.hwm)
 			select {
 			case p.responseStats <- p.lastStats:
-			case <-p.dying:
+			case <-ctx.Done():
 				return nil
 			}
 
-		case <-p.dying:
+		case <-ctx.Done():
 			return nil
 		}
 	}
@@ -408,14 +393,13 @@ func (p *partition) markRecovered(catchup bool) (err error) {
 	return
 }
 
-func (p *partition) fetchStats() *PartitionStats {
+func (p *partition) fetchStats(ctx context.Context) *PartitionStats {
 	timer := time.NewTimer(100 * time.Millisecond)
 	defer timer.Stop()
 
 	select {
 	case p.requestStats <- true:
-	case <-p.dying:
-		// if closing, return empty stats
+	case <-ctx.Done():
 		return newPartitionStats().init(p.lastStats, p.offset, p.hwm)
 	case <-timer.C:
 		return p.lastStats
@@ -424,8 +408,7 @@ func (p *partition) fetchStats() *PartitionStats {
 	select {
 	case s := <-p.responseStats:
 		return s
-	case <-p.dying:
-		// if closing, return empty stats
+	case <-ctx.Done():
 		return newPartitionStats().init(p.lastStats, p.offset, p.hwm)
 	}
 }

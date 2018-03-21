@@ -1,11 +1,13 @@
 package goka
 
 import (
+	"context"
 	"errors"
 	"log"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
@@ -48,24 +50,25 @@ func TestPartition_startStateless(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	var (
-		proxy = mock.NewMockkafkaProxy(ctrl)
-		wait  = make(chan bool)
-		final = make(chan bool)
+		proxy       = mock.NewMockkafkaProxy(ctrl)
+		wait        = make(chan bool)
+		final       = make(chan bool)
+		ctx, cancel = context.WithCancel(context.Background())
 	)
 
 	p := newPartition(logger.Default(), topic, nil, newNullStorageProxy(0), proxy, defaultPartitionChannelSize)
-
 	proxy.EXPECT().AddGroup().Do(func() { close(wait) })
 	proxy.EXPECT().Stop()
+
 	go func() {
-		err := p.start()
+		err := p.start(ctx)
 		ensure.Nil(t, err)
 		close(final)
 	}()
 
 	err := doTimed(t, func() {
 		<-wait
-		p.stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -76,10 +79,11 @@ func TestPartition_startStateful(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		proxy  = mock.NewMockkafkaProxy(ctrl)
-		st     = mock.NewMockStorage(ctrl)
-		offset = int64(123)
-		wait   = make(chan bool)
+		proxy       = mock.NewMockkafkaProxy(ctrl)
+		st          = mock.NewMockStorage(ctrl)
+		offset      = int64(123)
+		wait        = make(chan bool)
+		ctx, cancel = context.WithCancel(context.Background())
 	)
 
 	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, nil), proxy, defaultPartitionChannelSize)
@@ -91,13 +95,14 @@ func TestPartition_startStateful(t *testing.T) {
 		proxy.EXPECT().Stop(),
 	)
 	go func() {
-		err := p.start()
+		err := p.start(ctx)
 		ensure.Nil(t, err)
 		close(wait)
 	}()
 
 	err := doTimed(t, func() {
-		p.stop()
+		time.Sleep(100 * time.Millisecond)
+		cancel()
 		<-wait
 	})
 	ensure.Nil(t, err)
@@ -108,14 +113,15 @@ func TestPartition_runStateless(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		proxy        = mock.NewMockkafkaProxy(ctrl)
-		key          = "key"
-		par    int32 = 1
-		offset int64 = 4
-		value        = []byte("value")
-		wait         = make(chan bool)
-		step         = make(chan bool)
-		count  int64
+		proxy             = mock.NewMockkafkaProxy(ctrl)
+		key               = "key"
+		par         int32 = 1
+		offset      int64 = 4
+		value             = []byte("value")
+		wait              = make(chan bool)
+		step              = make(chan bool)
+		ctx, cancel       = context.WithCancel(context.Background())
+		count       int64
 	)
 
 	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
@@ -131,7 +137,7 @@ func TestPartition_runStateless(t *testing.T) {
 	proxy.EXPECT().AddGroup()
 	proxy.EXPECT().Stop()
 	go func() {
-		err := p.start()
+		err := p.start(ctx)
 		ensure.Nil(t, err)
 		close(wait)
 	}()
@@ -150,7 +156,7 @@ func TestPartition_runStateless(t *testing.T) {
 
 	err := doTimed(t, func() {
 		<-step
-		p.stop()
+		cancel()
 		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 		<-wait
 	})
@@ -181,7 +187,7 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 	proxy.EXPECT().AddGroup()
 	proxy.EXPECT().Stop()
 	go func() {
-		err := p.start()
+		err := p.start(context.Background())
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
@@ -197,7 +203,6 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 
 	err := doTimed(t, func() {
 		<-wait
-		p.stop()
 		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(0))
 	})
 	ensure.Nil(t, err)
@@ -209,7 +214,7 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 	proxy.EXPECT().AddGroup()
 	proxy.EXPECT().Stop()
 	go func() {
-		err := p.start()
+		err := p.start(context.Background())
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
@@ -218,7 +223,6 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 
 	err = doTimed(t, func() {
 		<-wait
-		p.stop()
 		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(0))
 	})
 	ensure.Nil(t, err)
@@ -230,15 +234,16 @@ func TestPartition_runStateful(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		proxy        = mock.NewMockkafkaProxy(ctrl)
-		st           = mock.NewMockStorage(ctrl)
-		key          = "key"
-		par    int32 = 1
-		offset int64 = 4
-		value        = []byte("value")
-		wait         = make(chan bool)
-		step         = make(chan bool)
-		count  int64
+		proxy             = mock.NewMockkafkaProxy(ctrl)
+		st                = mock.NewMockStorage(ctrl)
+		key               = "key"
+		par         int32 = 1
+		offset      int64 = 4
+		value             = []byte("value")
+		wait              = make(chan bool)
+		step              = make(chan bool)
+		ctx, cancel       = context.WithCancel(context.Background())
+		count       int64
 	)
 
 	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
@@ -261,7 +266,7 @@ func TestPartition_runStateful(t *testing.T) {
 	)
 
 	go func() {
-		err := p.start()
+		err := p.start(ctx)
 		log.Printf("%v", err)
 		ensure.Nil(t, err)
 		close(wait)
@@ -296,7 +301,7 @@ func TestPartition_runStateful(t *testing.T) {
 
 	err := doTimed(t, func() {
 		<-step
-		p.stop()
+		cancel()
 		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 		<-wait
 	})
@@ -342,7 +347,7 @@ func TestPartition_runStatefulWithError(t *testing.T) {
 	)
 
 	go func() {
-		err := p.start()
+		err := p.start(context.Background())
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
@@ -375,7 +380,6 @@ func TestPartition_runStatefulWithError(t *testing.T) {
 	err := doTimed(t, func() {
 		<-step
 		<-wait
-		p.stop()
 		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 	})
 	ensure.Nil(t, err)
@@ -386,15 +390,16 @@ func TestPartition_loadStateful(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		proxy        = mock.NewMockkafkaProxy(ctrl)
-		st           = mock.NewMockStorage(ctrl)
-		key          = "key"
-		par    int32 = 1
-		offset int64 = 4
-		value        = []byte("value")
-		wait         = make(chan bool)
-		step         = make(chan bool)
-		count  int64
+		proxy             = mock.NewMockkafkaProxy(ctrl)
+		st                = mock.NewMockStorage(ctrl)
+		key               = "key"
+		par         int32 = 1
+		offset      int64 = 4
+		value             = []byte("value")
+		wait              = make(chan bool)
+		step              = make(chan bool)
+		ctx, cancel       = context.WithCancel(context.Background())
+		count       int64
 	)
 
 	consume := func(msg *message, st storage.Storage, wg *sync.WaitGroup, pstats *PartitionStats) (int, error) {
@@ -420,7 +425,7 @@ func TestPartition_loadStateful(t *testing.T) {
 	)
 
 	go func() {
-		err := p.start()
+		err := p.start(ctx)
 		ensure.Nil(t, err)
 		close(wait)
 	}()
@@ -458,7 +463,7 @@ func TestPartition_loadStateful(t *testing.T) {
 
 	err := doTimed(t, func() {
 		<-step
-		p.stop()
+		cancel()
 		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 		<-wait
 	})
@@ -496,7 +501,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	)
 
 	go func() {
-		err := p.start()
+		err := p.start(context.Background())
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
@@ -510,9 +515,8 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	}
 
 	err := doTimed(t, func() {
-		p.stop()
-		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 		<-wait
+		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 	})
 	ensure.Nil(t, err)
 
@@ -530,7 +534,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	)
 
 	go func() {
-		err := p.start()
+		err := p.start(context.Background())
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
@@ -544,9 +548,8 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	}
 
 	err = doTimed(t, func() {
-		p.stop()
-		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 		<-wait
+		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 	})
 	ensure.Nil(t, err)
 
@@ -560,15 +563,14 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	)
 
 	go func() {
-		err := p.start()
+		err := p.start(context.Background())
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
 
 	err = doTimed(t, func() {
-		p.stop()
-		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 		<-wait
+		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 	})
 	ensure.Nil(t, err)
 }
@@ -599,7 +601,7 @@ func TestPartition_loadStatefulWithErrorAddRemovePartition(t *testing.T) {
 	)
 
 	go func() {
-		err := p.start()
+		err := p.start(context.Background())
 		ensure.NotNil(t, err)
 		ensure.StringContains(t, err.Error(), "some error")
 		close(wait)
@@ -623,7 +625,7 @@ func TestPartition_loadStatefulWithErrorAddRemovePartition(t *testing.T) {
 	)
 
 	go func() {
-		err := p.start()
+		err := p.start(context.Background())
 		ensure.NotNil(t, err)
 		ensure.StringContains(t, err.Error(), "some error")
 		ensure.StringContains(t, err.Error(), "error while removing partition")
@@ -640,9 +642,8 @@ func TestPartition_loadStatefulWithErrorAddRemovePartition(t *testing.T) {
 	}
 
 	err := doTimed(t, func() {
-		p.stop()
-		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 		<-wait
+		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(1))
 	})
 	ensure.Nil(t, err)
 }
@@ -652,16 +653,17 @@ func TestPartition_catchupStateful(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		proxy        = mock.NewMockkafkaProxy(ctrl)
-		st           = mock.NewMockStorage(ctrl)
-		key          = "key"
-		par    int32 = 1
-		offset int64 = 4
-		value        = []byte("value")
-		wait         = make(chan bool)
-		step         = make(chan bool)
-		sync         = func() error { return doTimed(t, func() { <-step }) }
-		count  int64
+		proxy             = mock.NewMockkafkaProxy(ctrl)
+		st                = mock.NewMockStorage(ctrl)
+		key               = "key"
+		par         int32 = 1
+		offset      int64 = 4
+		value             = []byte("value")
+		wait              = make(chan bool)
+		step              = make(chan bool)
+		sync              = func() error { return doTimed(t, func() { <-step }) }
+		ctx, cancel       = context.WithCancel(context.Background())
+		count       int64
 	)
 
 	update := func(st storage.Storage, p int32, k string, v []byte) error {
@@ -688,7 +690,7 @@ func TestPartition_catchupStateful(t *testing.T) {
 	)
 
 	go func() {
-		err := p.startCatchup()
+		err := p.startCatchup(ctx)
 		ensure.Nil(t, err)
 		close(wait)
 	}()
@@ -757,7 +759,7 @@ func TestPartition_catchupStateful(t *testing.T) {
 	p.ch <- new(kafka.NOP)
 
 	err = doTimed(t, func() {
-		p.stop()
+		cancel()
 		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(3))
 		<-wait
 	})
@@ -803,7 +805,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 	)
 
 	go func() {
-		err := p.startCatchup()
+		err := p.startCatchup(context.Background())
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
@@ -870,7 +872,6 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 
 	err = doTimed(t, func() {
 		<-wait
-		p.stop()
 		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(2))
 	})
 	ensure.Nil(t, err)
@@ -890,9 +891,9 @@ func BenchmarkPartition_load(b *testing.B) {
 		return nil
 	}
 	p := newPartition(logger.Default(), topic, nil, newStorageProxy(st, 0, update), new(nullProxy), 0)
-
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		err := p.start()
+		err := p.start(ctx)
 		if err != nil {
 			panic(err)
 		}
@@ -917,7 +918,6 @@ func BenchmarkPartition_load(b *testing.B) {
 		}
 		offset++
 	}
-
-	p.stop()
+	cancel()
 	<-wait
 }

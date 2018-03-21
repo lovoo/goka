@@ -58,7 +58,7 @@ type Context interface {
 
 type emitter func(topic string, key string, value []byte) *kafka.Promise
 
-type context struct {
+type cbContext struct {
 	graph *GroupGraph
 
 	commit  func()
@@ -84,7 +84,7 @@ type context struct {
 }
 
 // Emit sends a message asynchronously to a topic.
-func (ctx *context) Emit(topic Stream, key string, value interface{}) {
+func (ctx *cbContext) Emit(topic Stream, key string, value interface{}) {
 	if topic == "" {
 		ctx.Fail(errors.New("Cannot emit to empty topic"))
 	}
@@ -112,7 +112,7 @@ func (ctx *context) Emit(topic Stream, key string, value interface{}) {
 }
 
 // Loopback sends a message to another key of the processor.
-func (ctx *context) Loopback(key string, value interface{}) {
+func (ctx *cbContext) Loopback(key string, value interface{}) {
 	l := ctx.graph.LoopStream()
 	if l == nil {
 		ctx.Fail(errors.New("No loop topic configured"))
@@ -126,7 +126,7 @@ func (ctx *context) Loopback(key string, value interface{}) {
 	ctx.emit(l.Topic(), key, data)
 }
 
-func (ctx *context) emit(topic string, key string, value []byte) {
+func (ctx *cbContext) emit(topic string, key string, value []byte) {
 	ctx.counters.emits++
 	ctx.emitter(topic, key, value).Then(func(err error) {
 		if err != nil {
@@ -141,14 +141,14 @@ func (ctx *context) emit(topic string, key string, value []byte) {
 	ctx.pstats.Output[topic] = s
 }
 
-func (ctx *context) Delete() {
+func (ctx *cbContext) Delete() {
 	if err := ctx.deleteKey(ctx.Key()); err != nil {
 		ctx.Fail(err)
 	}
 }
 
 // Value returns the value of the key in the group table.
-func (ctx *context) Value() interface{} {
+func (ctx *cbContext) Value() interface{} {
 	val, err := ctx.valueForKey(ctx.msg.Key)
 	if err != nil {
 		ctx.Fail(err)
@@ -157,26 +157,26 @@ func (ctx *context) Value() interface{} {
 }
 
 // SetValue updates the value of the key in the group table.
-func (ctx *context) SetValue(value interface{}) {
+func (ctx *cbContext) SetValue(value interface{}) {
 	if err := ctx.setValueForKey(string(ctx.msg.Key), value); err != nil {
 		ctx.Fail(err)
 	}
 }
 
 // Timestamp returns the timestamp of the input message.
-func (ctx *context) Timestamp() time.Time {
+func (ctx *cbContext) Timestamp() time.Time {
 	return ctx.msg.Timestamp
 }
 
-func (ctx *context) Key() string {
+func (ctx *cbContext) Key() string {
 	return string(ctx.msg.Key)
 }
 
-func (ctx *context) Topic() Stream {
+func (ctx *cbContext) Topic() Stream {
 	return Stream(ctx.msg.Topic)
 }
 
-func (ctx *context) Join(topic Table) interface{} {
+func (ctx *cbContext) Join(topic Table) interface{} {
 	if ctx.pviews == nil {
 		ctx.Fail(fmt.Errorf("table %s not subscribed", topic))
 	}
@@ -198,7 +198,7 @@ func (ctx *context) Join(topic Table) interface{} {
 	return value
 }
 
-func (ctx *context) Lookup(topic Table, key string) interface{} {
+func (ctx *cbContext) Lookup(topic Table, key string) interface{} {
 	if ctx.views == nil {
 		ctx.Fail(fmt.Errorf("topic %s not subscribed", topic))
 	}
@@ -214,7 +214,7 @@ func (ctx *context) Lookup(topic Table, key string) interface{} {
 }
 
 // valueForKey returns the value of key in the processor state.
-func (ctx *context) valueForKey(key string) (interface{}, error) {
+func (ctx *cbContext) valueForKey(key string) (interface{}, error) {
 	if ctx.storage == nil {
 		return nil, fmt.Errorf("Cannot access state in stateless processor")
 	}
@@ -233,7 +233,7 @@ func (ctx *context) valueForKey(key string) (interface{}, error) {
 	return value, nil
 }
 
-func (ctx *context) deleteKey(key string) error {
+func (ctx *cbContext) deleteKey(key string) error {
 	if ctx.graph.GroupTable() == nil {
 		return fmt.Errorf("Cannot access state in stateless processor")
 	}
@@ -252,7 +252,7 @@ func (ctx *context) deleteKey(key string) error {
 }
 
 // setValueForKey sets a value for a key in the processor state.
-func (ctx *context) setValueForKey(key string, value interface{}) error {
+func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 	if ctx.graph.GroupTable() == nil {
 		return fmt.Errorf("Cannot access state in stateless processor")
 	}
@@ -285,7 +285,7 @@ func (ctx *context) setValueForKey(key string, value interface{}) error {
 	return nil
 }
 
-func (ctx *context) emitDone(err error) {
+func (ctx *cbContext) emitDone(err error) {
 	ctx.m.Lock()
 	defer ctx.m.Unlock()
 	ctx.counters.dones++
@@ -293,7 +293,7 @@ func (ctx *context) emitDone(err error) {
 }
 
 // called after all emits
-func (ctx *context) finish() {
+func (ctx *cbContext) finish() {
 	ctx.m.Lock()
 	defer ctx.m.Unlock()
 	ctx.done = true
@@ -301,13 +301,13 @@ func (ctx *context) finish() {
 }
 
 // called before any emit
-func (ctx *context) start() {
+func (ctx *cbContext) start() {
 	ctx.wg.Add(1)
 }
 
 // calls ctx.commit once all emits have successfully finished, or fails context
 // if some emit failed.
-func (ctx *context) tryCommit(err error) {
+func (ctx *cbContext) tryCommit(err error) {
 	if err != nil {
 		ctx.errors.Collect(err)
 	}
@@ -329,6 +329,6 @@ func (ctx *context) tryCommit(err error) {
 }
 
 // Fail stops execution and shuts down the processor
-func (ctx *context) Fail(err error) {
+func (ctx *cbContext) Fail(err error) {
 	panic(err)
 }
