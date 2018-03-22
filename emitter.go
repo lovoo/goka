@@ -7,6 +7,7 @@ import (
 	"github.com/lovoo/goka/kafka"
 )
 
+// Emitter emits messages into a specific Kafka topic, first encoding the message with the given codec.
 type Emitter struct {
 	codec    Codec
 	producer kafka.Producer
@@ -16,7 +17,7 @@ type Emitter struct {
 	wg sync.WaitGroup
 }
 
-// NewEmitter creates a new emitter using passed brokers, topic, codec and possibly options
+// NewEmitter creates a new emitter using passed brokers, topic, codec and possibly options.
 func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterOption) (*Emitter, error) {
 	options = append(
 		// default options comes first
@@ -64,7 +65,7 @@ func (e *Emitter) Emit(key string, msg interface{}) (*kafka.Promise, error) {
 	}), nil
 }
 
-// EmitSync sends a message to passed topic and key
+// EmitSync sends a message to passed topic and key.
 func (e *Emitter) EmitSync(key string, msg interface{}) error {
 	var (
 		err     error
@@ -85,7 +86,7 @@ func (e *Emitter) EmitSync(key string, msg interface{}) error {
 	return err
 }
 
-// Finish waits until the emitter is finished producing all pending messages
+// Finish waits until the emitter is finished producing all pending messages.
 func (e *Emitter) Finish() {
 	e.wg.Wait()
 }

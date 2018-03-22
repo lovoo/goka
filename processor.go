@@ -267,6 +267,9 @@ func (g *Processor) hash(key string) (int32, error) {
 // Start starts receiving messages from Kafka for the subscribed topics. For each
 // partition, a recovery will be attempted.
 func (g *Processor) Start() (rerr error) {
+	g.opts.log.Printf("Processor: starting")
+	defer g.opts.log.Printf("Processor: stopped")
+
 	// create errorgroup
 	ctx := context.Background()
 	ctx, g.cancel = context.WithCancel(ctx)
@@ -276,7 +279,7 @@ func (g *Processor) Start() (rerr error) {
 	// collect all errors before leaving
 	g.errors = new(multierr.Errors)
 	defer func() {
-		g.errors.Collect(rerr)
+		_ = g.errors.Collect(rerr)
 		rerr = g.errors.NilOrError()
 	}()
 
@@ -289,8 +292,8 @@ func (g *Processor) Start() (rerr error) {
 	g.consumer = consumer
 	defer func() {
 		g.opts.log.Printf("Processor: closing consumer")
-		if err := g.consumer.Close(); err != nil {
-			g.errors.Collect(fmt.Errorf("error closing consumer: %v", err))
+		if err = g.consumer.Close(); err != nil {
+			_ = g.errors.Collect(fmt.Errorf("error closing consumer: %v", err))
 		}
 	}()
 
@@ -304,7 +307,7 @@ func (g *Processor) Start() (rerr error) {
 	defer func() {
 		g.opts.log.Printf("Processor: closing producer")
 		if err := g.producer.Close(); err != nil {
-			g.errors.Collect(fmt.Errorf("error closing producer: %v", err))
+			_ = g.errors.Collect(fmt.Errorf("error closing producer: %v", err))
 		}
 	}()
 
@@ -317,7 +320,7 @@ func (g *Processor) Start() (rerr error) {
 			}
 			return nil
 		})
-		defer func() { g.errors.Collect(v.Terminate()) }()
+		defer func() { _ = g.errors.Collect(v.Terminate()) }()
 	}
 
 	// subscribe for streams
@@ -330,7 +333,7 @@ func (g *Processor) Start() (rerr error) {
 	}
 	if err := g.consumer.Subscribe(topics); err != nil {
 		g.cancel()
-		g.errors.Merge(g.errg.Wait())
+		_ = g.errors.Merge(g.errg.Wait())
 		return fmt.Errorf("error subscribing topics: %v", err)
 	}
 
@@ -338,15 +341,13 @@ func (g *Processor) Start() (rerr error) {
 	g.errg.Go(func() error { return g.run(ctx) })
 
 	// wait for goroutines to return
-	g.errors.Merge(g.errg.Wait())
+	_ = g.errors.Merge(g.errg.Wait())
 
 	// remove all partitions first
 	g.opts.log.Printf("Processor: removing partitions")
 	for partition := range g.partitions {
-		g.errors.Merge(g.removePartition(partition))
+		_ = g.errors.Merge(g.removePartition(partition))
 	}
-
-	g.opts.log.Printf("Processor: shutdown complete")
 
 	return nil
 }
@@ -446,7 +447,7 @@ func (g *Processor) run(ctx context.Context) error {
 
 func (g *Processor) fail(err error) {
 	g.opts.log.Printf("failing: %v", err)
-	g.errors.Collect(err)
+	_ = g.errors.Collect(err)
 	g.cancel()
 }
 
@@ -593,25 +594,26 @@ func (g *Processor) createPartition(ctx context.Context, id int32) error {
 }
 
 func (g *Processor) rebalance(ctx context.Context, partitions kafka.Assignment) error {
+	errs := new(multierr.Errors)
 	g.opts.log.Printf("Processor: rebalancing: %+v", partitions)
 
 	for id := range partitions {
 		// create partition views
 		if err := g.createPartitionViews(ctx, id); err != nil {
-			return err
+			return errs.Collect(err).NilOrError()
 		}
 		// create partition processor
 		if err := g.createPartition(ctx, id); err != nil {
-			return err
+			return errs.Collect(err).NilOrError()
 		}
 	}
 
 	for partition := range g.partitions {
 		if _, has := partitions[partition]; !has {
-			g.removePartition(partition)
+			_ = errs.Merge(g.removePartition(partition))
 		}
 	}
-	return nil
+	return errs.NilOrError()
 }
 
 func (g *Processor) removePartition(partition int32) *multierr.Errors {
@@ -619,9 +621,8 @@ func (g *Processor) removePartition(partition int32) *multierr.Errors {
 	g.opts.log.Printf("Removing partition %d", partition)
 
 	// remove partition processor
-	//TODO(diogo) ctx g.partitions[partition].stop()
 	if err := g.partitions[partition].st.Close(); err != nil {
-		errs.Collect(fmt.Errorf("error closing storage partition %d: %v", partition, err))
+		_ = errs.Collect(fmt.Errorf("error closing storage partition %d: %v", partition, err))
 	}
 	delete(g.partitions, partition)
 
@@ -632,9 +633,8 @@ func (g *Processor) removePartition(partition int32) *multierr.Errors {
 	}
 
 	for topic, p := range pv {
-		// TODO(diogo) processor p.stop()
 		if err := p.st.Close(); err != nil {
-			errs.Collect(fmt.Errorf("error closing storage %s/%d: %v", topic, partition, err))
+			_ = errs.Collect(fmt.Errorf("error closing storage %s/%d: %v", topic, partition, err))
 		}
 	}
 	delete(g.partitionViews, partition)
@@ -759,6 +759,7 @@ func (g *Processor) Recovered() bool {
 	return true
 }
 
+// Stats returns a set of performance metrics of the processor.
 func (g *Processor) Stats() *ProcessorStats {
 	return g.statsWithContext(context.Background())
 }
@@ -778,7 +779,7 @@ func (g *Processor) statsWithContext(ctx context.Context) *ProcessorStats {
 			stats.Group[pid] = s
 			m.Unlock()
 			wg.Done()
-		}(int32(i), p)
+		}(i, p)
 	}
 	for i, p := range g.partitionViews {
 		if _, ok := stats.Joined[i]; !ok {
@@ -792,7 +793,7 @@ func (g *Processor) statsWithContext(ctx context.Context) *ProcessorStats {
 				stats.Joined[pid][topic] = s
 				m.Unlock()
 				wg.Done()
-			}(int32(i), t, tp)
+			}(i, t, tp)
 		}
 	}
 	for t, v := range g.views {
@@ -800,7 +801,7 @@ func (g *Processor) statsWithContext(ctx context.Context) *ProcessorStats {
 		go func(topic string, vi *View) {
 			s := vi.statsWithContext(ctx)
 			m.Lock()
-			stats.Lookup[t] = s
+			stats.Lookup[topic] = s
 			m.Unlock()
 			wg.Done()
 		}(t, v)
@@ -810,6 +811,7 @@ func (g *Processor) statsWithContext(ctx context.Context) *ProcessorStats {
 	return stats
 }
 
+// Graph returns the GroupGraph given at the creation of the processor.
 func (g *Processor) Graph() *GroupGraph {
 	return g.graph
 }

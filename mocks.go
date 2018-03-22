@@ -35,6 +35,7 @@ func (ch *constHasher) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// NewConstHasher creates a constant hasher that hashes any value to 0.
 func NewConstHasher(part uint32) hash.Hash32 {
 	return &constHasher{partition: part}
 }

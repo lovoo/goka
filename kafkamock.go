@@ -93,11 +93,13 @@ func NewKafkaMock(t Tester, groupName Group) *KafkaMock {
 	return kafkaMock
 }
 
+// SetCodec sets the codec for the group table.
 func (km *KafkaMock) SetCodec(codec Codec) *KafkaMock {
 	km.codec = codec
 	return km
 }
 
+// SetGroupTableCreator sets a creator for the group table.
 func (km *KafkaMock) SetGroupTableCreator(creator func() (string, []byte)) {
 	km.groupTableCreator = creator
 }
@@ -187,16 +189,21 @@ func (km *KafkaMock) ConsumeProto(topic string, key string, msg proto.Message) {
 	km.ConsumeData(topic, key, data)
 }
 
+// ConsumeString simulates a message with a string payload.
 func (km *KafkaMock) ConsumeString(topic string, key string, msg string) {
 	km.ConsumeData(topic, key, []byte(msg))
 }
 
+// Consume simulates a message with a byte slice payload.
 func (km *KafkaMock) Consume(topic string, key string, msg []byte) {
 	km.ConsumeData(topic, key, msg)
 }
 
-// Helper function consuming marshalled data. This function is used by ConsumeProto by the test case
-// as well as any emit calls of the processor being tested.
+// ConsumeData simulates a message with a byte slice payload. This is the same
+// as Consume.
+// ConsumeData is a helper function consuming marshalled data. This function is
+// used by ConsumeProto by the test case as well as any emit calls of the
+// processor being tested.
 func (km *KafkaMock) ConsumeData(topic string, key string, data []byte) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -251,6 +258,7 @@ func (km *KafkaMock) SetValue(key string, value interface{}) {
 	ensure.Nil(km.t, err)
 }
 
+// ReplaceEmitHandler replaces the emitter.
 func (km *KafkaMock) ReplaceEmitHandler(emitter EmitHandler) {
 	km.producerMock.emitter = emitter
 }

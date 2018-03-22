@@ -148,6 +148,7 @@ func WithHasher(hasher func() hash.Hash32) ProcessorOption {
 	}
 }
 
+// NilHandling defines how nil messages should be handled by the processor.
 type NilHandling int
 
 const (
@@ -239,14 +240,14 @@ func WithViewStorageBuilder(sb storage.Builder) ViewOption {
 	}
 }
 
-// WithViewConsumer replaces default view consumer.
+// WithViewConsumerBuilder replaces default view consumer.
 func WithViewConsumerBuilder(cb kafka.ConsumerBuilder) ViewOption {
 	return func(o *voptions) {
 		o.builders.consumer = cb
 	}
 }
 
-// WithViewTopicManager replaces the default topic manager.
+// WithViewTopicManagerBuilder replaces the default topic manager.
 func WithViewTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ViewOption {
 	return func(o *voptions) {
 		o.builders.topicmgr = tmb
@@ -321,7 +322,6 @@ type eoptions struct {
 	log      logger.Logger
 	clientID string
 
-	codec  Codec
 	hasher func() hash.Hash32
 
 	builders struct {
@@ -345,7 +345,7 @@ func WithEmitterClientID(clientID string) EmitterOption {
 	}
 }
 
-// WithEmitterTopicManager replaces the default topic manager builder.
+// WithEmitterTopicManagerBuilder replaces the default topic manager builder.
 func WithEmitterTopicManagerBuilder(tmb kafka.TopicManagerBuilder) EmitterOption {
 	return func(o *eoptions) {
 		o.builders.topicmgr = tmb

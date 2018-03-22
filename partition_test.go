@@ -214,7 +214,7 @@ func TestPartition_runStatelessWithError(t *testing.T) {
 	proxy.EXPECT().AddGroup()
 	proxy.EXPECT().Stop()
 	go func() {
-		err := p.start(context.Background())
+		err = p.start(context.Background())
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
@@ -534,7 +534,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	)
 
 	go func() {
-		err := p.start(context.Background())
+		err = p.start(context.Background())
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
@@ -563,7 +563,7 @@ func TestPartition_loadStatefulWithError(t *testing.T) {
 	)
 
 	go func() {
-		err := p.start(context.Background())
+		err = p.start(context.Background())
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
