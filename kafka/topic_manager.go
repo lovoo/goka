@@ -31,8 +31,7 @@ type saramaTopicManager struct {
 }
 
 // NewSaramaTopicManager creates a new topic manager using the sarama library
-func NewSaramaTopicManager(brokers []string) (TopicManager, error) {
-	config := sarama.NewConfig()
+func NewSaramaTopicManager(brokers []string, config *sarama.Config) (TopicManager, error) {
 	client, err := sarama.NewClient(brokers, config)
 	if err != nil {
 		return nil, fmt.Errorf("Error creating the kafka client: %v", err)

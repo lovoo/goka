@@ -52,7 +52,15 @@ type TopicManagerBuilder func(brokers []string) (TopicManager, error)
 // DefaultTopicManagerBuilder creates TopicManager using the Sarama library.
 // This topic manager cannot create topics.
 func DefaultTopicManagerBuilder(brokers []string) (TopicManager, error) {
-	return NewSaramaTopicManager(brokers)
+	return NewSaramaTopicManager(brokers, sarama.NewConfig())
+}
+
+// TopicManagerBuilderWithConfig creates TopicManager using the Sarama library.
+// This topic manager cannot create topics.
+func TopicManagerBuilderWithConfig(config *cluster.Config) TopicManagerBuilder {
+	return func(brokers []string) (TopicManager, error) {
+		return NewSaramaTopicManager(brokers, &config.Config)
+	}
 }
 
 // ZKTopicManagerBuilder creates a TopicManager that connects with ZooKeeper to
