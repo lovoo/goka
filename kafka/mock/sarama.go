@@ -69,6 +69,17 @@ func (_mr *_MockClientRecorder) Config() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Config")
 }
 
+func (_m *MockClient) Controller() (*sarama.Broker, error) {
+	ret := _m.ctrl.Call(_m, "Controller")
+	ret0, _ := ret[0].(*sarama.Broker)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockClientRecorder) Controller() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "Controller")
+}
+
 func (_m *MockClient) Coordinator(_param0 string) (*sarama.Broker, error) {
 	ret := _m.ctrl.Call(_m, "Coordinator", _param0)
 	ret0, _ := ret[0].(*sarama.Broker)
