@@ -7,7 +7,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/mock"
+	"github.com/lovoo/goka/tester"
 )
 
 func Test_ConsumeScalar(t *testing.T) {
@@ -28,8 +28,8 @@ func Test_ConsumeScalar(t *testing.T) {
 func Test_ConsumeScalar_Integration(t *testing.T) {
 	// ctrl := goka.NewMockController(t)
 	// defer ctrl.Finish()
-	kafkaMock := mock.NewKafkaMock(t, "consume-scalar")
-	proc, err := createProcessor(nil, goka.WithTester(kafkaMock))
+	tester := tester.New(t)
+	proc, err := createProcessor(nil, goka.WithTester(tester))
 
 	if err != nil {
 		t.Fatalf("Error creating processor: %v", err)
@@ -47,15 +47,15 @@ func Test_ConsumeScalar_Integration(t *testing.T) {
 	msg := []byte(strconv.FormatInt(1, 10))
 
 	// there is no initial value for key "foo"
-	if val := kafkaMock.ValueForKey("foo"); val != nil {
+	if val := tester.ValueForKey("foo"); val != nil {
 		t.Errorf("state was not initially empty: %v", val)
 	}
 
 	// send the message twice
-	kafkaMock.Consume("scalar", "foo", msg)
-	kafkaMock.Consume("scalar", "foo", msg)
+	tester.Consume("scalar", "foo", msg)
+	tester.Consume("scalar", "foo", msg)
 
-	value := string(kafkaMock.ValueForKey("foo").([]byte))
+	value := string(tester.ValueForKey("foo").([]byte))
 	fmt.Printf("%v\n", value)
 
 	if value != "2" {
