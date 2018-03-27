@@ -168,6 +168,25 @@ func WithNilHandling(nh NilHandling) ProcessorOption {
 	}
 }
 
+type Tester interface {
+	StorageBuilder() storage.Builder
+	ConsumerBuilder() kafka.ConsumerBuilder
+	ProducerBuilder() kafka.ProducerBuilder
+	TopicManagerBuilder() kafka.TopicManagerBuilder
+}
+
+// WithTester configures all external connections of a processor, ie, storage,
+// consumer and producer
+func WithTester(t Tester) ProcessorOption {
+	return func(o *poptions) {
+		o.builders.storage = t.StorageBuilder()
+		o.builders.consumer = t.ConsumerBuilder()
+		o.builders.producer = t.ProducerBuilder()
+		o.builders.topicmgr = t.TopicManagerBuilder()
+		o.partitionChannelSize = 0
+	}
+}
+
 func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()

@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka"
+	"github.com/lovoo/goka/mock"
 )
 
 func Test_ConsumeScalar(t *testing.T) {
@@ -27,8 +28,8 @@ func Test_ConsumeScalar(t *testing.T) {
 func Test_ConsumeScalar_Integration(t *testing.T) {
 	// ctrl := goka.NewMockController(t)
 	// defer ctrl.Finish()
-	kafkaMock := goka.NewKafkaMock(t, "consume-scalar")
-	proc, err := createProcessor(nil, kafkaMock.ProcessorOptions()...)
+	kafkaMock := mock.NewKafkaMock(t, "consume-scalar")
+	proc, err := createProcessor(nil, goka.WithTester(kafkaMock))
 
 	if err != nil {
 		t.Fatalf("Error creating processor: %v", err)

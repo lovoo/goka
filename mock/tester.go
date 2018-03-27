@@ -1,4 +1,4 @@
-package goka
+package mock
 
 import (
 	"fmt"
@@ -14,6 +14,12 @@ import (
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/storage"
 )
+
+// Codec decodes and encodes from and to []byte
+type Codec interface {
+	Encode(value interface{}) (data []byte, err error)
+	Decode(data []byte) (value interface{}, err error)
+}
 
 // EmitHandler abstracts a function that allows to overwrite kafkamock's Emit function to
 // simulate producer errors
@@ -32,8 +38,8 @@ func (gm *gomockPanicker) Fatalf(format string, args ...interface{}) {
 }
 
 // NewMockController returns a *gomock.Controller using a wrapped testing.T (or whatever)
-// which panics on a Fatalf. This is necessary when using a mock in kafkamock. Otherwise it will
-// freeze on an unexpected call.
+// which panics on a Fatalf. This is necessary when using a mock in kafkamock.
+// Otherwise it will freeze on an unexpected call.
 func NewMockController(t gomock.TestReporter) *gomock.Controller {
 	return gomock.NewController(&gomockPanicker{reporter: t})
 }
@@ -76,14 +82,14 @@ type Tester interface {
 }
 
 // NewKafkaMock returns a new testprocessor mocking every external service
-func NewKafkaMock(t Tester, groupName Group) *KafkaMock {
+func NewKafkaMock(t Tester, groupName string) *KafkaMock {
 	kafkaMock := &KafkaMock{
 		storage:        storage.NewMemory(),
 		t:              t,
 		incomingEvents: make(chan kafka.Event),
 		consumerEvents: make(chan kafka.Event),
 		handledTopics:  make(map[string]bool),
-		groupTopic:     tableName(groupName),
+		groupTopic:     fmt.Sprintf("%s-table", groupName),
 		codec:          new(codec.Bytes),
 	}
 	kafkaMock.consumerMock = newConsumerMock(kafkaMock)
@@ -122,28 +128,29 @@ func (km *KafkaMock) SetGroupTableCreator(creator func() (string, []byte)) {
 //                       option_c,
 //                       )...,
 //     )
-func (km *KafkaMock) ProcessorOptions() []ProcessorOption {
-	return []ProcessorOption{
-		WithStorageBuilder(func(topic string, partition int32) (storage.Storage, error) {
-			return km.storage, nil
-		}),
-		WithConsumerBuilder(km.consumerBuilder),
-		WithProducerBuilder(km.producerBuilder),
-		WithTopicManagerBuilder(km.topicManagerBuilder),
-		WithPartitionChannelSize(0),
+
+func (km *KafkaMock) TopicManagerBuilder() kafka.TopicManagerBuilder {
+	return func(brokers []string) (kafka.TopicManager, error) {
+		return km.topicMgrMock, nil
 	}
 }
 
-func (km *KafkaMock) topicManagerBuilder(brokers []string) (kafka.TopicManager, error) {
-	return km.topicMgrMock, nil
+func (km *KafkaMock) ConsumerBuilder() kafka.ConsumerBuilder {
+	return func(b []string, group, clientID string) (kafka.Consumer, error) {
+		return km.consumerMock, nil
+	}
 }
 
-func (km *KafkaMock) producerBuilder(b []string, cid string, hasher func() hash.Hash32) (kafka.Producer, error) {
-	return km.producerMock, nil
+func (km *KafkaMock) ProducerBuilder() kafka.ProducerBuilder {
+	return func(b []string, cid string, hasher func() hash.Hash32) (kafka.Producer, error) {
+		return km.producerMock, nil
+	}
 }
 
-func (km *KafkaMock) consumerBuilder(b []string, group, clientID string) (kafka.Consumer, error) {
-	return km.consumerMock, nil
+func (km *KafkaMock) StorageBuilder() storage.Builder {
+	return func(topic string, partition int32) (storage.Storage, error) {
+		return km.storage, nil
+	}
 }
 
 // initProtocol initiates the protocol with the client basically making the KafkaMock
