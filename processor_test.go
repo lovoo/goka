@@ -19,6 +19,7 @@ import (
 	"github.com/lovoo/goka/mock"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
+	"github.com/lovoo/goka/tester"
 
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
@@ -1393,10 +1394,10 @@ func TestProcessor_HasGetStateless(t *testing.T) {
 }
 
 func TestProcessor_StatelessContext(t *testing.T) {
-	ctrl := NewMockController(t)
+	ctrl := mock.NewMockController(t)
 	defer ctrl.Finish()
 	var (
-		km = NewKafkaMock(t, "user-reputation").SetCodec(new(codec.Bytes))
+		tester = tester.New(t).SetCodec(new(codec.Bytes))
 		//count int64
 		//wait  = make(chan bool)
 	)
@@ -1413,8 +1414,7 @@ func TestProcessor_StatelessContext(t *testing.T) {
 			"stateless-ctx",
 			Input("input-topic", new(codec.Bytes), callPersist),
 		),
-		// add kafkamock options
-		km.ProcessorOptions()...,
+		WithTester(tester),
 	)
 	ensure.Nil(t, err)
 	done := make(chan bool)
@@ -1425,7 +1425,7 @@ func TestProcessor_StatelessContext(t *testing.T) {
 	}()
 	err = doTimed(t, func() {
 		// consume a random key/message, the content doesn't matter as this should fail
-		km.ConsumeString("input-topic", "key", "msg")
+		tester.ConsumeString("input-topic", "key", "msg")
 		<-done
 	})
 	ensure.Nil(t, err)
@@ -1434,8 +1434,8 @@ func TestProcessor_StatelessContext(t *testing.T) {
 func TestProcessor_ProducerError(t *testing.T) {
 
 	t.Run("SetValue", func(t *testing.T) {
-		km := NewKafkaMock(t, "test")
-		km.ReplaceEmitHandler(func(topic, key string, value []byte) *kafka.Promise {
+		tester := tester.New(t)
+		tester.ReplaceEmitHandler(func(topic, key string, value []byte) *kafka.Promise {
 			return kafka.NewPromise().Finish(errors.New("producer error"))
 		})
 
@@ -1448,7 +1448,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 				Input("topic", new(codec.String), consume),
 				Persist(new(codec.String)),
 			),
-			km.ProcessorOptions()...,
+			WithTester(tester),
 		)
 
 		ensure.Nil(t, err)
@@ -1461,15 +1461,15 @@ func TestProcessor_ProducerError(t *testing.T) {
 			close(done)
 		}()
 
-		km.ConsumeString("topic", "key", "world")
+		tester.ConsumeString("topic", "key", "world")
 		proc.Stop()
 		<-done
 		ensure.True(t, processorErrors != nil)
 	})
 
 	t.Run("Emit", func(t *testing.T) {
-		km := NewKafkaMock(t, "test")
-		km.ReplaceEmitHandler(func(topic, key string, value []byte) *kafka.Promise {
+		tester := tester.New(t)
+		tester.ReplaceEmitHandler(func(topic, key string, value []byte) *kafka.Promise {
 			return kafka.NewPromise().Finish(errors.New("producer error"))
 		})
 
@@ -1482,7 +1482,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 				Input("topic", new(codec.String), consume),
 				Persist(new(codec.String)),
 			),
-			km.ProcessorOptions()...,
+			WithTester(tester),
 		)
 
 		ensure.Nil(t, err)
@@ -1495,7 +1495,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 			close(done)
 		}()
 
-		km.ConsumeString("topic", "key", "world")
+		tester.ConsumeString("topic", "key", "world")
 
 		proc.Stop()
 		<-done
@@ -1503,8 +1503,8 @@ func TestProcessor_ProducerError(t *testing.T) {
 	})
 
 	t.Run("Value-stateless", func(t *testing.T) {
-		km := NewKafkaMock(t, "test")
-		km.ReplaceEmitHandler(func(topic, key string, value []byte) *kafka.Promise {
+		tester := tester.New(t)
+		tester.ReplaceEmitHandler(func(topic, key string, value []byte) *kafka.Promise {
 			return kafka.NewPromise().Finish(errors.New("producer error"))
 		})
 
@@ -1519,7 +1519,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 			DefineGroup("test",
 				Input("topic", new(codec.String), consume),
 			),
-			append(km.ProcessorOptions())...,
+			WithTester(tester),
 		)
 
 		ensure.Nil(t, err)
@@ -1532,7 +1532,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 			close(done)
 		}()
 
-		km.ConsumeString("topic", "key", "world")
+		tester.ConsumeString("topic", "key", "world")
 
 		// stopping the processor. It should actually not produce results
 		proc.Stop()
@@ -1543,7 +1543,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 }
 
 func TestProcessor_consumeFail(t *testing.T) {
-	km := NewKafkaMock(t, "test")
+	tester := tester.New(t)
 
 	consume := func(ctx Context, msg interface{}) {
 		ctx.Fail(errors.New("consume-failed"))
@@ -1553,7 +1553,7 @@ func TestProcessor_consumeFail(t *testing.T) {
 		DefineGroup("test",
 			Input("topic", new(codec.String), consume),
 		),
-		append(km.ProcessorOptions())...,
+		WithTester(tester),
 	)
 
 	ensure.Nil(t, err)
@@ -1566,7 +1566,7 @@ func TestProcessor_consumeFail(t *testing.T) {
 		close(done)
 	}()
 
-	km.ConsumeString("topic", "key", "world")
+	tester.ConsumeString("topic", "key", "world")
 
 	proc.Stop()
 	<-done
@@ -1574,7 +1574,7 @@ func TestProcessor_consumeFail(t *testing.T) {
 }
 
 func TestProcessor_consumePanic(t *testing.T) {
-	km := NewKafkaMock(t, "test")
+	tester := tester.New(t)
 
 	consume := func(ctx Context, msg interface{}) {
 		panic("panicking")
@@ -1584,7 +1584,7 @@ func TestProcessor_consumePanic(t *testing.T) {
 		DefineGroup("test",
 			Input("topic", new(codec.String), consume),
 		),
-		append(km.ProcessorOptions())...,
+		WithTester(tester),
 	)
 
 	ensure.Nil(t, err)
@@ -1597,7 +1597,7 @@ func TestProcessor_consumePanic(t *testing.T) {
 		close(done)
 	}()
 
-	km.ConsumeString("topic", "key", "world")
+	tester.ConsumeString("topic", "key", "world")
 
 	proc.Stop()
 	<-done
@@ -1661,12 +1661,13 @@ func TestProcessor_consumeNil(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			km := NewKafkaMock(t, "test")
+			tester := tester.New(t)
 			proc, err := NewProcessor([]string{"broker"},
 				DefineGroup("test",
 					Input("topic", tc.codec, tc.cb),
 				),
-				append(km.ProcessorOptions(), WithNilHandling(tc.handling))...,
+				WithTester(tester),
+				WithNilHandling(tc.handling),
 			)
 
 			ensure.Nil(t, err)
@@ -1679,7 +1680,7 @@ func TestProcessor_consumeNil(t *testing.T) {
 				close(done)
 			}()
 
-			km.Consume("topic", "key", nil)
+			tester.Consume("topic", "key", nil)
 
 			proc.Stop()
 			<-done
@@ -1697,13 +1698,13 @@ func TestProcessor_failOnRecover(t *testing.T) {
 		msgToRecover    = 100
 	)
 
-	km := NewKafkaMock(t, "test")
+	tester := tester.New(t)
 
 	consume := func(ctx Context, msg interface{}) {
 		log.Println("consuming message..", ctx.Key())
 	}
 
-	km.SetGroupTableCreator(func() (string, []byte) {
+	tester.SetGroupTableCreator(func() (string, []byte) {
 		time.Sleep(10 * time.Millisecond)
 		recovered++
 		if recovered > msgToRecover {
@@ -1717,12 +1718,11 @@ func TestProcessor_failOnRecover(t *testing.T) {
 			Input("topic", new(codec.String), consume),
 			Persist(rawCodec),
 		),
-		append(km.ProcessorOptions(),
-			WithUpdateCallback(func(s storage.Storage, partition int32, key string, value []byte) error {
-				log.Printf("recovered state: %s: %s", key, string(value))
-				return nil
-			}),
-		)...,
+		WithTester(tester),
+		WithUpdateCallback(func(s storage.Storage, partition int32, key string, value []byte) error {
+			log.Printf("recovered state: %s: %s", key, string(value))
+			return nil
+		}),
 	)
 
 	ensure.Nil(t, err)

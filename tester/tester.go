@@ -1,4 +1,4 @@
-package goka
+package tester
 
 import (
 	"fmt"
@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/facebookgo/ensure"
-	"github.com/golang/mock/gomock"
 	"github.com/golang/protobuf/proto"
 
 	"github.com/lovoo/goka/codec"
@@ -15,34 +14,26 @@ import (
 	"github.com/lovoo/goka/storage"
 )
 
+// Codec decodes and encodes from and to []byte
+type Codec interface {
+	Encode(value interface{}) (data []byte, err error)
+	Decode(data []byte) (value interface{}, err error)
+}
+
 // EmitHandler abstracts a function that allows to overwrite kafkamock's Emit function to
 // simulate producer errors
 type EmitHandler func(topic string, key string, value []byte) *kafka.Promise
 
-type gomockPanicker struct {
-	reporter gomock.TestReporter
-}
+// Tester allows interacting with a test processor
+type Tester struct {
+	t T
 
-func (gm *gomockPanicker) Errorf(format string, args ...interface{}) {
-	gm.reporter.Errorf(format, args...)
-}
-func (gm *gomockPanicker) Fatalf(format string, args ...interface{}) {
-	defer panic(fmt.Sprintf(format, args...))
-	gm.reporter.Fatalf(format, args...)
-}
-
-// NewMockController returns a *gomock.Controller using a wrapped testing.T (or whatever)
-// which panics on a Fatalf. This is necessary when using a mock in kafkamock. Otherwise it will
-// freeze on an unexpected call.
-func NewMockController(t gomock.TestReporter) *gomock.Controller {
-	return gomock.NewController(&gomockPanicker{reporter: t})
-}
-
-// KafkaMock allows interacting with a test processor
-type KafkaMock struct {
-	t       Tester
-	storage storage.Storage
-
+	consumerMock   *consumerMock
+	producerMock   *producerMock
+	topicMgrMock   *topicMgrMock
+	emitHandler    EmitHandler
+	storage        storage.Storage
+	codec          Codec
 	offset         int64
 	tableOffset    int64
 	incomingEvents chan kafka.Event
@@ -58,97 +49,90 @@ type KafkaMock struct {
 	groupTableCreator func() (string, []byte)
 	callQueue         []func()
 	wg                sync.WaitGroup
-
-	consumerMock *consumerMock
-
-	producerMock *producerMock
-	emitHandler  EmitHandler
-	topicMgrMock *topicMgrMock
-	codec        Codec
 }
 
-// Tester abstracts the interface we assume from the test case.
+// T abstracts the interface we assume from the test case.
 // Will most likely be *testing.T
-type Tester interface {
+type T interface {
 	Errorf(format string, args ...interface{})
 	Fatalf(format string, args ...interface{})
 	Fatal(a ...interface{})
 }
 
-// NewKafkaMock returns a new testprocessor mocking every external service
-func NewKafkaMock(t Tester, groupName Group) *KafkaMock {
-	kafkaMock := &KafkaMock{
-		storage:        storage.NewMemory(),
-		t:              t,
-		incomingEvents: make(chan kafka.Event),
-		consumerEvents: make(chan kafka.Event),
-		handledTopics:  make(map[string]bool),
-		groupTopic:     tableName(groupName),
-		codec:          new(codec.Bytes),
-	}
-	kafkaMock.consumerMock = newConsumerMock(kafkaMock)
-	kafkaMock.producerMock = newProducerMock(kafkaMock.handleEmit)
-	kafkaMock.topicMgrMock = newTopicMgrMock(kafkaMock)
-
-	return kafkaMock
-}
-
-// SetCodec sets the codec for the group table.
-func (km *KafkaMock) SetCodec(codec Codec) *KafkaMock {
-	km.codec = codec
-	return km
-}
-
-// SetGroupTableCreator sets a creator for the group table.
-func (km *KafkaMock) SetGroupTableCreator(creator func() (string, []byte)) {
-	km.groupTableCreator = creator
-}
-
-// ProcessorOptions returns the options that must be passed to NewProcessor
-// to use the Mock. It essentially replaces the consumer/producer/topicmanager with a mock.
-// For convenience, the storage is also mocked.
+// New returns a new testprocessor mocking every external service
+// It should be passed as goka.WithTester to goka.NewProcessor. It essentially
+// replaces the storage/consumer/producer/topicmanager with a mock.
 // For example, a normal call to NewProcessor like this
-//     NewProcessor(brokers, group, subscriptions,
+//     goka.NewProcessor(brokers, group, subscriptions,
 //                       option_a,
 //                       option_b,
 //                       option_c,
 //     )
 // would become in the unit test:
-// kafkaMock := NewKafkaMock(t)
+// tester := tester.New(t)
 // NewProcessor(brokers, group, subscriptions,
-//                       append(kafkaMock.ProcessorOptions(),
 //                       option_a,
 //                       option_b,
 //                       option_c,
-//                       )...,
+//                       WithTester(tester),
 //     )
-func (km *KafkaMock) ProcessorOptions() []ProcessorOption {
-	return []ProcessorOption{
-		WithStorageBuilder(func(topic string, partition int32) (storage.Storage, error) {
-			return km.storage, nil
-		}),
-		WithConsumerBuilder(km.consumerBuilder),
-		WithProducerBuilder(km.producerBuilder),
-		WithTopicManagerBuilder(km.topicManagerBuilder),
-		WithPartitionChannelSize(0),
+func New(t T) *Tester {
+	tester := &Tester{
+		storage:        storage.NewMemory(),
+		t:              t,
+		incomingEvents: make(chan kafka.Event),
+		consumerEvents: make(chan kafka.Event),
+		handledTopics:  make(map[string]bool),
+		codec:          new(codec.Bytes),
+	}
+	tester.consumerMock = newConsumerMock(tester)
+	tester.producerMock = newProducerMock(tester.handleEmit)
+	tester.topicMgrMock = newTopicMgrMock(tester)
+
+	return tester
+}
+
+// SetCodec sets the codec for the group table.
+func (km *Tester) SetCodec(codec Codec) *Tester {
+	km.codec = codec
+	return km
+}
+
+// SetGroupTableCreator sets a creator for the group table.
+func (km *Tester) SetGroupTableCreator(creator func() (string, []byte)) {
+	km.groupTableCreator = creator
+}
+
+func (km *Tester) TopicManagerBuilder() kafka.TopicManagerBuilder {
+	return func(brokers []string) (kafka.TopicManager, error) {
+		return km.topicMgrMock, nil
 	}
 }
 
-func (km *KafkaMock) topicManagerBuilder(brokers []string) (kafka.TopicManager, error) {
-	return km.topicMgrMock, nil
+func (km *Tester) ConsumerBuilder() kafka.ConsumerBuilder {
+	return func(b []string, group, clientID string) (kafka.Consumer, error) {
+		if km.groupTopic == "" {
+			km.groupTopic = fmt.Sprintf("%s-table", group)
+		}
+		return km.consumerMock, nil
+	}
 }
 
-func (km *KafkaMock) producerBuilder(b []string, cid string, hasher func() hash.Hash32) (kafka.Producer, error) {
-	return km.producerMock, nil
+func (km *Tester) ProducerBuilder() kafka.ProducerBuilder {
+	return func(b []string, cid string, hasher func() hash.Hash32) (kafka.Producer, error) {
+		return km.producerMock, nil
+	}
 }
 
-func (km *KafkaMock) consumerBuilder(b []string, group, clientID string) (kafka.Consumer, error) {
-	return km.consumerMock, nil
+func (km *Tester) StorageBuilder() storage.Builder {
+	return func(topic string, partition int32) (storage.Storage, error) {
+		return km.storage, nil
+	}
 }
 
 // initProtocol initiates the protocol with the client basically making the KafkaMock
 // usable.
-func (km *KafkaMock) initProtocol() {
+func (km *Tester) initProtocol() {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("tester: panic initProtocol: %+v", r)
@@ -181,7 +165,7 @@ func (km *KafkaMock) initProtocol() {
 }
 
 // ConsumeProto simulates a message on kafka in a topic with a key.
-func (km *KafkaMock) ConsumeProto(topic string, key string, msg proto.Message) {
+func (km *Tester) ConsumeProto(topic string, key string, msg proto.Message) {
 	data, err := proto.Marshal(msg)
 	if err != nil && km.t != nil {
 		km.t.Errorf("Error marshaling message for consume: %v", err)
@@ -190,12 +174,12 @@ func (km *KafkaMock) ConsumeProto(topic string, key string, msg proto.Message) {
 }
 
 // ConsumeString simulates a message with a string payload.
-func (km *KafkaMock) ConsumeString(topic string, key string, msg string) {
+func (km *Tester) ConsumeString(topic string, key string, msg string) {
 	km.ConsumeData(topic, key, []byte(msg))
 }
 
 // Consume simulates a message with a byte slice payload.
-func (km *KafkaMock) Consume(topic string, key string, msg []byte) {
+func (km *Tester) Consume(topic string, key string, msg []byte) {
 	km.ConsumeData(topic, key, msg)
 }
 
@@ -204,7 +188,7 @@ func (km *KafkaMock) Consume(topic string, key string, msg []byte) {
 // ConsumeData is a helper function consuming marshalled data. This function is
 // used by ConsumeProto by the test case as well as any emit calls of the
 // processor being tested.
-func (km *KafkaMock) ConsumeData(topic string, key string, data []byte) {
+func (km *Tester) ConsumeData(topic string, key string, data []byte) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("tester: panic ConsumeData: %+v\n", r)
@@ -232,14 +216,14 @@ func (km *KafkaMock) ConsumeData(topic string, key string, data []byte) {
 	km.incomingEvents <- &kafka.NOP{Partition: -1}
 }
 
-func (km *KafkaMock) consumeError(err error) {
+func (km *Tester) consumeError(err error) {
 	km.incomingEvents <- &kafka.Error{Err: err}
 	// no need to send NOP (actuallly we can't, otherwise we might panic
 	// as the channels are already closed due to the error first).
 }
 
 // ValueForKey attempts to get a value from KafkaMock's storage.
-func (km *KafkaMock) ValueForKey(key string) interface{} {
+func (km *Tester) ValueForKey(key string) interface{} {
 	item, err := km.storage.Get(key)
 	ensure.Nil(km.t, err)
 	if item == nil {
@@ -251,7 +235,7 @@ func (km *KafkaMock) ValueForKey(key string) interface{} {
 }
 
 // SetValue sets a value in the storage.
-func (km *KafkaMock) SetValue(key string, value interface{}) {
+func (km *Tester) SetValue(key string, value interface{}) {
 	data, err := km.codec.Encode(value)
 	ensure.Nil(km.t, err)
 	err = km.storage.Set(key, data)
@@ -259,13 +243,13 @@ func (km *KafkaMock) SetValue(key string, value interface{}) {
 }
 
 // ReplaceEmitHandler replaces the emitter.
-func (km *KafkaMock) ReplaceEmitHandler(emitter EmitHandler) {
+func (km *Tester) ReplaceEmitHandler(emitter EmitHandler) {
 	km.producerMock.emitter = emitter
 }
 
 // ExpectEmit ensures a message exists in passed topic and key. The message may be
 // inspected/unmarshalled by a passed expecter function.
-func (km *KafkaMock) ExpectEmit(topic string, key string, expecter func(value []byte)) {
+func (km *Tester) ExpectEmit(topic string, key string, expecter func(value []byte)) {
 	for i := 0; i < len(km.emitted); i++ {
 		msg := km.emitted[i]
 		if msg.Topic != topic || msg.Key != key {
@@ -285,7 +269,7 @@ func (km *KafkaMock) ExpectEmit(topic string, key string, expecter func(value []
 
 // ExpectAllEmitted calls passed expected-emit-handler function for all emitted values and clears the
 // emitted values
-func (km *KafkaMock) ExpectAllEmitted(handler func(topic string, key string, value []byte)) {
+func (km *Tester) ExpectAllEmitted(handler func(topic string, key string, value []byte)) {
 	for _, emitted := range km.emitted {
 		handler(emitted.Topic, emitted.Key, emitted.Value)
 	}
@@ -298,7 +282,7 @@ func (km *KafkaMock) ExpectAllEmitted(handler func(topic string, key string, val
 // Clears the list of emits either case.
 // This should always be called at the end of a test case to make sure
 // no emits of prior test cases are stuck in the list and mess with the test results.
-func (km *KafkaMock) Finish(fail bool) {
+func (km *Tester) Finish(fail bool) {
 	if len(km.emitted) > 0 {
 		if fail {
 			km.t.Errorf("The following emits are still in the list, although it's supposed to be empty:")
@@ -313,7 +297,7 @@ func (km *KafkaMock) Finish(fail bool) {
 // handleEmit handles an Emit-call on the producerMock.
 // This takes care of queueing calls
 // to handled topics or putting the emitted messages in the emitted-messages-list
-func (km *KafkaMock) handleEmit(topic string, key string, value []byte) *kafka.Promise {
+func (km *Tester) handleEmit(topic string, key string, value []byte) *kafka.Promise {
 	promise := kafka.NewPromise()
 	if topic == km.groupTopic {
 		return promise.Finish(nil)
@@ -335,7 +319,7 @@ func (km *KafkaMock) handleEmit(topic string, key string, value []byte) *kafka.P
 }
 
 // creates a new call being executed after the consume function has run.
-func (km *KafkaMock) newCall(call func()) {
+func (km *Tester) newCall(call func()) {
 	km.wg.Add(1)
 	km.callQueue = append(km.callQueue, call)
 }
@@ -343,7 +327,7 @@ func (km *KafkaMock) newCall(call func()) {
 // executes all calls on the call queue.
 // Executing calls may put new calls on the queue (if they emit something),
 // so this function executes until no further calls are being made.
-func (km *KafkaMock) makeCalls() {
+func (km *Tester) makeCalls() {
 	go func() {
 		for len(km.callQueue) > 0 {
 			call := km.callQueue[0]
@@ -356,18 +340,18 @@ func (km *KafkaMock) makeCalls() {
 }
 
 type consumerMock struct {
-	kafkaMock *KafkaMock
+	tester *Tester
 }
 
-func newConsumerMock(kafkaMock *KafkaMock) *consumerMock {
+func newConsumerMock(tester *Tester) *consumerMock {
 	return &consumerMock{
-		kafkaMock: kafkaMock,
+		tester: tester,
 	}
 }
 
 // Events returns the event channel of the consumer mock
 func (km *consumerMock) Events() <-chan kafka.Event {
-	return km.kafkaMock.consumerEvents
+	return km.tester.consumerEvents
 }
 
 // Subscribe marks the consumer to subscribe to passed topics.
@@ -375,9 +359,9 @@ func (km *consumerMock) Events() <-chan kafka.Event {
 // pass emitted messages back to the processor.
 func (km *consumerMock) Subscribe(topics map[string]int64) error {
 	for topic := range topics {
-		km.kafkaMock.handledTopics[topic] = true
+		km.tester.handledTopics[topic] = true
 	}
-	go km.kafkaMock.initProtocol()
+	go km.tester.initProtocol()
 	return nil
 }
 
@@ -407,14 +391,14 @@ func (km *consumerMock) RemovePartition(topic string, partition int32) error {
 // Close closes the consumer.
 // No action required in the mock.
 func (km *consumerMock) Close() error {
-	close(km.kafkaMock.incomingEvents)
-	close(km.kafkaMock.consumerEvents)
+	close(km.tester.incomingEvents)
+	close(km.tester.consumerEvents)
 	fmt.Println("closed consumer mock")
 	return nil
 }
 
 type topicMgrMock struct {
-	kafkaMock *KafkaMock
+	tester *Tester
 }
 
 // EnsureTableExists checks that a table (log-compacted topic) exists, or create one if possible
@@ -430,7 +414,7 @@ func (tm *topicMgrMock) EnsureStreamExists(topic string, npar int) error {
 // Partitions returns the number of partitions of a topic, that are assigned to the running
 // instance, i.e. it doesn't represent all partitions of a topic.
 func (tm *topicMgrMock) Partitions(topic string) ([]int32, error) {
-	tm.kafkaMock.handledTopics[topic] = true
+	tm.tester.handledTopics[topic] = true
 	return []int32{0}, nil
 }
 
@@ -440,9 +424,9 @@ func (tm *topicMgrMock) Close() error {
 	return nil
 }
 
-func newTopicMgrMock(kafkaMock *KafkaMock) *topicMgrMock {
+func newTopicMgrMock(tester *Tester) *topicMgrMock {
 	return &topicMgrMock{
-		kafkaMock: kafkaMock,
+		tester: tester,
 	}
 }
 

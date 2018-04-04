@@ -37,7 +37,9 @@ func createProcessor(brokers []string, extraopts ...goka.ProcessorOption) (*goka
 		goka.DefineGroup(
 			goka.Group("consume-scalar"),
 			goka.Persist(new(codec.Int64)),
-			goka.Input(goka.Stream("scalar"), new(codec.Int64), ConsumeScalarState),
+			goka.Input(goka.Stream("scalar-state"), new(codec.Int64), ConsumeScalarState),
+			goka.Input(goka.Stream("scalar"), new(codec.Int64), ConsumeScalar),
+			goka.Output(goka.Stream("sink"), new(codec.Int64)),
 		),
 		extraopts...,
 	)

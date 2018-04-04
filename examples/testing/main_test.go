@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka"
+	"github.com/lovoo/goka/tester"
 )
 
 func Test_ConsumeScalar(t *testing.T) {
@@ -27,8 +28,8 @@ func Test_ConsumeScalar(t *testing.T) {
 func Test_ConsumeScalar_Integration(t *testing.T) {
 	// ctrl := goka.NewMockController(t)
 	// defer ctrl.Finish()
-	kafkaMock := goka.NewKafkaMock(t, "consume-scalar")
-	proc, err := createProcessor(nil, kafkaMock.ProcessorOptions()...)
+	tester := tester.New(t)
+	proc, err := createProcessor(nil, goka.WithTester(tester))
 
 	if err != nil {
 		t.Fatalf("Error creating processor: %v", err)
@@ -46,20 +47,38 @@ func Test_ConsumeScalar_Integration(t *testing.T) {
 	msg := []byte(strconv.FormatInt(1, 10))
 
 	// there is no initial value for key "foo"
-	if val := kafkaMock.ValueForKey("foo"); val != nil {
+	if val := tester.ValueForKey("foo"); val != nil {
 		t.Errorf("state was not initially empty: %v", val)
 	}
 
 	// send the message twice
-	kafkaMock.Consume("scalar", "foo", msg)
-	kafkaMock.Consume("scalar", "foo", msg)
+	tester.Consume("scalar-state", "foo", msg)
+	tester.Consume("scalar-state", "foo", msg)
 
-	value := string(kafkaMock.ValueForKey("foo").([]byte))
+	fooByte, isByte := tester.ValueForKey("foo").([]byte)
+	if !isByte {
+		t.Errorf("state does not exist or is not []byte")
+	}
+	value := string(fooByte)
 	fmt.Printf("%v\n", value)
 
 	if value != "2" {
 		t.Errorf("Expected value %s, got %s", "2", value)
 	}
+
+	tester.Consume("scalar", "somekey", msg)
+	var (
+		parsed   int64
+		parseErr error
+	)
+	// expect that a value was emitted
+	tester.ExpectEmit("sink", "outgoing", func(value []byte) {
+		parsed, parseErr = strconv.ParseInt(string(value), 10, 64)
+	})
+	if parseErr != nil || parsed != 2 {
+		panic(fmt.Errorf("parsing emitted message failed or had a wrong value (%d): %v", parsed, parseErr))
+	}
+	tester.Finish(true)
 
 	proc.Stop()
 	<-done
