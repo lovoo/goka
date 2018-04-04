@@ -52,15 +52,33 @@ func Test_ConsumeScalar_Integration(t *testing.T) {
 	}
 
 	// send the message twice
-	tester.Consume("scalar", "foo", msg)
-	tester.Consume("scalar", "foo", msg)
+	tester.Consume("scalar-state", "foo", msg)
+	tester.Consume("scalar-state", "foo", msg)
 
-	value := string(tester.ValueForKey("foo").([]byte))
+	fooByte, isByte := tester.ValueForKey("foo").([]byte)
+	if !isByte {
+		t.Errorf("state does not exist or is not []byte")
+	}
+	value := string(fooByte)
 	fmt.Printf("%v\n", value)
 
 	if value != "2" {
 		t.Errorf("Expected value %s, got %s", "2", value)
 	}
+
+	tester.Consume("scalar", "somekey", msg)
+	var (
+		parsed   int64
+		parseErr error
+	)
+	// expect that a value was emitted
+	tester.ExpectEmit("sink", "outgoing", func(value []byte) {
+		parsed, parseErr = strconv.ParseInt(string(value), 10, 64)
+	})
+	if parseErr != nil || parsed != 2 {
+		panic(fmt.Errorf("parsing emitted message failed or had a wrong value (%d): %v", parsed, parseErr))
+	}
+	tester.Finish(true)
 
 	proc.Stop()
 	<-done
