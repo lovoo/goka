@@ -55,3 +55,34 @@ func TestMultiIterator(t *testing.T) {
 	}
 	ensure.DeepEqual(t, total, 3, "not enough element found in iter seek")
 }
+
+func TestMultiIteratorOneValue(t *testing.T) {
+	numStorages := 3
+
+	storages := make([]Storage, numStorages)
+	expected := map[string]string{}
+
+	// first two storages are empty
+	storages[0] = NewMemory()
+	storages[1] = NewMemory()
+
+	// add one value to the last one
+	storages[numStorages-1] = NewMemory()
+	key := fmt.Sprintf("storage-%d", numStorages-1)
+	val := fmt.Sprintf("value-%d", 1)
+	expected[key] = val
+	storages[numStorages-1].Set(key, []byte(val))
+
+	iters := make([]Iterator, len(storages))
+	for i := range storages {
+		iter, err := storages[i].Iterator()
+		ensure.Nil(t, err)
+		iters[i] = iter
+	}
+
+	iter := NewMultiIterator(iters)
+	k := []byte("storage-2")
+	ensure.True(t, iter.Next(), "Iterator should have a value")
+	ensure.DeepEqual(t, iter.Key(), k, "key mismatch")
+	ensure.False(t, iter.Next())
+}
