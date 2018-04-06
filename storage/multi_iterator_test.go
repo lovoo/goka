@@ -86,3 +86,49 @@ func TestMultiIteratorOneValue(t *testing.T) {
 	ensure.DeepEqual(t, iter.Key(), k, "key mismatch")
 	ensure.False(t, iter.Next())
 }
+
+func TestMultiIteratorMixedValues(t *testing.T) {
+	storages := make([]Storage, 3)
+	var expected []string
+	n := 0
+
+	// first storage has 0 values
+	storages[0] = NewMemory()
+
+	// second storage has two values
+	storages[1] = NewMemory()
+	for i := 0; i < 2; i++ {
+		key := fmt.Sprintf("key-%d", n)
+		val := fmt.Sprintf("value-%d", n)
+		n++
+		expected = append(expected, val)
+		storages[1].Set(key, []byte(val))
+	}
+
+	// third storage has three values
+	storages[2] = NewMemory()
+	for i := 0; i < 3; i++ {
+		key := fmt.Sprintf("key-%d", n)
+		val := fmt.Sprintf("value-%d", n)
+		n++
+		expected = append(expected, val)
+		storages[2].Set(key, []byte(val))
+	}
+
+	iters := make([]Iterator, len(storages))
+	for i := range storages {
+		iter, err := storages[i].Iterator()
+		ensure.Nil(t, err)
+		iters[i] = iter
+	}
+
+	iter := NewMultiIterator(iters)
+	count := 0
+	for iter.Next() {
+		val, err := iter.Value()
+		ensure.Nil(t, err)
+		ensure.DeepEqual(t, expected[count], string(val))
+		count++
+	}
+	ensure.DeepEqual(t, count, len(expected))
+}
