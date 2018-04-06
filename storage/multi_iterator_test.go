@@ -89,18 +89,18 @@ func TestMultiIteratorMixedValues(t *testing.T) {
 	var expected []string
 	n := 0
 
-	// first storage has 0 values
+	// first storage has two values
 	storages[0] = NewMemory()
-
-	// second storage has two values
-	storages[1] = NewMemory()
 	for i := 0; i < 2; i++ {
 		key := fmt.Sprintf("key-%d", n)
 		val := fmt.Sprintf("value-%d", n)
 		n++
 		expected = append(expected, val)
-		storages[1].Set(key, []byte(val))
+		storages[0].Set(key, []byte(val))
 	}
+
+	// second storage has 0 values
+	storages[1] = NewMemory()
 
 	// third storage has three values
 	storages[2] = NewMemory()
