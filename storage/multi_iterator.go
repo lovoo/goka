@@ -20,9 +20,7 @@ func (m *multiIterator) Next() (next bool) {
 		if next {
 			break
 		}
-		m.current++
 	}
-
 	return next
 }
 
