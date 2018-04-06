@@ -58,9 +58,7 @@ func TestMultiIterator(t *testing.T) {
 
 func TestMultiIteratorOneValue(t *testing.T) {
 	numStorages := 3
-
 	storages := make([]Storage, numStorages)
-	expected := map[string]string{}
 
 	// first two storages are empty
 	storages[0] = NewMemory()
@@ -70,7 +68,6 @@ func TestMultiIteratorOneValue(t *testing.T) {
 	storages[numStorages-1] = NewMemory()
 	key := fmt.Sprintf("storage-%d", numStorages-1)
 	val := fmt.Sprintf("value-%d", 1)
-	expected[key] = val
 	storages[numStorages-1].Set(key, []byte(val))
 
 	iters := make([]Iterator, len(storages))
