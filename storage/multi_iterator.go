@@ -14,13 +14,13 @@ func NewMultiIterator(iters []Iterator) Iterator {
 	return &multiIterator{current: 0, iters: iters}
 }
 
-func (m *multiIterator) Next() bool {
-	next := m.iters[m.current].Next()
-	if !next && len(m.iters)-1 > m.current {
-		m.current++
+func (m *multiIterator) Next() (next bool) {
+	for ; m.current < len(m.iters); m.current++ {
 		next = m.iters[m.current].Next()
+		if next {
+			break
+		}
 	}
-
 	return next
 }
 
