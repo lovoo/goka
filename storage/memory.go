@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
@@ -50,7 +51,7 @@ func (i *memiter) Seek(key []byte) bool {
 	seek := make(map[string][]byte)
 	keys := []string{}
 	for k, v := range i.storage {
-		if bytes.ContainsAny(key, k) {
+		if strings.Contains(k, string(key)) {
 			keys = append(keys, k)
 			seek[k] = v
 		}
