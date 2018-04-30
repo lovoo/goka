@@ -1,11 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
@@ -60,16 +58,9 @@ func runProcessor() {
 	if err != nil {
 		log.Fatalf("error creating processor: %v", err)
 	}
-	go func() {
-		if err = p.Start(); err != nil {
-			log.Fatalf("error running processor: %v", err)
-		}
-	}()
-
-	wait := make(chan os.Signal, 1)
-	signal.Notify(wait, syscall.SIGINT, syscall.SIGTERM)
-	<-wait   // wait for SIGINT/SIGTERM
-	p.Stop() // gracefully stop processor
+	if err = p.Run(context.Background()); err != nil {
+		log.Fatalf("error running processor: %v", err)
+	}
 }
 
 func main() {

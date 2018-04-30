@@ -77,7 +77,7 @@ update it in our group table (10) by calling `ctx.SetValue(u)`.
 We conclude process() with a print statement showing message’s content, the
 current count of the user, and the user ID fetched with ctx.Key().
 
-The context interface never returns errors to the callbacks. Instead, if an error is encountered while executing the context functions, the processor instance is stopped and its Start() method returns an error.
+The context interface never returns errors to the callbacks. Instead, if an error is encountered while executing the context functions, the processor instance is stopped and its Run() method returns an error.
 
 
 We configure the processor using `goka.DefineGroup`, which we later
@@ -128,8 +128,7 @@ func runView() {
 	if err != nil {
 		panic(err)
 	}
-	go view.Start()
-	defer view.Stop()
+	go view.Run(context.Background())
 
 	root := mux.NewRouter()
 	root.HandleFunc("/{key}", func(w http.ResponseWriter, r *http.Request) {

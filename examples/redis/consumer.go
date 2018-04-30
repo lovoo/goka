@@ -40,7 +40,6 @@ func Consume(pub Publisher, brokers []string, group string, stream string, store
 	if err != nil {
 		return err
 	}
-	defer processor.Stop()
 
-	return processor.Start()
+	return processor.Run(context.Background())
 }

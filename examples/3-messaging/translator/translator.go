@@ -1,6 +1,8 @@
 package translator
 
 import (
+	"context"
+
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
 )
@@ -19,14 +21,16 @@ func translate(ctx goka.Context, msg interface{}) {
 	ctx.SetValue(msg.(string))
 }
 
-func Run(brokers []string) {
-	g := goka.DefineGroup(group,
-		goka.Input(Stream, new(ValueCodec), translate),
-		goka.Persist(new(ValueCodec)),
-	)
-	if p, err := goka.NewProcessor(brokers, g); err != nil {
-		panic(err)
-	} else if err = p.Start(); err != nil {
-		panic(err)
+func Run(ctx context.Context, brokers []string) func() error {
+	return func() error {
+		g := goka.DefineGroup(group,
+			goka.Input(Stream, new(ValueCodec), translate),
+			goka.Persist(new(ValueCodec)),
+		)
+		p, err := goka.NewProcessor(brokers, g)
+		if err != nil {
+			return err
+		}
+		return p.Run(ctx)
 	}
 }

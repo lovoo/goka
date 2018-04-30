@@ -65,6 +65,7 @@ To locally start a dockerized Zookeeper and Kafka instances, execute `make start
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -124,8 +125,11 @@ func runProcessor() {
 	if err != nil {
 		log.Fatalf("error creating processor: %v", err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan bool)
 	go func() {
-		if err = p.Start(); err != nil {
+		defer close(done)
+		if err = p.Run(ctx); err != nil {
 			log.Fatalf("error running processor: %v", err)
 		}
 	}()
@@ -133,7 +137,8 @@ func runProcessor() {
 	wait := make(chan os.Signal, 1)
 	signal.Notify(wait, syscall.SIGINT, syscall.SIGTERM)
 	<-wait   // wait for SIGINT/SIGTERM
-	p.Stop() // gracefully stop processor
+	cancel() // gracefully stop processor
+	<-done
 }
 
 func main() {

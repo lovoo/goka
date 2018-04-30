@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lovoo/goka"
@@ -51,8 +52,7 @@ func main() {
 		panic(err)
 	}
 
-	errs := proc.Start()
-	if errs != nil {
+	if errs := proc.Run(context.Background()); errs != nil {
 		fmt.Printf("Error executing processor: %v", errs)
 	}
 }

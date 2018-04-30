@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/lovoo/goka"
@@ -41,14 +42,16 @@ func collect(ctx goka.Context, msg interface{}) {
 	ctx.SetValue(ml)
 }
 
-func Run(brokers []string) {
-	g := goka.DefineGroup(group,
-		goka.Input(messaging.ReceivedStream, new(messaging.MessageCodec), collect),
-		goka.Persist(new(MessageListCodec)),
-	)
-	if p, err := goka.NewProcessor(brokers, g); err != nil {
-		panic(err)
-	} else if err = p.Start(); err != nil {
-		panic(err)
+func Run(ctx context.Context, brokers []string) func() error {
+	return func() error {
+		g := goka.DefineGroup(group,
+			goka.Input(messaging.ReceivedStream, new(messaging.MessageCodec), collect),
+			goka.Persist(new(MessageListCodec)),
+		)
+		p, err := goka.NewProcessor(brokers, g)
+		if err != nil {
+			return err
+		}
+		return p.Run(ctx)
 	}
 }

@@ -1,6 +1,7 @@
 package detector
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/lovoo/goka"
@@ -48,38 +49,41 @@ func detectSpammer(ctx goka.Context, c *Counters) bool {
 	return total >= minMessages && rate >= maxRate
 }
 
-func Run(brokers []string) {
-	g := goka.DefineGroup(group,
-		goka.Input(messaging.SentStream, new(messaging.MessageCodec), func(ctx goka.Context, msg interface{}) {
-			c := getValue(ctx)
-			c.Sent++
-			ctx.SetValue(c)
+func Run(ctx context.Context, brokers []string) func() error {
+	return func() error {
+		g := goka.DefineGroup(group,
+			goka.Input(messaging.SentStream, new(messaging.MessageCodec), func(ctx goka.Context, msg interface{}) {
+				c := getValue(ctx)
+				c.Sent++
+				ctx.SetValue(c)
 
-			// check if sender is a spammer
-			if detectSpammer(ctx, c) {
-				ctx.Emit(blocker.Stream, ctx.Key(), new(blocker.BlockEvent))
-			}
+				// check if sender is a spammer
+				if detectSpammer(ctx, c) {
+					ctx.Emit(blocker.Stream, ctx.Key(), new(blocker.BlockEvent))
+				}
 
-			// Loop to receiver
-			m := msg.(*messaging.Message)
-			ctx.Loopback(m.To, m)
-		}),
-		goka.Loop(new(messaging.MessageCodec), func(ctx goka.Context, msg interface{}) {
-			c := getValue(ctx)
-			c.Received++
-			ctx.SetValue(c)
+				// Loop to receiver
+				m := msg.(*messaging.Message)
+				ctx.Loopback(m.To, m)
+			}),
+			goka.Loop(new(messaging.MessageCodec), func(ctx goka.Context, msg interface{}) {
+				c := getValue(ctx)
+				c.Received++
+				ctx.SetValue(c)
 
-			// check if receiver is a spammer
-			if detectSpammer(ctx, c) {
-				ctx.Emit(blocker.Stream, ctx.Key(), new(blocker.BlockEvent))
-			}
-		}),
-		goka.Output(blocker.Stream, new(blocker.BlockEventCodec)),
-		goka.Persist(new(CountersCodec)),
-	)
-	if p, err := goka.NewProcessor(brokers, g); err != nil {
-		panic(err)
-	} else if err = p.Start(); err != nil {
-		panic(err)
+				// check if receiver is a spammer
+				if detectSpammer(ctx, c) {
+					ctx.Emit(blocker.Stream, ctx.Key(), new(blocker.BlockEvent))
+				}
+			}),
+			goka.Output(blocker.Stream, new(blocker.BlockEventCodec)),
+			goka.Persist(new(CountersCodec)),
+		)
+		p, err := goka.NewProcessor(brokers, g)
+		if err != nil {
+			return err
+		}
+
+		return p.Run(ctx)
 	}
 }

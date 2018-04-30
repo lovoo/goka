@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/lovoo/goka/examples/3-messaging/detector"
 	"github.com/lovoo/goka/examples/3-messaging/filter"
 	"github.com/lovoo/goka/examples/3-messaging/translator"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -26,33 +28,37 @@ var (
 
 func main() {
 	flag.Parse()
+	ctx, cancel := context.WithCancel(context.Background())
+	grp, ctx := errgroup.WithContext(ctx)
+
 	if *runCollector {
 		log.Println("starting collector")
-		go collector.Run(brokers)
+		grp.Go(collector.Run(ctx, brokers))
 	}
 	if *runFilter {
 		log.Println("starting filter")
-		go filter.Run(brokers)
+		grp.Go(filter.Run(ctx, brokers))
 	}
 	if *runBlocker {
 		log.Println("starting blocker")
-		go blocker.Run(brokers)
+		grp.Go(blocker.Run(ctx, brokers))
 	}
 	if *runDetector {
 		log.Println("starting detector")
-		go detector.Run(brokers)
+		grp.Go(detector.Run(ctx, brokers))
 	}
 	if *runTranslator {
 		log.Println("starting translator")
-		go translator.Run(brokers)
+		grp.Go(translator.Run(ctx, brokers))
 	}
 
 	// Wait for SIGINT/SIGTERM
 	waiter := make(chan os.Signal, 1)
 	signal.Notify(waiter, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case signal := <-waiter:
-		log.Printf("Got interrupted by %v", signal)
+	<-waiter
+	cancel()
+	if err := grp.Wait(); err != nil {
+		log.Println(err)
 	}
+	log.Println("done")
 }

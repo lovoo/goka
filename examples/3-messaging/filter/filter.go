@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"context"
 	"strings"
 
 	"github.com/lovoo/goka"
@@ -40,16 +41,18 @@ func translate(ctx goka.Context, m *messaging.Message) *messaging.Message {
 	}
 }
 
-func Run(brokers []string) {
-	g := goka.DefineGroup(group,
-		goka.Input(messaging.SentStream, new(messaging.MessageCodec), filter),
-		goka.Output(messaging.ReceivedStream, new(messaging.MessageCodec)),
-		goka.Join(blocker.Table, new(blocker.BlockValueCodec)),
-		goka.Lookup(translator.Table, new(translator.ValueCodec)),
-	)
-	if p, err := goka.NewProcessor(brokers, g); err != nil {
-		panic(err)
-	} else if err = p.Start(); err != nil {
-		panic(err)
+func Run(ctx context.Context, brokers []string) func() error {
+	return func() error {
+		g := goka.DefineGroup(group,
+			goka.Input(messaging.SentStream, new(messaging.MessageCodec), filter),
+			goka.Output(messaging.ReceivedStream, new(messaging.MessageCodec)),
+			goka.Join(blocker.Table, new(blocker.BlockValueCodec)),
+			goka.Lookup(translator.Table, new(translator.ValueCodec)),
+		)
+		p, err := goka.NewProcessor(brokers, g)
+		if err != nil {
+			return err
+		}
+		return p.Run(ctx)
 	}
 }

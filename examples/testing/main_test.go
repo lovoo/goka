@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"testing"
@@ -35,8 +36,9 @@ func Test_ConsumeScalar_Integration(t *testing.T) {
 		t.Fatalf("Error creating processor: %v", err)
 	}
 	done := make(chan int, 0)
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		errs := proc.Start()
+		errs := proc.Run(ctx)
 		if errs != nil {
 			t.Errorf("Error executing processor: %v", err)
 		}
@@ -80,6 +82,6 @@ func Test_ConsumeScalar_Integration(t *testing.T) {
 	}
 	tester.Finish(true)
 
-	proc.Stop()
+	cancel()
 	<-done
 }

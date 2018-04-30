@@ -29,7 +29,7 @@ monitorServer.AttachProcessor(proc)
 
 Ok, then let's start the processor and the server with
 ```go
-go proc.Start()
+go proc.Run(context.Background())
 http.ListenAndServe(":9095", root)
 ```
 
