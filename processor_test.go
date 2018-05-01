@@ -1759,23 +1759,23 @@ func TestProcessor_failOnRecover(t *testing.T) {
 // Example shows how to use a callback. For each partition of the topics, a new
 // goroutine will be created. Topics should be co-partitioned (they should have
 // the same number of partitions and be partitioned by the same key).
-func ExampleProcessor_simplest() {
+func ExampleProcessor() {
 	var (
 		brokers        = []string{"127.0.0.1:9092"}
 		group   Group  = "group"
 		topic   Stream = "topic"
 	)
 
-	consume := func(ctx Context, m interface{}) {
+	f := func(ctx Context, m interface{}) {
 		fmt.Printf("Hello world: %v", m)
 	}
 
-	p, err := NewProcessor(brokers, DefineGroup(group, Input(topic, rawCodec, consume)))
+	p, err := NewProcessor(brokers, DefineGroup(group, Input(topic, rawCodec, f)))
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	// start consumer with a goroutine (blocks)
+	// start processor with a goroutine (blocks)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		err := p.Run(ctx)

@@ -488,7 +488,9 @@ func doTimed(t *testing.T, do func()) error {
 
 	select {
 	case <-time.After(2 * time.Second):
-		t.Fail()
+		if t != nil {
+			t.Fail()
+		}
 		return errors.New("function took too long to complete")
 	case <-ch:
 	}
@@ -496,7 +498,7 @@ func doTimed(t *testing.T, do func()) error {
 	return nil
 }
 
-func ExampleView_simple() {
+func ExampleView() {
 	var (
 		brokers       = []string{"localhost:9092"}
 		group   Group = "group-name"
