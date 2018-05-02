@@ -55,7 +55,10 @@ func main() {
 	// Wait for SIGINT/SIGTERM
 	waiter := make(chan os.Signal, 1)
 	signal.Notify(waiter, syscall.SIGINT, syscall.SIGTERM)
-	<-waiter
+	select {
+	case <-waiter:
+	case <-ctx.Done():
+	}
 	cancel()
 	if err := grp.Wait(); err != nil {
 		log.Println(err)
