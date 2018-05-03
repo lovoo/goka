@@ -296,7 +296,7 @@ func WithViewClientID(clientID string) ViewOption {
 	}
 }
 
-// WithViewRestartable defines the view can be restarted, even when Start()
+// WithViewRestartable defines the view can be restarted, even when Run()
 // returns errors. If the view is restartable, the client must call Terminate()
 // to release all resources, ie, close the local storage.
 func WithViewRestartable() ViewOption {

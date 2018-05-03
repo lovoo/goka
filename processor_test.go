@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"hash"
@@ -610,7 +611,7 @@ func TestProcessor_StartFails(t *testing.T) {
 	p := createProcessor(t, ctrl, consumer, 2, nullStorageBuilder())
 	p.opts.builders.consumer = createFailedConsumerBuilder()
 	go func() {
-		errs := p.Start()
+		errs := p.Run(context.Background())
 		ensure.NotNil(t, errs)
 		close(done)
 	}()
@@ -623,7 +624,7 @@ func TestProcessor_StartFails(t *testing.T) {
 	p.opts.builders.producer = createFailedProducerBuilder()
 	consumer.EXPECT().Close().Return(errSome)
 	go func() {
-		errs := p.Start()
+		errs := p.Run(context.Background())
 		ensure.NotNil(t, errs)
 		ensure.StringContains(t, errs.Error(), "creating producer")
 		ensure.StringContains(t, errs.Error(), "closing consumer")
@@ -650,7 +651,7 @@ func TestProcessor_StartFails(t *testing.T) {
 	consumer.EXPECT().Close().Return(nil).Times(2) // view + processor
 	producer.EXPECT().Close().Return(errSome)
 	go func() {
-		errs := p.Start()
+		errs := p.Run(context.Background())
 		ensure.NotNil(t, errs)
 		ensure.StringContains(t, errs.Error(), "closing producer")
 		ensure.StringContains(t, errs.Error(), "opening storage")
@@ -665,7 +666,7 @@ func TestProcessor_StartFails(t *testing.T) {
 	consumer.EXPECT().Subscribe(topOff).Return(errSome)
 	consumer.EXPECT().Close().Return(nil)
 	go func() {
-		errs := p.Start()
+		errs := p.Run(context.Background())
 		ensure.NotNil(t, errs)
 		ensure.StringContains(t, errs.Error(), "subscribing topics")
 		close(done)
@@ -688,8 +689,9 @@ func TestProcessor_StartStopEmpty(t *testing.T) {
 
 	consumer.EXPECT().Subscribe(topOff).Return(nil)
 	consumer.EXPECT().Events().Return(ch).Do(func() { close(wait) })
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		err := p.Start()
+		err := p.Run(ctx)
 		ensure.Nil(t, err)
 		close(final)
 	}()
@@ -697,7 +699,7 @@ func TestProcessor_StartStopEmpty(t *testing.T) {
 	consumer.EXPECT().Close().Return(nil).Do(func() { close(ch) })
 	err := doTimed(t, func() {
 		<-wait
-		p.Stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -717,8 +719,9 @@ func TestProcessor_StartStopEmptyError(t *testing.T) {
 
 	consumer.EXPECT().Subscribe(topOff).Return(nil)
 	consumer.EXPECT().Events().Return(ch).Do(func() { close(wait) })
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		err := p.Start()
+		err := p.Run(ctx)
 		ensure.NotNil(t, err)
 		close(final)
 	}()
@@ -726,7 +729,7 @@ func TestProcessor_StartStopEmptyError(t *testing.T) {
 	consumer.EXPECT().Close().Return(errors.New("some error")).Do(func() { close(ch) })
 	err := doTimed(t, func() {
 		<-wait
-		p.Stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -769,7 +772,7 @@ func TestProcessor_StartWithErrorBeforeRebalance(t *testing.T) {
 				consumer.EXPECT().Close().Do(func() { close(ch) }),
 			)
 			go func() {
-				err = p.Start()
+				err = p.Run(context.Background())
 				ensure.NotNil(t, err)
 				close(final)
 			}()
@@ -828,8 +831,7 @@ func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
 	// -- test --
 	// 1. start
 	go func() {
-		err = p.Start()
-		log.Println(err)
+		err = p.Run(context.Background())
 		ensure.NotNil(t, err)
 		close(final)
 	}()
@@ -919,7 +921,7 @@ func TestProcessor_StartWithTableWithErrorAfterRebalance(t *testing.T) {
 	// -- test --
 	// 1. start
 	go func() {
-		err = p.Start()
+		err = p.Run(context.Background())
 		ensure.NotNil(t, err)
 		close(final)
 	}()
@@ -1028,9 +1030,10 @@ func TestProcessor_Start(t *testing.T) {
 	st.EXPECT().Close()
 
 	// -- test --
+	ctx, cancel := context.WithCancel(context.Background())
 	// 1. start
 	go func() {
-		err = p.Start()
+		err = p.Run(ctx)
 		ensure.Nil(t, err)
 		close(final)
 	}()
@@ -1077,7 +1080,7 @@ func TestProcessor_Start(t *testing.T) {
 
 	// 7. stop processor
 	err = doTimed(t, func() {
-		p.Stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -1106,9 +1109,10 @@ func TestProcessor_StartStateless(t *testing.T) {
 	producer.EXPECT().Close().Return(nil)
 
 	// -- test --
+	ctx, cancel := context.WithCancel(context.Background())
 	// 1. start
 	go func() {
-		err := p.Start()
+		err := p.Run(ctx)
 		ensure.Nil(t, err)
 		close(final)
 	}()
@@ -1122,7 +1126,7 @@ func TestProcessor_StartStateless(t *testing.T) {
 
 	// 3. stop processor
 	err = doTimed(t, func() {
-		p.Stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -1186,9 +1190,10 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	producer.EXPECT().Close().Return(nil)
 
 	// -- test --
+	ctx, cancel := context.WithCancel(context.Background())
 	// 1. start
 	go func() {
-		procErrs := p.Start()
+		procErrs := p.Run(ctx)
 		ensure.Nil(t, procErrs)
 		close(final)
 	}()
@@ -1247,7 +1252,7 @@ func TestProcessor_StartWithTable(t *testing.T) {
 
 	// 7. stop processor
 	err = doTimed(t, func() {
-		p.Stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -1272,8 +1277,10 @@ func TestProcessor_rebalanceError(t *testing.T) {
 	consumer.EXPECT().Close().Return(nil).Do(func() {
 		close(ch)
 	})
+
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		err := p.Start()
+		err := p.Run(ctx)
 		ensure.NotNil(t, err)
 		close(wait)
 	}()
@@ -1284,7 +1291,7 @@ func TestProcessor_rebalanceError(t *testing.T) {
 
 	// stop processor
 	err := doTimed(t, func() {
-		p.Stop()
+		cancel()
 		<-wait
 	})
 	ensure.Nil(t, err)
@@ -1310,8 +1317,9 @@ func TestProcessor_HasGet(t *testing.T) {
 	consumer.EXPECT().Subscribe(topOff).Return(nil)
 	consumer.EXPECT().Events().Return(ch).AnyTimes()
 
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		procErrs := p.Start()
+		procErrs := p.Run(ctx)
 		ensure.Nil(t, procErrs)
 		close(wait)
 	}()
@@ -1342,7 +1350,7 @@ func TestProcessor_HasGet(t *testing.T) {
 	st.EXPECT().Close()
 
 	err = doTimed(t, func() {
-		p.Stop()
+		cancel()
 		<-wait
 	})
 	ensure.Nil(t, err)
@@ -1419,7 +1427,7 @@ func TestProcessor_StatelessContext(t *testing.T) {
 	ensure.Nil(t, err)
 	done := make(chan bool)
 	go func() {
-		err = proc.Start()
+		err = proc.Run(context.Background())
 		ensure.NotNil(t, err)
 		close(done)
 	}()
@@ -1455,14 +1463,15 @@ func TestProcessor_ProducerError(t *testing.T) {
 		var (
 			processorErrors error
 			done            = make(chan struct{})
+			ctx, cancel     = context.WithCancel(context.Background())
 		)
 		go func() {
-			processorErrors = proc.Start()
+			processorErrors = proc.Run(ctx)
 			close(done)
 		}()
 
 		tester.ConsumeString("topic", "key", "world")
-		proc.Stop()
+		cancel()
 		<-done
 		ensure.True(t, processorErrors != nil)
 	})
@@ -1489,15 +1498,16 @@ func TestProcessor_ProducerError(t *testing.T) {
 		var (
 			processorErrors error
 			done            = make(chan struct{})
+			ctx, cancel     = context.WithCancel(context.Background())
 		)
 		go func() {
-			processorErrors = proc.Start()
+			processorErrors = proc.Run(ctx)
 			close(done)
 		}()
 
 		tester.ConsumeString("topic", "key", "world")
 
-		proc.Stop()
+		cancel()
 		<-done
 		ensure.True(t, processorErrors != nil)
 	})
@@ -1526,16 +1536,17 @@ func TestProcessor_ProducerError(t *testing.T) {
 		var (
 			processorErrors error
 			done            = make(chan struct{})
+			ctx, cancel     = context.WithCancel(context.Background())
 		)
 		go func() {
-			processorErrors = proc.Start()
+			processorErrors = proc.Run(ctx)
 			close(done)
 		}()
 
 		tester.ConsumeString("topic", "key", "world")
 
 		// stopping the processor. It should actually not produce results
-		proc.Stop()
+		cancel()
 		<-done
 		ensure.Nil(t, processorErrors)
 	})
@@ -1560,15 +1571,16 @@ func TestProcessor_consumeFail(t *testing.T) {
 	var (
 		processorErrors error
 		done            = make(chan struct{})
+		ctx, cancel     = context.WithCancel(context.Background())
 	)
 	go func() {
-		processorErrors = proc.Start()
+		processorErrors = proc.Run(ctx)
 		close(done)
 	}()
 
 	tester.ConsumeString("topic", "key", "world")
 
-	proc.Stop()
+	cancel()
 	<-done
 	ensure.True(t, strings.Contains(processorErrors.Error(), "consume-failed"))
 }
@@ -1591,15 +1603,16 @@ func TestProcessor_consumePanic(t *testing.T) {
 	var (
 		processorErrors error
 		done            = make(chan struct{})
+		ctx, cancel     = context.WithCancel(context.Background())
 	)
 	go func() {
-		processorErrors = proc.Start()
+		processorErrors = proc.Run(ctx)
 		close(done)
 	}()
 
 	tester.ConsumeString("topic", "key", "world")
 
-	proc.Stop()
+	cancel()
 	<-done
 	ensure.NotNil(t, processorErrors)
 	ensure.True(t, strings.Contains(processorErrors.Error(), "panicking"))
@@ -1674,15 +1687,16 @@ func TestProcessor_consumeNil(t *testing.T) {
 			var (
 				processorErrors error
 				done            = make(chan struct{})
+				ctx, cancel     = context.WithCancel(context.Background())
 			)
 			go func() {
-				processorErrors = proc.Start()
+				processorErrors = proc.Run(ctx)
 				close(done)
 			}()
 
 			tester.Consume("topic", "key", nil)
 
-			proc.Stop()
+			cancel()
 			<-done
 			ensure.Nil(t, processorErrors)
 		})
@@ -1727,14 +1741,15 @@ func TestProcessor_failOnRecover(t *testing.T) {
 
 	ensure.Nil(t, err)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		processorErrors = proc.Start()
+		processorErrors = proc.Run(ctx)
 		close(done)
 	}()
 
 	time.Sleep(100 * time.Millisecond)
 	log.Println("stopping")
-	proc.Stop()
+	cancel()
 	<-done
 	log.Println("stopped")
 	// make sure the recovery was aborted
@@ -1755,14 +1770,15 @@ func ExampleProcessor_simplest() {
 		fmt.Printf("Hello world: %v", m)
 	}
 
-	c, err := NewProcessor(brokers, DefineGroup(group, Input(topic, rawCodec, consume)))
+	p, err := NewProcessor(brokers, DefineGroup(group, Input(topic, rawCodec, consume)))
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	// start consumer with a goroutine (blocks)
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		err := c.Start()
+		err := p.Run(ctx)
 		panic(err)
 	}()
 
@@ -1770,5 +1786,5 @@ func ExampleProcessor_simplest() {
 	wait := make(chan os.Signal, 1)
 	signal.Notify(wait, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
 	<-wait
-	c.Stop()
+	cancel()
 }

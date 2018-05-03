@@ -261,17 +261,17 @@ func (g *Processor) hash(key string) (int32, error) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// start/stop
+// lifecyle
 ///////////////////////////////////////////////////////////////////////////////
 
-// Start starts receiving messages from Kafka for the subscribed topics. For each
-// partition, a recovery will be attempted.
-func (g *Processor) Start() (rerr error) {
+// Run starts receiving messages from Kafka for the subscribed topics. For each
+// partition, a recovery will be attempted. Cancel the context to stop the
+// processor.
+func (g *Processor) Run(ctx context.Context) (rerr error) {
 	g.opts.log.Printf("Processor: starting")
 	defer g.opts.log.Printf("Processor: stopped")
 
 	// create errorgroup
-	ctx := context.Background()
 	ctx, g.cancel = context.WithCancel(ctx)
 	g.errg, ctx = multierr.NewErrGroup(ctx)
 	defer g.cancel()
@@ -315,7 +315,7 @@ func (g *Processor) Start() (rerr error) {
 	for t, v := range g.views {
 		t, v := t, v
 		g.errg.Go(func() error {
-			if err := v.startWithContext(ctx); err != nil {
+			if err := v.Run(ctx); err != nil {
 				return fmt.Errorf("error starting lookup table %s: %v", t, err)
 			}
 			return nil
@@ -449,13 +449,6 @@ func (g *Processor) fail(err error) {
 	g.opts.log.Printf("failing: %v", err)
 	_ = g.errors.Collect(err)
 	g.cancel()
-}
-
-// Stop gracefully stops the consumer
-func (g *Processor) Stop() {
-	g.opts.log.Printf("Processor: stopping")
-	g.cancel()
-	g.opts.log.Printf("Processor: shutdown complete")
 }
 
 ///////////////////////////////////////////////////////////////////////////////

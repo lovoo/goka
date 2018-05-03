@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -99,7 +100,7 @@ func runStatelessProcessor(monitor *monitor.Server) {
 	// attach the processor to the monitor
 	monitor.AttachProcessor(p)
 
-	err = p.Start()
+	err = p.Run(context.Background())
 	if err != nil {
 		panic(err)
 	} else {
@@ -132,7 +133,7 @@ func runJoinProcessor(monitor *monitor.Server) {
 	// attach the processor to the monitor
 	monitor.AttachProcessor(p)
 
-	err = p.Start()
+	err = p.Run(context.Background())
 	if err != nil {
 		panic(err)
 	} else {
@@ -155,7 +156,7 @@ func runProcessor(monitor *monitor.Server, query *query.Server) {
 	monitor.AttachProcessor(p)
 	query.AttachSource("user-clicks", p.Get)
 
-	err = p.Start()
+	err = p.Run(context.Background())
 	if err != nil {
 		panic(err)
 	} else {
@@ -175,8 +176,7 @@ func runView(root *mux.Router, monitor *monitor.Server) {
 	// attach the processor to the monitor
 	monitor.AttachView(view)
 
-	go view.Start()
-	defer view.Stop()
+	go view.Run(context.Background())
 
 	root.HandleFunc("/{key}", func(w http.ResponseWriter, r *http.Request) {
 		value, _ := view.Get(mux.Vars(r)["key"])

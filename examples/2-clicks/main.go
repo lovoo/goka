@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -91,12 +92,7 @@ func runProcessor() {
 		panic(err)
 	}
 
-	err = p.Start()
-	if err != nil {
-		panic(err)
-	} else {
-		fmt.Println("Processor stopped without errors")
-	}
+	p.Run(context.Background())
 }
 
 func runView() {
@@ -107,8 +103,6 @@ func runView() {
 	if err != nil {
 		panic(err)
 	}
-	go view.Start()
-	defer view.Stop()
 
 	root := mux.NewRouter()
 	root.HandleFunc("/{key}", func(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +111,9 @@ func runView() {
 		w.Write(data)
 	})
 	fmt.Println("View opened at http://localhost:9095/")
-	http.ListenAndServe(":9095", root)
+	go http.ListenAndServe(":9095", root)
+
+	view.Run(context.Background())
 }
 
 func main() {

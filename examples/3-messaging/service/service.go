@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -18,8 +19,7 @@ func Run(brokers []string, stream goka.Stream) {
 	if err != nil {
 		panic(err)
 	}
-	go view.Start()
-	defer view.Stop()
+	go view.Run(context.Background())
 
 	emitter, err := goka.NewEmitter(brokers, stream, new(messaging.MessageCodec))
 	if err != nil {

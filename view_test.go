@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"context"
 	"errors"
 	"hash"
 	"testing"
@@ -162,15 +163,16 @@ func TestView_StartStop(t *testing.T) {
 	err := v.createPartitions(nil)
 	ensure.Nil(t, err)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		errs := v.Start()
+		errs := v.Run(ctx)
 		ensure.Nil(t, errs)
 		close(final)
 	}()
 
 	err = doTimed(t, func() {
 		<-initial
-		v.Stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -204,7 +206,7 @@ func TestView_StartStopWithError(t *testing.T) {
 	consumer.EXPECT().Close().Return(errors.New("some error2")).Do(func() { close(ch) })
 
 	go func() {
-		viewErrs := v.Start()
+		viewErrs := v.Run(context.Background())
 		ensure.StringContains(t, viewErrs.Error(), "error1")
 		ensure.StringContains(t, viewErrs.Error(), "error2")
 		close(final)
@@ -258,15 +260,16 @@ func TestView_RestartNonRestartable(t *testing.T) {
 	err := v.createPartitions(nil)
 	ensure.Nil(t, err)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		errs := v.Start()
+		errs := v.Run(ctx)
 		ensure.Nil(t, errs)
 		close(final)
 	}()
 
 	err = doTimed(t, func() {
 		<-initial
-		v.Stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -275,7 +278,7 @@ func TestView_RestartNonRestartable(t *testing.T) {
 	final = make(chan bool)
 
 	go func() {
-		err = v.Start()
+		err = v.Run(context.Background())
 		ensure.NotNil(t, err)
 		ensure.StringContains(t, err.Error(), "terminated")
 		close(final)
@@ -331,15 +334,16 @@ func TestView_Restart(t *testing.T) {
 	err := v.createPartitions(nil)
 	ensure.Nil(t, err)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		errs := v.Start()
+		errs := v.Run(ctx)
 		ensure.Nil(t, errs)
 		close(final)
 	}()
 
 	err = doTimed(t, func() {
 		<-initial
-		v.Stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -359,15 +363,16 @@ func TestView_Restart(t *testing.T) {
 	consumer.EXPECT().Close().Do(chClose).Return(nil)
 
 	_ = initialPush
+	ctx, cancel = context.WithCancel(context.Background())
 	go func() {
-		err = v.Start()
+		err = v.Run(ctx)
 		ensure.Nil(t, err)
 		close(final)
 	}()
 	time.Sleep(2 * time.Second)
 
 	err = doTimed(t, func() {
-		v.Stop()
+		cancel()
 		<-final
 	})
 	ensure.Nil(t, err)
@@ -496,11 +501,11 @@ func ExampleView_simple() {
 		brokers       = []string{"localhost:9092"}
 		group   Group = "group-name"
 	)
-	sr, err := NewView(brokers, GroupTable(group), nil)
+	v, err := NewView(brokers, GroupTable(group), nil)
 	if err != nil {
 		panic(err)
 	}
-	if err = sr.Start(); err != nil {
+	if err = v.Run(context.Background()); err != nil {
 		panic(err)
 	}
 }

@@ -1,6 +1,7 @@
 package blocker
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/lovoo/goka"
@@ -57,14 +58,16 @@ func block(ctx goka.Context, msg interface{}) {
 	ctx.SetValue(s)
 }
 
-func Run(brokers []string) {
-	g := goka.DefineGroup(group,
-		goka.Input(Stream, new(BlockEventCodec), block),
-		goka.Persist(new(BlockValueCodec)),
-	)
-	if p, err := goka.NewProcessor(brokers, g); err != nil {
-		panic(err)
-	} else if err = p.Start(); err != nil {
-		panic(err)
+func Run(ctx context.Context, brokers []string) func() error {
+	return func() error {
+		g := goka.DefineGroup(group,
+			goka.Input(Stream, new(BlockEventCodec), block),
+			goka.Persist(new(BlockValueCodec)),
+		)
+		p, err := goka.NewProcessor(brokers, g)
+		if err != nil {
+			return err
+		}
+		return p.Run(ctx)
 	}
 }

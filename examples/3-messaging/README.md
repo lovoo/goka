@@ -119,8 +119,6 @@ g := goka.DefineGroup(goka.Group("collector"),
 	goka.Input(messaging.ReceivedStream, new(messaging.MessageCodec), collect),
 )
 p, _ := goka.NewProcessor(brokers, g)
-go p.Start()
-
 ```
 
 ### Feed endpoint
@@ -165,7 +163,6 @@ view, _ := goka.NewView(
 	collector.Table,
 	new(collector.MessageListCodec),
 )
-go view.Start()
 router.HandleFunc("/{user}/feed", feed(view)).Methods("GET")
 ```
 
@@ -289,8 +286,6 @@ g := goka.DefineGroup(goka.Group("filter"),
 )
 
 p, _ := goka.NewProcessor(brokers, g)
-_ = p.Start()
-
 ```
 
 Nothing has to be changed in the collector processor or in the feed endpoint.
@@ -493,7 +488,6 @@ g := goka.DefineGroup(goka.Group("detector"),
 )
 
 p, _ := goka.NewProcessor(brokers, g)
-_ = p.Start()
 ```
 
 ### Running the example
