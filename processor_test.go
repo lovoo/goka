@@ -416,6 +416,31 @@ func TestProcessor_processFail(t *testing.T) {
 		<-canceled
 	})
 	ensure.Nil(t, err)
+
+	// fail with panic (ctx.Fatal)
+	p = newProcessor()
+	// we dont add expect consumer.EXPECT().Commit() here, so if the context
+	// would call it, the test would fail
+	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
+		ctx.Fail(errSome)
+		t.Errorf("should never reach this point")
+		t.Fail()
+	}
+	go func() {
+		defer func() {
+			if x := recover(); x != nil {
+				ensure.StringContains(t, fmt.Sprintf("%v", x), errSome.Error())
+			}
+		}()
+		updates, err = p.process(msg, st, &wg, pstats)
+	}()
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, updates, 1)
+	err = doTimed(t, func() {
+		<-canceled
+	})
+	ensure.Nil(t, err)
+
 }
 
 func TestNewProcessor(t *testing.T) {

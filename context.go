@@ -293,11 +293,11 @@ func (ctx *cbContext) emitDone(err error) {
 }
 
 // called after all emits
-func (ctx *cbContext) finish() {
+func (ctx *cbContext) finish(err error) {
 	ctx.m.Lock()
 	defer ctx.m.Unlock()
 	ctx.done = true
-	ctx.tryCommit(nil)
+	ctx.tryCommit(err)
 }
 
 // called before any emit
@@ -319,7 +319,7 @@ func (ctx *cbContext) tryCommit(err error) {
 
 	// commit if no errors, otherwise fail context
 	if ctx.errors.HasErrors() {
-		ctx.failer(fmt.Errorf("error emitting to %s: %v", ctx.graph.GroupTable().Topic(), ctx.errors.Error()))
+		ctx.failer(ctx.errors.NilOrError())
 	} else {
 		ctx.commit()
 	}
