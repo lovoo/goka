@@ -719,10 +719,19 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 		return 0, fmt.Errorf("error processing message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
 	}
 
-	// start context and call ProcessorCallback
+	// start context and call the ProcessorCallback cb
 	ctx.start()
-	defer ctx.finish() // execute even in case of panic
+	// call finish(err) if a panic occurs in cb
+	defer func() {
+		if r := recover(); r != nil {
+			ctx.finish(fmt.Errorf("panic: %v", r))
+			panic(r) // propagate panic up
+		}
+	}()
+	// now call cb
 	cb(ctx, m)
+	// if everything went fine, call finish(nil)
+	ctx.finish(nil)
 
 	return ctx.counters.stores, nil
 }

@@ -58,7 +58,7 @@ func TestContext_Emit(t *testing.T) {
 
 	ctx.start()
 	ctx.emit("emit-topic", "key", []byte("value"))
-	ctx.finish()
+	ctx.finish(nil)
 
 	// we can now for all callbacks -- it should also guarantee a memory fence
 	// to the emitted variable (which is not being locked)
@@ -104,7 +104,7 @@ func TestContext_EmitError(t *testing.T) {
 
 	ctx.start()
 	ctx.emit("emit-topic", "key", []byte("value"))
-	ctx.finish()
+	ctx.finish(nil)
 
 	// we can now for all callbacks -- it should also guarantee a memory fence
 	// to the emitted variable (which is not being locked)
@@ -183,7 +183,7 @@ func TestContext_Delete(t *testing.T) {
 	ctx.start()
 	err := ctx.deleteKey(key)
 	ensure.Nil(t, err)
-	ctx.finish()
+	ctx.finish(nil)
 
 	ctx.wg.Wait()
 
@@ -263,7 +263,7 @@ func TestContext_Set(t *testing.T) {
 	ctx.start()
 	err := ctx.setValueForKey(key, value)
 	ensure.Nil(t, err)
-	ctx.finish()
+	ctx.finish(nil)
 
 	ctx.wg.Wait()
 
