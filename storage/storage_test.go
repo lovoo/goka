@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"io/ioutil"
+	"sort"
 	"testing"
 
 	"github.com/syndtr/goleveldb/leveldb"
@@ -80,6 +81,7 @@ func TestMemIter(t *testing.T) {
 
 	k := []byte("key-1")
 	iter, err = storage.IteratorWithRange(k, nil)
+	sort.Strings(iter.(*memiter).keys) // make iteration order deterministic
 
 	ensure.True(t, iter.Next(), "next should return true after a IteratorWithRange")
 	ensure.DeepEqual(t, iter.Key(), k, "the first matching key in IteratorWithRange is not corresponding to the value")
