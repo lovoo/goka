@@ -170,19 +170,19 @@ func (km *Tester) ConsumeProto(topic string, key string, msg proto.Message) {
 	if err != nil && km.t != nil {
 		km.t.Errorf("Error marshaling message for consume: %v", err)
 	}
-	km.ConsumeData(topic, key, data)
+	km.consumeData(topic, key, data)
 	km.makeCalls()
 }
 
 // ConsumeString simulates a message with a string payload.
 func (km *Tester) ConsumeString(topic string, key string, msg string) {
-	km.ConsumeData(topic, key, []byte(msg))
+	km.consumeData(topic, key, []byte(msg))
 	km.makeCalls()
 }
 
 // Consume simulates a message with a byte slice payload.
 func (km *Tester) Consume(topic string, key string, msg []byte) {
-	km.ConsumeData(topic, key, msg)
+	km.consumeData(topic, key, msg)
 	km.makeCalls()
 }
 
