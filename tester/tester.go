@@ -171,16 +171,19 @@ func (km *Tester) ConsumeProto(topic string, key string, msg proto.Message) {
 		km.t.Errorf("Error marshaling message for consume: %v", err)
 	}
 	km.ConsumeData(topic, key, data)
+	km.makeCalls()
 }
 
 // ConsumeString simulates a message with a string payload.
 func (km *Tester) ConsumeString(topic string, key string, msg string) {
 	km.ConsumeData(topic, key, []byte(msg))
+	km.makeCalls()
 }
 
 // Consume simulates a message with a byte slice payload.
 func (km *Tester) Consume(topic string, key string, msg []byte) {
 	km.ConsumeData(topic, key, msg)
+	km.makeCalls()
 }
 
 // ConsumeData simulates a message with a byte slice payload. This is the same
@@ -189,12 +192,16 @@ func (km *Tester) Consume(topic string, key string, msg []byte) {
 // used by ConsumeProto by the test case as well as any emit calls of the
 // processor being tested.
 func (km *Tester) ConsumeData(topic string, key string, data []byte) {
+	km.consumeData(topic, key, data)
+	km.makeCalls()
+}
+
+func (km *Tester) consumeData(topic string, key string, data []byte) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("tester: panic ConsumeData: %+v\n", r)
 		}
 	}()
-	defer km.makeCalls()
 	km.offset++
 	kafkaMsg := &kafka.Message{
 		Topic:     topic,
@@ -304,7 +311,7 @@ func (km *Tester) handleEmit(topic string, key string, value []byte) *kafka.Prom
 	}
 	if _, hasTopic := km.handledTopics[topic]; hasTopic {
 		km.newCall(func() {
-			km.ConsumeData(topic, key, value)
+			km.consumeData(topic, key, value)
 		})
 	} else {
 		km.offset++
@@ -337,6 +344,15 @@ func (km *Tester) makeCalls() {
 		}
 	}()
 	km.wg.Wait()
+}
+
+// ClearValues resets everything that might be in the storage by deleting everything
+// using the iterator.
+func (km *Tester) ClearValues() {
+	it, _ := km.storage.Iterator()
+	for it.Next() {
+		km.storage.Delete(string(it.Key()))
+	}
 }
 
 type consumerMock struct {
