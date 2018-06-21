@@ -87,6 +87,7 @@ func (e *Emitter) EmitSync(key string, msg interface{}) error {
 }
 
 // Finish waits until the emitter is finished producing all pending messages.
-func (e *Emitter) Finish() {
+func (e *Emitter) Finish() error {
 	e.wg.Wait()
+	return e.producer.Close()
 }
