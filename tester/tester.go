@@ -339,6 +339,15 @@ func (km *Tester) makeCalls() {
 	km.wg.Wait()
 }
 
+// ClearValues resets everything that might be in the storage by deleting everything
+// using the iterator.
+func (km *Tester) ClearValues() {
+	it, _ := km.storage.Iterator()
+	for it.Next() {
+		km.storage.Delete(string(it.Key()))
+	}
+}
+
 type consumerMock struct {
 	tester *Tester
 }
