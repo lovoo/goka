@@ -23,6 +23,12 @@ type Context interface {
 	// Key returns the key of the input message.
 	Key() string
 
+	// Partition returns the partition of the input message.
+	Partition() int32
+
+	// Offset returns the offset of the input message.
+	Offset() int64
+
 	// Value returns the value of the key in the group table.
 	Value() interface{}
 
@@ -174,6 +180,14 @@ func (ctx *cbContext) Key() string {
 
 func (ctx *cbContext) Topic() Stream {
 	return Stream(ctx.msg.Topic)
+}
+
+func (ctx *cbContext) Offset() int64 {
+	return ctx.msg.Offset
+}
+
+func (ctx *cbContext) Partition() int32 {
+	return ctx.msg.Partition
 }
 
 func (ctx *cbContext) Join(topic Table) interface{} {
