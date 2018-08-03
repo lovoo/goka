@@ -30,7 +30,7 @@ func DefaultBuilder(path string) Builder {
 func BuilderWithOptions(path string, opts *opt.Options) Builder {
 	return func(topic string, partition int32) (Storage, error) {
 		fp := filepath.Join(path, fmt.Sprintf("%s.%d", topic, partition))
-		db, err := leveldb.OpenFile(fp, nil)
+		db, err := leveldb.OpenFile(fp, opts)
 		if err != nil {
 			return nil, fmt.Errorf("error opening leveldb: %v", err)
 		}
