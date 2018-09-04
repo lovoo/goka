@@ -9,6 +9,7 @@ import (
 	"github.com/facebookgo/ensure"
 	"github.com/golang/protobuf/proto"
 
+	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/storage"
@@ -24,20 +25,27 @@ type Codec interface {
 // simulate producer errors
 type EmitHandler func(topic string, key string, value []byte) *kafka.Promise
 
+type viewStorage struct {
+	storage storage.Storage
+	codec   Codec
+}
+
 // Tester allows interacting with a test processor
 type Tester struct {
 	t T
 
-	consumerMock   *consumerMock
-	producerMock   *producerMock
-	topicMgrMock   *topicMgrMock
-	emitHandler    EmitHandler
-	storage        storage.Storage
-	codec          Codec
-	offset         int64
-	tableOffset    int64
-	incomingEvents chan kafka.Event
-	consumerEvents chan kafka.Event
+	consumerMock     *consumerMock
+	producerMock     *producerMock
+	topicMgrMock     *topicMgrMock
+	viewConsumerMock *viewConsumerMock
+	emitHandler      EmitHandler
+	storage          storage.Storage
+	codec            Codec
+	viewStorages     map[goka.Table]*viewStorage
+	offset           int64
+	tableOffset      int64
+	incomingEvents   chan kafka.Event
+	consumerEvents   chan kafka.Event
 	// Stores a map of all topics that are handled by the processor.
 	// Every time an emit is called, those messages for handled topics are relayed
 	// after the consume-function has finished.
@@ -84,10 +92,12 @@ func New(t T) *Tester {
 		consumerEvents: make(chan kafka.Event),
 		handledTopics:  make(map[string]bool),
 		codec:          new(codec.Bytes),
+		viewStorages:   make(map[goka.Table]*viewStorage),
 	}
 	tester.consumerMock = newConsumerMock(tester)
 	tester.producerMock = newProducerMock(tester.handleEmit)
 	tester.topicMgrMock = newTopicMgrMock(tester)
+	tester.viewConsumerMock = newViewConsumerMock(tester)
 
 	return tester
 }
@@ -98,19 +108,51 @@ func (km *Tester) SetCodec(codec Codec) *Tester {
 	return km
 }
 
+// AddMockLookupTable configures mock table to be used as lookup.
+// If this is not set, all lookup-calls from the tested processor will be nil
+func (km *Tester) AddMockLookupTable(table goka.Table, codec Codec) {
+	km.viewStorages[table] = &viewStorage{
+		codec:   codec,
+		storage: storage.NewMemory(),
+	}
+}
+
+// SetLookupValue registers a key-value pair in a confirgured lookup table
+func (km *Tester) SetLookupValue(table goka.Table, key string, value interface{}) {
+	viewStorage, exists := km.viewStorages[table]
+
+	if !exists {
+		panic(fmt.Errorf("Lookup table for %s not set. Did you call AddMockLookupTable?", table))
+	}
+	encoded, err := viewStorage.codec.Encode(value)
+
+	if err != nil {
+		panic(fmt.Errorf("Error encoding value for stoage in Lookup table %s: %v", table, err))
+	}
+	viewStorage.storage.Set(key, encoded)
+}
+
 // SetGroupTableCreator sets a creator for the group table.
 func (km *Tester) SetGroupTableCreator(creator func() (string, []byte)) {
 	km.groupTableCreator = creator
 }
 
+// TopicManagerBuilder returns the topicmanager builder when this tester is used as an option
+// to a processor
 func (km *Tester) TopicManagerBuilder() kafka.TopicManagerBuilder {
 	return func(brokers []string) (kafka.TopicManager, error) {
 		return km.topicMgrMock, nil
 	}
 }
 
+// ConsumerBuilder returns the consumer builder when this tester is used as an option
+// to a processor
 func (km *Tester) ConsumerBuilder() kafka.ConsumerBuilder {
 	return func(b []string, group, clientID string) (kafka.Consumer, error) {
+		if group == kafka.ViewConsumerGroup {
+			return km.viewConsumerMock, nil
+		}
+
 		if km.groupTopic == "" {
 			km.groupTopic = fmt.Sprintf("%s-table", group)
 		}
@@ -118,14 +160,21 @@ func (km *Tester) ConsumerBuilder() kafka.ConsumerBuilder {
 	}
 }
 
+// ProducerBuilder returns the producer builder when this tester is used as an option
+// to a processor
 func (km *Tester) ProducerBuilder() kafka.ProducerBuilder {
 	return func(b []string, cid string, hasher func() hash.Hash32) (kafka.Producer, error) {
 		return km.producerMock, nil
 	}
 }
 
+// StorageBuilder returns the storage builder when this tester is used as an option
+// to a processor
 func (km *Tester) StorageBuilder() storage.Builder {
 	return func(topic string, partition int32) (storage.Storage, error) {
+		if viewStorage, exists := km.viewStorages[goka.Table(topic)]; exists {
+			return viewStorage.storage, nil
+		}
 		return km.storage, nil
 	}
 }
@@ -355,8 +404,63 @@ func (km *Tester) ClearValues() {
 	}
 }
 
+type viewConsumerMock struct {
+	events    chan kafka.Event
+	closeOnce sync.Once
+}
+
+func newViewConsumerMock(tester *Tester) *viewConsumerMock {
+	return &viewConsumerMock{
+		events: make(chan kafka.Event),
+	}
+}
+
+// Events returns the event channel of the consumer mock
+func (vcm *viewConsumerMock) Events() <-chan kafka.Event {
+	return vcm.events
+}
+
+// Subscribe marks the consumer to subscribe to passed topics.
+// the viewconsumer does not subscribe to topics
+func (vcm *viewConsumerMock) Subscribe(topics map[string]int64) error {
+	return nil
+}
+
+// AddGroupPartition adds a partition for group consumption.
+// No action required in the mock.
+func (vcm *viewConsumerMock) AddGroupPartition(partition int32) {
+}
+
+// Commit commits an offest.
+// No action required in the mock.
+func (vcm *viewConsumerMock) Commit(topic string, partition int32, offset int64) error {
+	return nil
+}
+
+// AddPartition marks the topic as a table topic.
+// The mock has to know the group table topic to ignore emit calls (which would never be consumed)
+func (vcm *viewConsumerMock) AddPartition(topic string, partition int32, initialOffset int64) error {
+	return nil
+}
+
+// RemovePartition removes a partition from a topic.
+// No action required in the mock.
+func (vcm *viewConsumerMock) RemovePartition(topic string, partition int32) error {
+	return nil
+}
+
+// Close closes the consumer.
+// No action required in the mock.
+func (vcm *viewConsumerMock) Close() error {
+	vcm.closeOnce.Do(func() {
+		close(vcm.events)
+	})
+	return nil
+}
+
 type consumerMock struct {
-	tester *Tester
+	tester    *Tester
+	closeOnce sync.Once
 }
 
 func newConsumerMock(tester *Tester) *consumerMock {
@@ -407,9 +511,10 @@ func (km *consumerMock) RemovePartition(topic string, partition int32) error {
 // Close closes the consumer.
 // No action required in the mock.
 func (km *consumerMock) Close() error {
-	close(km.tester.incomingEvents)
-	close(km.tester.consumerEvents)
-	fmt.Println("closed consumer mock")
+	km.closeOnce.Do(func() {
+		close(km.tester.incomingEvents)
+		close(km.tester.consumerEvents)
+	})
 	return nil
 }
 

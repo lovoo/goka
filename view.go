@@ -112,7 +112,7 @@ func (v *View) reinit() error {
 		return fmt.Errorf("view: cannot reinitialize terminated view")
 	}
 
-	consumer, err := v.opts.builders.consumer(v.brokers, "goka-view", v.opts.clientID)
+	consumer, err := v.opts.builders.consumer(v.brokers, kafka.ViewConsumerGroup, v.opts.clientID)
 	if err != nil {
 		return fmt.Errorf("view: cannot create Kafka consumer: %v", err)
 	}

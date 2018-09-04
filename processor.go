@@ -284,14 +284,14 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	}()
 
 	// create kafka consumer
-	g.opts.log.Printf("Processor: creating consumer")
+	g.opts.log.Printf("Processor: creating consumer [%s]", g.graph.Group())
 	consumer, err := g.opts.builders.consumer(g.brokers, string(g.graph.Group()), g.opts.clientID)
 	if err != nil {
 		return fmt.Errorf(errBuildConsumer, err)
 	}
 	g.consumer = consumer
 	defer func() {
-		g.opts.log.Printf("Processor: closing consumer")
+		g.opts.log.Printf("Processor: closing consumer [%s]", g.graph.Group())
 		if err = g.consumer.Close(); err != nil {
 			_ = g.errors.Collect(fmt.Errorf("error closing consumer: %v", err))
 		}
