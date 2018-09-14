@@ -45,18 +45,17 @@ func Test_Lookup(t *testing.T) {
 
 	kafkaMock := New(t).SetCodec(new(codec.String))
 
-	lookupTable := goka.Table("lookup-table")
 	// add a lookup table
-	kafkaMock.AddMockLookupTable(lookupTable, new(codec.String))
-	kafkaMock.SetLookupValue(lookupTable, "somekey", "42")
+	kafkaMock.AddMockLookupTable("lookup-table", new(codec.String))
+	kafkaMock.SetLookupValue("lookup-table", "somekey", "42")
 	proc, err := goka.NewProcessor([]string{}, goka.DefineGroup("group",
 		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
-			val := ctx.Lookup(lookupTable, "somekey").(string)
+			val := ctx.Lookup("lookup-table", "somekey").(string)
 			if val != "42" {
 				ctx.Fail(fmt.Errorf("lookup value was unexpected"))
 			}
 		}),
-		goka.Lookup(lookupTable, new(codec.String)),
+		goka.Lookup("lookup-table", new(codec.String)),
 	),
 		goka.WithTester(kafkaMock),
 	)

@@ -7,10 +7,6 @@ import (
 	"github.com/Shopify/sarama"
 )
 
-const (
-	ViewConsumerGroup = "goka-view"
-)
-
 type topicPartition struct {
 	topic     string
 	partition int32

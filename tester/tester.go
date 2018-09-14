@@ -30,6 +30,20 @@ type viewStorage struct {
 	codec   Codec
 }
 
+type eventConsumer struct {
+	consumers []chan kafka.Event
+}
+
+func (ec *eventConsumer) addConsumer(events chan kafka.Event) {
+	ec.consumers = append(ec.consumers, events)
+}
+
+func (ec *eventConsumer) sendToAll(msg kafka.Event) {
+	for _, cons := range ec.consumers {
+		cons <- msg
+	}
+}
+
 // Tester allows interacting with a test processor
 type Tester struct {
 	t T
@@ -41,16 +55,17 @@ type Tester struct {
 	emitHandler      EmitHandler
 	storage          storage.Storage
 	codec            Codec
-	viewStorages     map[goka.Table]*viewStorage
+	viewStorages     map[string]*viewStorage
+	groupGraphs      map[goka.Group]*goka.GroupGraph
 	offset           int64
 	tableOffset      int64
 	incomingEvents   chan kafka.Event
-	consumerEvents   chan kafka.Event
 	// Stores a map of all topics that are handled by the processor.
 	// Every time an emit is called, those messages for handled topics are relayed
 	// after the consume-function has finished.
 	// All other messages are stored in the emitted-slice for further inspection
-	handledTopics map[string]bool
+	handledTopics map[string]*eventConsumer
+	initOnce      sync.Once
 	groupTopic    string
 	emitted       []*kafka.Message
 
@@ -89,10 +104,10 @@ func New(t T) *Tester {
 		storage:        storage.NewMemory(),
 		t:              t,
 		incomingEvents: make(chan kafka.Event),
-		consumerEvents: make(chan kafka.Event),
-		handledTopics:  make(map[string]bool),
+		handledTopics:  make(map[string]*eventConsumer),
 		codec:          new(codec.Bytes),
-		viewStorages:   make(map[goka.Table]*viewStorage),
+		viewStorages:   make(map[string]*viewStorage),
+		groupGraphs:    make(map[goka.Group]*goka.GroupGraph),
 	}
 	tester.consumerMock = newConsumerMock(tester)
 	tester.producerMock = newProducerMock(tester.handleEmit)
@@ -100,6 +115,10 @@ func New(t T) *Tester {
 	tester.viewConsumerMock = newViewConsumerMock(tester)
 
 	return tester
+}
+
+func (km *Tester) RegisterGroupGraph(gg *goka.GroupGraph) {
+	km.groupGraphs[gg.Group()] = gg
 }
 
 // SetCodec sets the codec for the group table.
@@ -110,15 +129,81 @@ func (km *Tester) SetCodec(codec Codec) *Tester {
 
 // AddMockLookupTable configures mock table to be used as lookup.
 // If this is not set, all lookup-calls from the tested processor will be nil
-func (km *Tester) AddMockLookupTable(table goka.Table, codec Codec) {
+func (km *Tester) AddMockLookupTable(table string, codec Codec) {
 	km.viewStorages[table] = &viewStorage{
 		codec:   codec,
 		storage: storage.NewMemory(),
 	}
 }
 
+func (km *Tester) isViewTopic(topic string) bool {
+	for _, graph := range km.groupGraphs {
+		for _, viewtopic := range graph.JointTables() {
+			if viewtopic.Topic() == topic {
+				return true
+			}
+		}
+
+		for _, viewtopic := range graph.LookupTables() {
+			if viewtopic.Topic() == topic {
+				return true
+			}
+		}
+	}
+	return false
+}
+func (km *Tester) AddEventConsumer(topic string, events chan kafka.Event) {
+	if _, exists := km.handledTopics[topic]; !exists {
+		km.handledTopics[topic] = new(eventConsumer)
+	}
+	km.handledTopics[topic].addConsumer(events)
+	log.Printf("Adding event consumer for %s (is view: %t)", topic, km.isViewTopic(topic))
+	if !km.isViewTopic(topic) {
+		go func() {
+			events <- &kafka.Assignment{
+				0: -1,
+			}
+			events <- &kafka.EOF{Partition: 0}
+			events <- &kafka.NOP{Partition: -1}
+			log.Printf("Initialized group protocol for topic %s", topic)
+		}()
+	}
+}
+
+func (km *Tester) startEventForwarding() {
+	km.initOnce.Do(func() {
+		go func() {
+			for {
+				select {
+				case event, ok := <-km.incomingEvents:
+					if !ok {
+						return
+					}
+					var topic string
+					switch msg := event.(type) {
+					case *kafka.Message:
+						topic = msg.Topic
+					case *kafka.EOF:
+						topic = msg.Topic
+					case *kafka.BOF:
+						topic = msg.Topic
+					case *kafka.Error:
+						log.Fatalf("Got kafka error. Can this happen?")
+					}
+					consumers, exists := km.handledTopics[topic]
+					if !exists {
+						log.Printf("topic not handled")
+					} else {
+						consumers.sendToAll(event)
+					}
+				}
+			}
+		}()
+	})
+}
+
 // SetLookupValue registers a key-value pair in a confirgured lookup table
-func (km *Tester) SetLookupValue(table goka.Table, key string, value interface{}) {
+func (km *Tester) SetLookupValue(table string, key string, value interface{}) {
 	viewStorage, exists := km.viewStorages[table]
 
 	if !exists {
@@ -130,11 +215,6 @@ func (km *Tester) SetLookupValue(table goka.Table, key string, value interface{}
 		panic(fmt.Errorf("Error encoding value for stoage in Lookup table %s: %v", table, err))
 	}
 	viewStorage.storage.Set(key, encoded)
-}
-
-// SetGroupTableCreator sets a creator for the group table.
-func (km *Tester) SetGroupTableCreator(creator func() (string, []byte)) {
-	km.groupTableCreator = creator
 }
 
 // TopicManagerBuilder returns the topicmanager builder when this tester is used as an option
@@ -149,14 +229,7 @@ func (km *Tester) TopicManagerBuilder() kafka.TopicManagerBuilder {
 // to a processor
 func (km *Tester) ConsumerBuilder() kafka.ConsumerBuilder {
 	return func(b []string, group, clientID string) (kafka.Consumer, error) {
-		if group == kafka.ViewConsumerGroup {
-			return km.viewConsumerMock, nil
-		}
-
-		if km.groupTopic == "" {
-			km.groupTopic = fmt.Sprintf("%s-table", group)
-		}
-		return km.consumerMock, nil
+		return newConsumerMock(km), nil
 	}
 }
 
@@ -172,7 +245,7 @@ func (km *Tester) ProducerBuilder() kafka.ProducerBuilder {
 // to a processor
 func (km *Tester) StorageBuilder() storage.Builder {
 	return func(topic string, partition int32) (storage.Storage, error) {
-		if viewStorage, exists := km.viewStorages[goka.Table(topic)]; exists {
+		if viewStorage, exists := km.viewStorages[topic]; exists {
 			return viewStorage.storage, nil
 		}
 		return km.storage, nil
@@ -181,37 +254,37 @@ func (km *Tester) StorageBuilder() storage.Builder {
 
 // initProtocol initiates the protocol with the client basically making the KafkaMock
 // usable.
-func (km *Tester) initProtocol() {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("tester: panic initProtocol: %+v", r)
-		}
-	}()
-	km.consumerEvents <- &kafka.Assignment{
-		0: -1,
-	}
-
-	for km.groupTableCreator != nil {
-		key, value := km.groupTableCreator()
-		if key == "" || value == nil {
-			break
-		}
-		km.consumerEvents <- &kafka.Message{
-			Topic:     km.groupTopic,
-			Partition: 0,
-			Offset:    km.tableOffset,
-			Key:       key,
-			Value:     value,
-		}
-	}
-
-	km.consumerEvents <- &kafka.EOF{Partition: 0}
-	km.consumerEvents <- &kafka.NOP{Partition: -1}
-
-	for ev := range km.incomingEvents {
-		km.consumerEvents <- ev
-	}
-}
+// func (km *Tester) initProtocol() {
+// 	defer func() {
+// 		if r := recover(); r != nil {
+// 			log.Printf("tester: panic initProtocol: %+v", r)
+// 		}
+// 	}()
+// 	km.consumerEvents <- &kafka.Assignment{
+// 		0: -1,
+// 	}
+//
+// 	for km.groupTableCreator != nil {
+// 		key, value := km.groupTableCreator()
+// 		if key == "" || value == nil {
+// 			break
+// 		}
+// 		km.consumerEvents <- &kafka.Message{
+// 			Topic:     km.groupTopic,
+// 			Partition: 0,
+// 			Offset:    km.tableOffset,
+// 			Key:       key,
+// 			Value:     value,
+// 		}
+// 	}
+//
+// 	km.consumerEvents <- &kafka.EOF{Partition: 0}
+// 	km.consumerEvents <- &kafka.NOP{Partition: -1}
+//
+// 	for ev := range km.incomingEvents {
+// 		km.consumerEvents <- ev
+// 	}
+// }
 
 // ConsumeProto simulates a message on kafka in a topic with a key.
 func (km *Tester) ConsumeProto(topic string, key string, msg proto.Message) {
@@ -411,7 +484,7 @@ type viewConsumerMock struct {
 
 func newViewConsumerMock(tester *Tester) *viewConsumerMock {
 	return &viewConsumerMock{
-		events: make(chan kafka.Event),
+		events: make(chan kafka.Event, 1),
 	}
 }
 
@@ -460,18 +533,20 @@ func (vcm *viewConsumerMock) Close() error {
 
 type consumerMock struct {
 	tester    *Tester
+	events    chan kafka.Event
 	closeOnce sync.Once
 }
 
 func newConsumerMock(tester *Tester) *consumerMock {
 	return &consumerMock{
 		tester: tester,
+		events: make(chan kafka.Event),
 	}
 }
 
 // Events returns the event channel of the consumer mock
 func (km *consumerMock) Events() <-chan kafka.Event {
-	return km.tester.consumerEvents
+	return km.events
 }
 
 // Subscribe marks the consumer to subscribe to passed topics.
@@ -479,9 +554,9 @@ func (km *consumerMock) Events() <-chan kafka.Event {
 // pass emitted messages back to the processor.
 func (km *consumerMock) Subscribe(topics map[string]int64) error {
 	for topic := range topics {
-		km.tester.handledTopics[topic] = true
+		km.tester.AddEventConsumer(topic, km.events)
 	}
-	go km.tester.initProtocol()
+	km.tester.startEventForwarding()
 	return nil
 }
 
@@ -499,6 +574,8 @@ func (km *consumerMock) Commit(topic string, partition int32, offset int64) erro
 // AddPartition marks the topic as a table topic.
 // The mock has to know the group table topic to ignore emit calls (which would never be consumed)
 func (km *consumerMock) AddPartition(topic string, partition int32, initialOffset int64) error {
+	km.tester.AddEventConsumer(topic, km.events)
+	km.tester.startEventForwarding()
 	return nil
 }
 
@@ -512,8 +589,7 @@ func (km *consumerMock) RemovePartition(topic string, partition int32) error {
 // No action required in the mock.
 func (km *consumerMock) Close() error {
 	km.closeOnce.Do(func() {
-		close(km.tester.incomingEvents)
-		close(km.tester.consumerEvents)
+		close(km.events)
 	})
 	return nil
 }
@@ -535,7 +611,6 @@ func (tm *topicMgrMock) EnsureStreamExists(topic string, npar int) error {
 // Partitions returns the number of partitions of a topic, that are assigned to the running
 // instance, i.e. it doesn't represent all partitions of a topic.
 func (tm *topicMgrMock) Partitions(topic string) ([]int32, error) {
-	tm.tester.handledTopics[topic] = true
 	return []int32{0}, nil
 }
 

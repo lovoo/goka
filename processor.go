@@ -74,7 +74,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	}
 
 	opts := new(poptions)
-	err := opts.applyOptions(string(gg.Group()), options...)
+	err := opts.applyOptions(gg, options...)
 	if err != nil {
 		return nil, fmt.Errorf(errApplyOptions, err)
 	}
