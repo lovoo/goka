@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	kazoo "github.com/db7/kazoo-go"
+	kazoo "github.com/wvanbergen/kazoo-go"
 )
 
 // TopicManager provides an interface to create/check topics and their partitions

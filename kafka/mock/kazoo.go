@@ -4,8 +4,8 @@
 package mock
 
 import (
-	kazoo_go "github.com/db7/kazoo-go"
 	gomock "github.com/golang/mock/gomock"
+	kazoo_go "github.com/wvanbergen/kazoo-go"
 )
 
 // Mock of TopicManager interface

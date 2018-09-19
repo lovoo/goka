@@ -6,9 +6,9 @@ import (
 
 	"github.com/lovoo/goka/kafka/mock"
 
-	kazoo "github.com/db7/kazoo-go"
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
+	kazoo "github.com/wvanbergen/kazoo-go"
 )
 
 func TestTopicManager_updateChroot(t *testing.T) {
