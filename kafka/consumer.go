@@ -33,7 +33,9 @@ type Consumer interface {
 	Events() <-chan Event
 
 	// group consume assumes co-partioned topics
+	// define input topics to consume
 	Subscribe(topics map[string]int64) error
+	// marks the consumer ready to start consuming the messages
 	AddGroupPartition(partition int32)
 	Commit(topic string, partition int32, offset int64) error
 
