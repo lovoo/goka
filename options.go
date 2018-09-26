@@ -61,7 +61,7 @@ func DefaultHasher() func() hash.Hash32 {
 ///////////////////////////////////////////////////////////////////////////////
 
 // ProcessorOption defines a configuration option to be used when creating a processor.
-type ProcessorOption func(*poptions)
+type ProcessorOption func(*poptions, *GroupGraph)
 
 // processor options
 type poptions struct {
@@ -84,42 +84,42 @@ type poptions struct {
 // WithUpdateCallback defines the callback called upon recovering a message
 // from the log.
 func WithUpdateCallback(cb UpdateCallback) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.updateCallback = cb
 	}
 }
 
 // WithClientID defines the client ID used to identify with Kafka.
 func WithClientID(clientID string) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.clientID = clientID
 	}
 }
 
 // WithStorageBuilder defines a builder for the storage of each partition.
 func WithStorageBuilder(sb storage.Builder) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.builders.storage = sb
 	}
 }
 
 // WithTopicManagerBuilder replaces the default topic manager builder.
 func WithTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.builders.topicmgr = tmb
 	}
 }
 
 // WithConsumerBuilder replaces the default consumer builder.
 func WithConsumerBuilder(cb kafka.ConsumerBuilder) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.builders.consumer = cb
 	}
 }
 
 // WithProducerBuilder replaces the default producer builder.
 func WithProducerBuilder(pb kafka.ProducerBuilder) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.builders.producer = pb
 	}
 }
@@ -128,7 +128,7 @@ func WithProducerBuilder(pb kafka.ProducerBuilder) ProcessorOption {
 // This is mostly used for testing by setting it to 0 to have synchronous behavior
 // of goka.
 func WithPartitionChannelSize(size int) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.partitionChannelSize = size
 	}
 }
@@ -136,14 +136,14 @@ func WithPartitionChannelSize(size int) ProcessorOption {
 // WithLogger sets the logger the processor should use. By default, processors
 // use the standard library logger.
 func WithLogger(log logger.Logger) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.log = log
 	}
 }
 
 // WithHasher sets the hash function that assigns keys to partitions.
 func WithHasher(hasher func() hash.Hash32) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.hasher = hasher
 	}
 }
@@ -163,37 +163,41 @@ const (
 // WithNilHandling configures how the processor should handle messages with nil
 // value. By default the processor ignores nil messages.
 func WithNilHandling(nh NilHandling) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.nilHandling = nh
 	}
 }
 
+// Tester interface to avoid import cycles when a processor needs to register to
+// the tester.
 type Tester interface {
 	StorageBuilder() storage.Builder
 	ConsumerBuilder() kafka.ConsumerBuilder
 	ProducerBuilder() kafka.ProducerBuilder
 	TopicManagerBuilder() kafka.TopicManagerBuilder
+	RegisterGroupGraph(*GroupGraph)
 }
 
 // WithTester configures all external connections of a processor, ie, storage,
 // consumer and producer
 func WithTester(t Tester) ProcessorOption {
-	return func(o *poptions) {
+	return func(o *poptions, gg *GroupGraph) {
 		o.builders.storage = t.StorageBuilder()
 		o.builders.consumer = t.ConsumerBuilder()
 		o.builders.producer = t.ProducerBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
 		o.partitionChannelSize = 0
+		t.RegisterGroupGraph(gg)
 	}
 }
 
-func (opt *poptions) applyOptions(group string, opts ...ProcessorOption) error {
+func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error {
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
 	opt.hasher = DefaultHasher()
 
 	for _, o := range opts {
-		o(opt)
+		o(opt, gg)
 	}
 
 	// StorageBuilder should always be set as a default option in NewProcessor

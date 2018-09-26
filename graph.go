@@ -124,12 +124,14 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 		switch e := e.(type) {
 		case inputStreams:
 			for _, input := range e {
+				gg.validateInputTopic(input.Topic())
 				inputStr := input.(*inputStream)
 				gg.codecs[input.Topic()] = input.Codec()
 				gg.callbacks[input.Topic()] = inputStr.cb
 				gg.inputStreams = append(gg.inputStreams, inputStr)
 			}
 		case *inputStream:
+			gg.validateInputTopic(e.Topic())
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.callbacks[e.Topic()] = e.cb
 			gg.inputStreams = append(gg.inputStreams, e)
@@ -155,6 +157,16 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 		}
 	}
 	return &gg
+}
+
+func (gg *GroupGraph) validateInputTopic(topic string) {
+	if topic == "" {
+		panic("Input topic cannot be empty. This will not work.")
+	}
+
+	if _, exists := gg.callbacks[topic]; exists {
+		panic(fmt.Errorf("Callback for topic %s already exists. It is illegal to consume a topic twice", topic))
+	}
 }
 
 // Validate validates the group graph and returns an error if invalid.
