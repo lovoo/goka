@@ -164,6 +164,7 @@ func (km *Tester) RegisterGroupGraph(gg *goka.GroupGraph) {
 
 	for _, output := range gg.OutputStreams() {
 		km.registerCodec(output.Topic(), output.Codec())
+		km.getOrCreateQueue(output.Topic())
 	}
 	for _, join := range gg.JointTables() {
 		km.getOrCreateQueue(join.Topic()).expectSimpleConsumer()

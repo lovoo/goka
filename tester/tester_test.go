@@ -3,7 +3,7 @@ package tester
 import (
 	"context"
 	"fmt"
-	"log"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -49,7 +49,33 @@ func Test_SimpleConsume(t *testing.T) {
 	}
 
 	if receivedMessage != "100" {
-		log.Fatalf("Message did not get through...")
+		t.Fatalf("Message did not get through...")
+	}
+}
+
+func Test_InputOutput(t *testing.T) {
+	gkt := New(t)
+
+	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
+		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+			ctx.Emit("output", ctx.Key(), msg)
+		}),
+		goka.Output("output", new(codec.String)),
+	),
+		goka.WithTester(gkt),
+	)
+	go proc.Run(context.Background())
+
+	mt := gkt.NewMessageTrackerFromEnd()
+
+	mt.ExpectEmpty("output")
+
+	gkt.ConsumeString("input", "key", "value")
+
+	key, value, ok := mt.NextMessage("output")
+
+	if key != "key" || !reflect.DeepEqual(value, "value") || !ok {
+		t.Fatalf("Message was not received in the output queue")
 	}
 }
 

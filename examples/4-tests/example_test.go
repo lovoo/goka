@@ -39,7 +39,6 @@ func Test_1Input(t *testing.T) {
 }
 
 // Scenario (2)
-//
 // One processor with only one input and one output
 func Test_2InputOutput(t *testing.T) {
 	var (
