@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"hash"
-	"io/ioutil"
 	"log"
 	"os"
 	"reflect"
@@ -24,9 +23,17 @@ type Codec interface {
 	Decode(data []byte) (value interface{}, err error)
 }
 
+type debugLogger interface {
+	Printf(s string, args ...interface{})
+}
+
+type nilLogger int
+
+func (*nilLogger) Printf(s string, args ...interface{}) {}
+
 var (
-	debug  = flag.Bool("tester-debug", false, "show debug prints of the tester.")
-	logger = log.New(ioutil.Discard, "<Tester> ", 0)
+	debug              = flag.Bool("tester-debug", false, "show debug prints of the tester.")
+	logger debugLogger = new(nilLogger)
 )
 
 // EmitHandler abstracts a function that allows to overwrite kafkamock's Emit function to
@@ -110,7 +117,7 @@ func New(t T) *Tester {
 
 	// activate the logger if debug is turned on
 	if *debug {
-		logger.SetOutput(os.Stdout)
+		logger = log.New(os.Stderr, "<Tester> ", 0)
 	}
 
 	tester := &Tester{
@@ -355,6 +362,7 @@ func (km *Tester) ReplaceEmitHandler(emitter EmitHandler) {
 // ClearValues resets all table values
 func (km *Tester) ClearValues() {
 	for topic, sts := range km.storages {
+		_ = topic
 		for _, st := range sts {
 			logger.Printf("clearing all values from storage for topic %s", topic)
 			it, _ := st.Iterator()
@@ -417,6 +425,6 @@ func (p *producerMock) Emit(topic string, key string, value []byte) *kafka.Promi
 // Close closes the producer mock
 // No action required in the mock.
 func (p *producerMock) Close() error {
-	fmt.Println("Closing producer mock")
+	logger.Printf("Closing producer mock")
 	return nil
 }
