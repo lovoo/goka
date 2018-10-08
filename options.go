@@ -176,6 +176,7 @@ type Tester interface {
 	ProducerBuilder() kafka.ProducerBuilder
 	TopicManagerBuilder() kafka.TopicManagerBuilder
 	RegisterGroupGraph(*GroupGraph)
+	RegisterEmitter(Stream, Codec)
 }
 
 // WithTester configures all external connections of a processor, ie, storage,
@@ -338,7 +339,7 @@ func (opt *voptions) applyOptions(topic Table, opts ...ViewOption) error {
 
 // EmitterOption defines a configuration option to be used when creating an
 // emitter.
-type EmitterOption func(*eoptions)
+type EmitterOption func(*eoptions, Stream, Codec)
 
 // emitter options
 type eoptions struct {
@@ -356,46 +357,54 @@ type eoptions struct {
 // WithEmitterLogger sets the logger the emitter should use. By default,
 // emitters use the standard library logger.
 func WithEmitterLogger(log logger.Logger) EmitterOption {
-	return func(o *eoptions) {
+	return func(o *eoptions, topic Stream, codec Codec) {
 		o.log = log
 	}
 }
 
 // WithEmitterClientID defines the client ID used to identify with kafka.
 func WithEmitterClientID(clientID string) EmitterOption {
-	return func(o *eoptions) {
+	return func(o *eoptions, topic Stream, codec Codec) {
 		o.clientID = clientID
 	}
 }
 
 // WithEmitterTopicManagerBuilder replaces the default topic manager builder.
 func WithEmitterTopicManagerBuilder(tmb kafka.TopicManagerBuilder) EmitterOption {
-	return func(o *eoptions) {
+	return func(o *eoptions, topic Stream, codec Codec) {
 		o.builders.topicmgr = tmb
 	}
 }
 
 // WithEmitterProducerBuilder replaces the default producer builder.
 func WithEmitterProducerBuilder(pb kafka.ProducerBuilder) EmitterOption {
-	return func(o *eoptions) {
+	return func(o *eoptions, topic Stream, codec Codec) {
 		o.builders.producer = pb
 	}
 }
 
 // WithEmitterHasher sets the hash function that assigns keys to partitions.
 func WithEmitterHasher(hasher func() hash.Hash32) EmitterOption {
-	return func(o *eoptions) {
+	return func(o *eoptions, topic Stream, codec Codec) {
 		o.hasher = hasher
 	}
 }
 
-func (opt *eoptions) applyOptions(opts ...EmitterOption) error {
+func WithEmitterTester(t Tester) EmitterOption {
+	return func(o *eoptions, topic Stream, codec Codec) {
+		o.builders.producer = t.ProducerBuilder()
+		o.builders.topicmgr = t.TopicManagerBuilder()
+		t.RegisterEmitter(topic, codec)
+	}
+}
+
+func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOption) error {
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
 	opt.hasher = DefaultHasher()
 
 	for _, o := range opts {
-		o(opt)
+		o(opt, topic, codec)
 	}
 
 	// config not set, use default one

@@ -183,6 +183,12 @@ func (km *Tester) RegisterGroupGraph(gg *goka.GroupGraph) {
 
 }
 
+// RegisterEmitter registers an emitter to be working with the tester.
+func (km *Tester) RegisterEmitter(topic goka.Stream, codec goka.Codec) {
+	km.registerCodec(string(topic), codec)
+	km.getOrCreateQueue(string(topic))
+}
+
 // TopicManagerBuilder returns the topicmanager builder when this tester is used as an option
 // to a processor
 func (km *Tester) TopicManagerBuilder() kafka.TopicManagerBuilder {
