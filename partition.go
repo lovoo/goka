@@ -271,7 +271,8 @@ func (p *partition) load(ctx context.Context, catchup bool) (rerr error) {
 			case *kafka.Message:
 				lastMessage = time.Now()
 				if ev.Topic != p.topic {
-					return fmt.Errorf("load: wrong topic = %s", ev.Topic)
+					p.log.Printf("dropping message from topic = %s while loading", ev.Topic)
+					continue
 				}
 				if err := p.storeEvent(ev); err != nil {
 					return fmt.Errorf("load: error updating storage: %v", err)
