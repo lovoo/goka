@@ -113,6 +113,17 @@ func (_mr *_MockClientRecorder) InSyncReplicas(arg0, arg1 interface{}) *gomock.C
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "InSyncReplicas", arg0, arg1)
 }
 
+func (_m *MockClient) InitProducerID() (*sarama.InitProducerIDResponse, error) {
+	ret := _m.ctrl.Call(_m, "InitProducerID")
+	ret0, _ := ret[0].(*sarama.InitProducerIDResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockClientRecorder) InitProducerID() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "InitProducerID")
+}
+
 func (_m *MockClient) Leader(_param0 string, _param1 int32) (*sarama.Broker, error) {
 	ret := _m.ctrl.Call(_m, "Leader", _param0, _param1)
 	ret0, _ := ret[0].(*sarama.Broker)
