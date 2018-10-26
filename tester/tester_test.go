@@ -3,6 +3,7 @@ package tester
 import (
 	"context"
 	"fmt"
+	"log"
 	"reflect"
 	"sync"
 	"testing"
@@ -21,7 +22,6 @@ func increment(ctx goka.Context, msg interface{}) {
 		state = value.(int64)
 	}
 	state++
-
 	ctx.SetValue(state)
 }
 
@@ -210,7 +210,6 @@ func Test_Loop(t *testing.T) {
 	if gkt.TableValue("looptest-table", "loop-key").(int64) != 1 {
 		t.Fatalf("loop failed")
 	}
-	time.Sleep(10 * time.Millisecond)
 }
 
 func Test_Lookup(t *testing.T) {
@@ -473,5 +472,31 @@ func Test_MultiLookup(t *testing.T) {
 	gkt.Consume("trigger", "set-in-table", "44")
 	if foundValue != 2 {
 		t.Fatalf("did not find value in lookup table")
+	}
+}
+
+func Test_ManyConsume(t *testing.T) {
+	var inputs goka.Streams
+	for i := 0; i < 100; i++ {
+		inputs = append(inputs, goka.Stream(fmt.Sprintf("input-%d", i)))
+	}
+
+	received := map[string]bool{}
+
+	gkt := New(t)
+	proc, _ := goka.NewProcessor([]string{},
+		goka.DefineGroup("group",
+			goka.Inputs(inputs, new(codec.String), func(ctx goka.Context, msg interface{}) { received[string(ctx.Topic())] = true }),
+		),
+		goka.WithTester(gkt),
+	)
+	go proc.Run(context.Background())
+
+	// we'll just try to get something consumed
+	for i := 0; i < 100; i++ {
+		gkt.Consume(fmt.Sprintf("input-%d", i), "something", "something")
+	}
+	if len(received) != 100 {
+		t.Fatalf("did not receive all messages")
 	}
 }

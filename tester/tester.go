@@ -53,7 +53,7 @@ type Tester struct {
 	producerMock *producerMock
 	topicMgrMock *topicMgrMock
 	emitHandler  EmitHandler
-	storages     map[string][]storage.Storage
+	storages     map[string]storage.Storage
 
 	codecs      map[string]goka.Codec
 	topicQueues map[string]*queue
@@ -72,7 +72,7 @@ func (km *Tester) queueForTopic(topic string) *queue {
 	return q
 }
 
-// CreateMessageTracker creates a message tracker that starts tracking
+// NewMessageTrackerFromEnd creates a message tracker that starts tracking
 // the messages from the end of the current queues
 func (km *Tester) NewMessageTrackerFromEnd() *MessageTracker {
 	km.waitStartup()
@@ -124,7 +124,7 @@ func New(t T) *Tester {
 		t:           t,
 		codecs:      make(map[string]goka.Codec),
 		topicQueues: make(map[string]*queue),
-		storages:    make(map[string][]storage.Storage),
+		storages:    make(map[string]storage.Storage),
 	}
 	tester.producerMock = newProducerMock(tester.handleEmit)
 	tester.topicMgrMock = newTopicMgrMock(tester)
@@ -217,8 +217,11 @@ func (km *Tester) ProducerBuilder() kafka.ProducerBuilder {
 // to a processor
 func (km *Tester) StorageBuilder() storage.Builder {
 	return func(topic string, partition int32) (storage.Storage, error) {
+		if st, exists := km.storages[topic]; exists {
+			return st, nil
+		}
 		st := storage.NewMemory()
-		km.storages[topic] = append(km.storages[topic], st)
+		km.storages[topic] = st
 		return st, nil
 	}
 }
@@ -324,12 +327,11 @@ func (km *Tester) TableValue(table goka.Table, key string) interface{} {
 	km.waitStartup()
 
 	topic := string(table)
-	sts := km.storages[topic]
-	if len(sts) == 0 {
+	st, exists := km.storages[topic]
+	if !exists {
 		panic(fmt.Errorf("topic %s does not exist", topic))
 	}
-
-	item, err := sts[0].Get(key)
+	item, err := st.Get(key)
 	ensure.Nil(km.t, err)
 	if item == nil {
 		return nil
@@ -346,18 +348,16 @@ func (km *Tester) SetTableValue(table goka.Table, key string, value interface{})
 	logger.Printf("setting value is not implemented yet.")
 
 	topic := string(table)
-	sts := km.storages[topic]
-	if len(sts) == 0 {
+	st, exists := km.storages[topic]
+	if !exists {
 		panic(fmt.Errorf("storage for topic %s does not exist", topic))
 	}
 	data, err := km.codecForTopic(topic).Encode(value)
 	ensure.Nil(km.t, err)
 
-	for _, st := range sts {
-		err = st.Set(key, data)
-		if err != nil {
-			panic(fmt.Errorf("Error setting key %s in storage %s: %v", key, table, err))
-		}
+	err = st.Set(key, data)
+	if err != nil {
+		panic(fmt.Errorf("Error setting key %s in storage %s: %v", key, table, err))
 	}
 }
 
@@ -368,14 +368,11 @@ func (km *Tester) ReplaceEmitHandler(emitter EmitHandler) {
 
 // ClearValues resets all table values
 func (km *Tester) ClearValues() {
-	for topic, sts := range km.storages {
-		_ = topic
-		for _, st := range sts {
-			logger.Printf("clearing all values from storage for topic %s", topic)
-			it, _ := st.Iterator()
-			for it.Next() {
-				st.Delete(string(it.Key()))
-			}
+	for topic, st := range km.storages {
+		logger.Printf("clearing all values from storage for topic %s", topic)
+		it, _ := st.Iterator()
+		for it.Next() {
+			st.Delete(string(it.Key()))
 		}
 	}
 }
