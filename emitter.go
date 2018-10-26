@@ -29,7 +29,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 
 	opts := new(eoptions)
 
-	err := opts.applyOptions(options...)
+	err := opts.applyOptions(topic, codec, options...)
 	if err != nil {
 		return nil, fmt.Errorf(errApplyOptions, err)
 	}

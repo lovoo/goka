@@ -353,6 +353,13 @@ func (v *View) run(ctx context.Context) error {
 				case <-ctx.Done():
 					return nil
 				}
+			case *kafka.NOP:
+				partition := v.partitions[int(ev.Partition)]
+				select {
+				case partition.ch <- ev:
+				case <-ctx.Done():
+					return nil
+				}
 			case *kafka.Error:
 				return fmt.Errorf("view: error from kafka consumer: %v", ev)
 			default:
