@@ -1027,8 +1027,8 @@ func TestProcessor_Start(t *testing.T) {
 	consumer.EXPECT().Subscribe(topOff).Return(nil)
 	consumer.EXPECT().Events().Return(ch).AnyTimes()
 	// 2. rebalance
-	st.EXPECT().Open().Times(3)
-	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(3)
+	st.EXPECT().Open().Times(4)
+	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(4)
 	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
 	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
 	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
@@ -1044,9 +1044,13 @@ func TestProcessor_Start(t *testing.T) {
 	// 5. process message partition 1
 	consumer.EXPECT().Commit(topic, int32(1), int64(1))
 	// 6. new assignment remove partition 1 and 2
+	st.EXPECT().Close() // partition 0 close (only temporarily)
+	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
 	st.EXPECT().Close() // partition 1 close
 	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
 	st.EXPECT().Close() // partition 2 close
+	// add partition 0 again
+	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
 	// 7. stop processor
 	consumer.EXPECT().Close() //.Do(func() { close(ch) })
 	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
@@ -1204,6 +1208,15 @@ func TestProcessor_StartWithTable(t *testing.T) {
 	consumer.EXPECT().RemovePartition(table, int32(1)).Times(2)
 	consumer.EXPECT().RemovePartition(table, int32(2))
 	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
+	// also partition 0 will be temporarily closed
+	st.EXPECT().Close().Times(2) // close group and other table of partition 0
+	consumer.EXPECT().RemovePartition(table, int32(0))
+	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
+	// add partition 0 again
+	st.EXPECT().Open().Times(2)
+	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(2)
+	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
+	consumer.EXPECT().AddPartition(table, int32(0), int64(123))
 	// 7. stop processor
 	consumer.EXPECT().Close().Do(func() { close(ch) })
 	consumer.EXPECT().RemovePartition(table, int32(0))
