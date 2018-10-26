@@ -3,13 +3,11 @@ package tester
 import (
 	"context"
 	"fmt"
-	"log"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/facebookgo/ensure"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
 )
@@ -66,13 +64,13 @@ func Test_InputOutput(t *testing.T) {
 	)
 	go proc.Run(context.Background())
 
-	mt := gkt.NewMessageTrackerFromEnd()
+	mt := gkt.NewMessageTracker("output")
 
-	mt.ExpectEmpty("output")
+	mt.ExpectAtEnd()
 
 	gkt.ConsumeString("input", "key", "value")
 
-	key, value, ok := mt.NextMessage("output")
+	key, value, ok := mt.Next()
 
 	if key != "key" || !reflect.DeepEqual(value, "value") || !ok {
 		t.Fatalf("Message was not received in the output queue")
@@ -294,26 +292,18 @@ func Test_MessageTracker_Default(t *testing.T) {
 		goka.WithTester(gkt),
 	)
 	runProcOrFail(proc)
-	mt := gkt.NewMessageTrackerFromEnd()
-	gkt.Consume("input", "somekey", "123")
-
-	mt.ExpectEmit("output", "somekey", func(value []byte) {
-		if string(value) != "123" {
-			t.Fatalf("unexpected output. expected '123', got %s", string(value))
-		}
-	})
-
+	mt := gkt.NewMessageTracker("output")
 	gkt.Consume("input", "somekey", "124")
-	key, value, hasNext := mt.NextMessage("output")
+	key, value, hasNext := mt.Next()
 	if key != "somekey" || value.(string) != "124" || !hasNext {
 		t.Fatalf("next emitted was something unexpected (key=%s, value=%s, hasNext=%t)", key, value.(string), hasNext)
 	}
-	_, _, hasNext = mt.NextMessage("output")
+	_, _, hasNext = mt.Next()
 	if hasNext {
 		t.Fatalf("got another emitted message which shouldn't be there")
 	}
 
-	mt.ExpectEmpty("output")
+	mt.ExpectAtEnd()
 
 }
 
@@ -331,14 +321,14 @@ func Test_MessageTracker_Extra(t *testing.T) {
 	runProcOrFail(proc)
 	gkt.Consume("input", "somekey", "123")
 
-	tracker := gkt.NewMessageTrackerFromEnd()
+	tracker := gkt.NewMessageTracker("output")
 
 	// the new message tracker should start at the end, so the already emitted message
 	// shouldn't appear
-	tracker.ExpectEmpty("output")
+	tracker.ExpectAtEnd()
 
 	gkt.Consume("input", "somekey", "124")
-	key, value, hasNext := tracker.NextMessage("output")
+	key, value, hasNext := tracker.Next()
 	if key != "somekey" || value.(string) != "124" || !hasNext {
 		t.Fatalf("next emitted was something unexpected (key=%s, value=%s, hasNext=%t)", key, value.(string), hasNext)
 	}
@@ -372,7 +362,9 @@ func Test_Shutdown(t *testing.T) {
 	gkt.Consume("input", "test", "test")
 
 	wg.Wait()
-	ensure.Nil(t, procErr, "no error, we cancelled the processor")
+	if procErr != nil {
+		t.Fatalf("got error for shutting down processor: %v", procErr)
+	}
 }
 
 func Test_LookupWithInitialData(t *testing.T) {

@@ -60,13 +60,13 @@ func Test_2InputOutput(t *testing.T) {
 
 	// create a new message tracker so we can check that the message was being emitted.
 	// If we created the message tracker after the ConsumeString, there wouldn't be a message.
-	mt := gkt.NewMessageTrackerFromEnd()
+	mt := gkt.NewMessageTracker("output")
 
 	// send some message
 	gkt.ConsumeString("input", "key", "some-message")
 
 	// make sure received the message in the output
-	key, value, valid := mt.NextMessage("output")
+	key, value, valid := mt.Next()
 	ensure.True(t, valid)
 	ensure.DeepEqual(t, key, "key")
 	ensure.DeepEqual(t, value, "forwarded: some-message")
@@ -126,22 +126,22 @@ func Test_Subtest(t *testing.T) {
 		gkt.ClearValues()
 		// in a subtest we can't know what messages already exists in the topics left
 		// by other tests, so let's start a message tracker from here.
-		mt := gkt.NewMessageTrackerFromEnd()
+		mt := gkt.NewMessageTracker("output")
 
 		// send a message
 		gkt.ConsumeString("input", "bob", "hello")
 
 		// check it was emitted
-		key, value, ok := mt.NextMessage("output")
+		key, value, ok := mt.Next()
 		ensure.True(t, ok)
 		ensure.DeepEqual(t, key, "output-key")
 		ensure.DeepEqual(t, value, "forwarded: hello")
 
 		// we should be at the end
-		mt.ExpectEmpty("output")
+		mt.ExpectAtEnd()
 
 		// this is equivalent
-		_, _, ok = mt.NextMessage("output")
+		_, _, ok = mt.Next()
 		ensure.False(t, ok)
 	})
 	t.Run("test-2", func(t *testing.T) {

@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/facebookgo/ensure"
 	"github.com/golang/protobuf/proto"
 
 	"github.com/lovoo/goka"
@@ -74,10 +73,10 @@ func (km *Tester) queueForTopic(topic string) *queue {
 
 // NewMessageTrackerFromEnd creates a message tracker that starts tracking
 // the messages from the end of the current queues
-func (km *Tester) NewMessageTrackerFromEnd() *MessageTracker {
+func (km *Tester) NewMessageTracker(topic string) *MessageTracker {
 	km.waitStartup()
 
-	mt := newMessageTracker(km, km.t)
+	mt := newMessageTracker(km, km.t, topic)
 	km.mQueues.RLock()
 	defer km.mQueues.RUnlock()
 	for topic := range km.topicQueues {
@@ -332,12 +331,16 @@ func (km *Tester) TableValue(table goka.Table, key string) interface{} {
 		panic(fmt.Errorf("topic %s does not exist", topic))
 	}
 	item, err := st.Get(key)
-	ensure.Nil(km.t, err)
+	if err != nil {
+		km.t.Fatalf("Error getting table value from storage (table=%s, key=%s): %v", table, key, err)
+	}
 	if item == nil {
 		return nil
 	}
 	value, err := km.codecForTopic(topic).Decode(item)
-	ensure.Nil(km.t, err)
+	if err != nil {
+		km.t.Fatalf("error decoding value from storage (table=%s, key=%s, value=%v): %v", table, key, item, err)
+	}
 	return value
 }
 
@@ -353,7 +356,9 @@ func (km *Tester) SetTableValue(table goka.Table, key string, value interface{})
 		panic(fmt.Errorf("storage for topic %s does not exist", topic))
 	}
 	data, err := km.codecForTopic(topic).Encode(value)
-	ensure.Nil(km.t, err)
+	if err != nil {
+		km.t.Fatalf("error decoding value from storage (table=%s, key=%s, value=%v): %v", table, key, value, err)
+	}
 
 	err = st.Set(key, data)
 	if err != nil {
