@@ -49,6 +49,16 @@ func (_mr *_MockTopicManagerRecorder) EnsureStreamExists(arg0, arg1 interface{})
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "EnsureStreamExists", arg0, arg1)
 }
 
+func (_m *MockTopicManager) EnsureTopicExists(topic string, npar int, rfactor int, config map[string]string) error {
+	ret := _m.ctrl.Call(_m, "EnsureTopicExists", topic, npar, rfactor, config)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockTopicManagerRecorder) EnsureTopicExists(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "EnsureTopicExists", arg0, arg1, arg2, arg3)
+}
+
 func (_m *MockTopicManager) Partitions(topic string) ([]int32, error) {
 	ret := _m.ctrl.Call(_m, "Partitions", topic)
 	ret0, _ := ret[0].([]int32)

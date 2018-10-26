@@ -148,6 +148,16 @@ func (_mr *_MockTopicManagerRecorder) EnsureTableExists(arg0, arg1 interface{}) 
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "EnsureTableExists", arg0, arg1)
 }
 
+func (_m *MockTopicManager) EnsureTopicExists(_param0 string, _param1 int, _param2 int, _param3 map[string]string) error {
+	ret := _m.ctrl.Call(_m, "EnsureTopicExists", _param0, _param1, _param2, _param3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockTopicManagerRecorder) EnsureTopicExists(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "EnsureTopicExists", arg0, arg1, arg2, arg3)
+}
+
 func (_m *MockTopicManager) Partitions(_param0 string) ([]int32, error) {
 	ret := _m.ctrl.Call(_m, "Partitions", _param0)
 	ret0, _ := ret[0].([]int32)

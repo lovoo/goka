@@ -16,6 +16,9 @@ type TopicManager interface {
 	EnsureTableExists(topic string, npar int) error
 	// EnsureStreamExists checks that a stream topic exists, or create one if possible
 	EnsureStreamExists(topic string, npar int) error
+	// EnsureTopicExists checks that a topic exists, or create one if possible,
+	// enforcing the given configuration
+	EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error
 
 	// Partitions returns the number of partitions of a topic, that are assigned to the running
 	// instance, i.e. it doesn't represent all partitions of a topic.
@@ -64,6 +67,10 @@ func (m *saramaTopicManager) EnsureTableExists(topic string, npar int) error {
 		return fmt.Errorf("topic %s has %d partitions instead of %d", topic, len(par), npar)
 	}
 	return nil
+}
+
+func (m *saramaTopicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
+	return fmt.Errorf("not implemented in SaramaTopicManager")
 }
 
 // TopicManagerConfig contains the configuration to access the Zookeeper servers
@@ -149,6 +156,13 @@ func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
 	return m.checkPartitions(topic, npar)
 }
 
+func (m *topicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
+	if err := checkTopic(m.zk, topic, npar, rfactor, config); err != nil {
+		return err
+	}
+	return m.checkPartitions(topic, npar)
+}
+
 func (m *topicManager) Partitions(topic string) ([]int32, error) {
 	tl, err := m.zk.Topics()
 	if err != nil {
@@ -176,14 +190,22 @@ func checkTopic(kz kzoo, topic string, npar int, rfactor int, cfg map[string]str
 	if err != nil {
 		return err
 	}
-	if ok {
-		return nil
+	if !ok {
+		err = kz.CreateTopic(topic, npar, rfactor, cfg)
+		if err != nil {
+			return err
+		}
 	}
-	err = kz.CreateTopic(topic, npar, rfactor, cfg)
+	// topic exists, check if config the same
+	c, err := kz.Topic(topic).Config()
 	if err != nil {
 		return err
 	}
-
+	for k, v := range cfg {
+		if c[k] != v {
+			return fmt.Errorf("expected %s=%s, but found %s", k, cfg[k], c[k])
+		}
+	}
 	return nil
 }
 
