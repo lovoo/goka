@@ -396,6 +396,11 @@ func (tm *topicMgrMock) EnsureStreamExists(topic string, npar int) error {
 	return nil
 }
 
+// EnsureTopicExists checks that a stream exists, or create one if possible
+func (tm *topicMgrMock) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
+	return nil
+}
+
 // Partitions returns the number of partitions of a topic, that are assigned to the running
 // instance, i.e. it doesn't represent all partitions of a topic.
 func (tm *topicMgrMock) Partitions(topic string) ([]int32, error) {
