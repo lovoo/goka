@@ -771,16 +771,17 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		proxy        = mock.NewMockkafkaProxy(ctrl)
-		st           = mock.NewMockStorage(ctrl)
-		key          = "key"
-		par    int32 = 1
-		offset int64 = 4
-		value        = []byte("value")
-		wait         = make(chan bool)
-		step         = make(chan bool)
-		sync         = func() error { return doTimed(t, func() { <-step }) }
-		count  int64
+		ctx, cancel       = context.WithCancel(context.Background())
+		proxy             = mock.NewMockkafkaProxy(ctrl)
+		st                = mock.NewMockStorage(ctrl)
+		key               = "key"
+		par         int32 = 1
+		offset      int64 = 4
+		value             = []byte("value")
+		wait              = make(chan bool)
+		step              = make(chan bool)
+		sync              = func() error { return doTimed(t, func() { <-step }) }
+		count       int64
 	)
 
 	update := func(st storage.Storage, p int32, k string, v []byte) error {
@@ -805,8 +806,8 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 	)
 
 	go func() {
-		err := p.startCatchup(context.Background())
-		ensure.NotNil(t, err)
+		err := p.startCatchup(ctx)
+		ensure.Nil(t, err)
 		close(wait)
 	}()
 
@@ -861,15 +862,7 @@ func TestPartition_catchupStatefulWithError(t *testing.T) {
 	p.ch <- new(kafka.NOP)
 	ensure.True(t, p.recovered())
 
-	// message will cause error (wrong topic)
-	p.ch <- &kafka.Message{
-		Topic:     "some-other-topic",
-		Partition: par,
-		Offset:    offset + 1,
-		Key:       key,
-		Value:     value,
-	}
-
+	cancel()
 	err = doTimed(t, func() {
 		<-wait
 		ensure.DeepEqual(t, atomic.LoadInt64(&count), int64(2))
