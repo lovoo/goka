@@ -50,6 +50,17 @@ func TestTopicManager_updateChroot(t *testing.T) {
 	_, _, err = updateChroot(servers)
 	ensure.NotNil(t, err)
 
+	// check chroot with trailing /
+	servers = []string{host + "/////"}
+	_, c, err = updateChroot(servers)
+	ensure.DeepEqual(t, c, "")
+	ensure.Nil(t, err)
+
+	servers = []string{host + "/test/"}
+	_, c, err = updateChroot(servers)
+	ensure.DeepEqual(t, c, "/test")
+	ensure.Nil(t, err)
+
 }
 
 func TestCheckPartitions(t *testing.T) {

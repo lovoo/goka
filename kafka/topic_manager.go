@@ -253,6 +253,9 @@ func checkPartitions(client sarama.Client, topic string, npar int) error {
 func updateChroot(servers []string) (servs []string, chroot string, err error) {
 	// find chroot in server addresses
 	for _, server := range servers {
+		for strings.HasSuffix(server, "/") {
+			server = server[:len(server)-1]
+		}
 		splt := strings.Split(server, "/")
 		if len(splt) == 1 {
 			// no chroot in address
