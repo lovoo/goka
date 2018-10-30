@@ -135,6 +135,7 @@ func (m *topicManager) EnsureTableExists(topic string, npar int) error {
 		m.zk, topic, npar,
 		m.config.Table.Replication,
 		map[string]string{"cleanup.policy": "compact"},
+		false,
 	)
 	if err != nil {
 		return err
@@ -149,6 +150,7 @@ func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
 		m.zk, topic, npar,
 		m.config.Stream.Replication,
 		map[string]string{"retention.ms": strconv.Itoa(retention)},
+		false,
 	)
 	if err != nil {
 		return err
@@ -157,7 +159,7 @@ func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
 }
 
 func (m *topicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
-	if err := checkTopic(m.zk, topic, npar, rfactor, config); err != nil {
+	if err := checkTopic(m.zk, topic, npar, rfactor, config, true); err != nil {
 		return err
 	}
 	return m.checkPartitions(topic, npar)
@@ -185,7 +187,7 @@ func (m *topicManager) Partitions(topic string) ([]int32, error) {
 }
 
 // ensure topic exists
-func checkTopic(kz kzoo, topic string, npar int, rfactor int, cfg map[string]string) error {
+func checkTopic(kz kzoo, topic string, npar int, rfactor int, cfg map[string]string, ensureConfig bool) error {
 	ok, err := hasTopic(kz, topic)
 	if err != nil {
 		return err
@@ -195,6 +197,9 @@ func checkTopic(kz kzoo, topic string, npar int, rfactor int, cfg map[string]str
 		if err != nil {
 			return err
 		}
+	}
+	if !ensureConfig {
+		return nil
 	}
 	// topic exists, check if config the same
 	c, err := kz.Topic(topic).Config()
