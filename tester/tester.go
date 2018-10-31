@@ -9,8 +9,6 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/golang/protobuf/proto"
-
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/storage"
@@ -223,17 +221,6 @@ func (km *Tester) StorageBuilder() storage.Builder {
 		km.storages[topic] = st
 		return st, nil
 	}
-}
-
-// ConsumeProto simulates a message on kafka in a topic with a key.
-func (km *Tester) ConsumeProto(topic string, key string, msg proto.Message) {
-	data, err := proto.Marshal(msg)
-	if err != nil && km.t != nil {
-		km.t.Errorf("Error marshaling message for consume: %v", err)
-	}
-	km.waitStartup()
-	km.pushMessage(topic, key, data)
-	km.waitForConsumers()
 }
 
 // ConsumeString simulates a message with a string payload.

@@ -13,7 +13,6 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/rcrowley/go-metrics"
 )
 
 var baseTemplates = append(templates.BaseTemplates, "web/templates/monitor/menu.go.html")
@@ -57,7 +56,6 @@ func (s *Server) BasePath() string {
 type processorStats struct {
 	ID       string
 	ClientID string
-	metrics  metrics.Registry
 }
 
 func (s *Server) AttachProcessor(processor *goka.Processor) {
