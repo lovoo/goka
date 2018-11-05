@@ -69,17 +69,15 @@ func (km *Tester) queueForTopic(topic string) *queue {
 	return q
 }
 
-// NewMessageTrackerFromEnd creates a message tracker that starts tracking
+// NewQueueTrackerFromEnd creates a message tracker that starts tracking
 // the messages from the end of the current queues
-func (km *Tester) NewMessageTracker(topic string) *MessageTracker {
+func (km *Tester) NewQueueTracker(topic string) *QueueTracker {
 	km.waitStartup()
 
-	mt := newMessageTracker(km, km.t, topic)
+	mt := newQueueTracker(km, km.t, topic)
 	km.mQueues.RLock()
 	defer km.mQueues.RUnlock()
-	for topic := range km.topicQueues {
-		mt.MoveToEnd(topic)
-	}
+	mt.Seek(mt.Hwm())
 	return mt
 }
 
@@ -221,13 +219,6 @@ func (km *Tester) StorageBuilder() storage.Builder {
 		km.storages[topic] = st
 		return st, nil
 	}
-}
-
-// ConsumeString simulates a message with a string payload.
-func (km *Tester) ConsumeString(topic string, key string, msg string) {
-	km.waitStartup()
-	km.pushMessage(topic, key, []byte(msg))
-	km.waitForConsumers()
 }
 
 func (km *Tester) waitForConsumers() {

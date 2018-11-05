@@ -65,7 +65,7 @@ func TestProcessor_StatelessContext(t *testing.T) {
 	}()
 	err = doTimed(t, func() {
 		// consume a random key/message, the content doesn't matter as this should fail
-		tester.ConsumeString("input-topic", "key", "msg")
+		tester.Consume("input-topic", "key", "msg")
 		<-done
 	})
 	ensure.Nil(t, err)
@@ -102,7 +102,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 			close(done)
 		}()
 
-		tester.ConsumeString("topic", "key", "world")
+		tester.Consume("topic", "key", "world")
 		cancel()
 		<-done
 		ensure.NotNil(t, procErrors)
@@ -137,7 +137,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 			close(done)
 		}()
 
-		tester.ConsumeString("topic", "key", "world")
+		tester.Consume("topic", "key", "world")
 
 		cancel()
 		<-done
@@ -175,7 +175,7 @@ func TestProcessor_ProducerError(t *testing.T) {
 			close(done)
 		}()
 
-		tester.ConsumeString("topic", "key", "world")
+		tester.Consume("topic", "key", "world")
 
 		// stopping the processor. It should actually not produce results
 		cancel()
@@ -210,7 +210,7 @@ func TestProcessor_consumeFail(t *testing.T) {
 		close(done)
 	}()
 
-	tester.ConsumeString("topic", "key", "world")
+	tester.Consume("topic", "key", "world")
 
 	cancel()
 	<-done
@@ -242,7 +242,7 @@ func TestProcessor_consumePanic(t *testing.T) {
 		close(done)
 	}()
 
-	tester.ConsumeString("topic", "key", "world")
+	tester.Consume("topic", "key", "world")
 
 	cancel()
 	<-done

@@ -32,7 +32,7 @@ func Test_1Input(t *testing.T) {
 	go proc.Run(context.Background())
 
 	// consume a message
-	gkt.ConsumeString("input", "key", "some message")
+	gkt.Consume("input", "key", "some message")
 
 	// ensure the message was received
 	ensure.DeepEqual(t, receivedMessage, "some message")
@@ -59,11 +59,11 @@ func Test_2InputOutput(t *testing.T) {
 	go proc.Run(context.Background())
 
 	// create a new message tracker so we can check that the message was being emitted.
-	// If we created the message tracker after the ConsumeString, there wouldn't be a message.
-	mt := gkt.NewMessageTracker("output")
+	// If we created the message tracker after the Consume, there wouldn't be a message.
+	mt := gkt.NewQueueTracker("output")
 
 	// send some message
-	gkt.ConsumeString("input", "key", "some-message")
+	gkt.Consume("input", "key", "some-message")
 
 	// make sure received the message in the output
 	key, value, valid := mt.Next()
@@ -93,7 +93,7 @@ func Test_3Persist(t *testing.T) {
 	go proc.Run(context.Background())
 
 	// send some message
-	gkt.ConsumeString("input", "key", "some-message")
+	gkt.Consume("input", "key", "some-message")
 
 	// make sure it's correctly persisted in the state
 	value := gkt.TableValue("group-table", "key")
@@ -126,10 +126,10 @@ func Test_Subtest(t *testing.T) {
 		gkt.ClearValues()
 		// in a subtest we can't know what messages already exists in the topics left
 		// by other tests, so let's start a message tracker from here.
-		mt := gkt.NewMessageTracker("output")
+		mt := gkt.NewQueueTracker("output")
 
 		// send a message
-		gkt.ConsumeString("input", "bob", "hello")
+		gkt.Consume("input", "bob", "hello")
 
 		// check it was emitted
 		key, value, ok := mt.Next()
@@ -138,7 +138,7 @@ func Test_Subtest(t *testing.T) {
 		ensure.DeepEqual(t, value, "forwarded: hello")
 
 		// we should be at the end
-		mt.ExpectAtEnd()
+		ensure.DeepEqual(t, mt.Hwm(), mt.NextOffset())
 
 		// this is equivalent
 		_, _, ok = mt.Next()
@@ -149,7 +149,7 @@ func Test_Subtest(t *testing.T) {
 		gkt.ClearValues()
 
 		// send a message
-		gkt.ConsumeString("input", "bob", "hello")
+		gkt.Consume("input", "bob", "hello")
 
 		// do some state checks
 		value := gkt.TableValue("group-table", "bob")
@@ -196,7 +196,7 @@ func Test_Chain(t *testing.T) {
 	// Now send a message to input
 	// when this method terminates, we know that the message and all subsequent
 	// messages that
-	gkt.ConsumeString("input", "bob", "hello world")
+	gkt.Consume("input", "bob", "hello world")
 
 	// the value should be persisted in the second processor's table
 	value := gkt.TableValue("proc2-table", "bob")

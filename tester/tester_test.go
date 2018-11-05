@@ -43,7 +43,7 @@ func Test_SimpleConsume(t *testing.T) {
 	)
 	go proc.Run(context.Background())
 	for i := 0; i < 101; i++ {
-		gkt.ConsumeString("input", "key", fmt.Sprintf("%d", i))
+		gkt.Consume("input", "key", fmt.Sprintf("%d", i))
 	}
 
 	if receivedMessage != "100" {
@@ -64,11 +64,13 @@ func Test_InputOutput(t *testing.T) {
 	)
 	go proc.Run(context.Background())
 
-	mt := gkt.NewMessageTracker("output")
+	mt := gkt.NewQueueTracker("output")
 
-	mt.ExpectAtEnd()
+	if mt.NextOffset() != mt.Hwm() {
+		t.Fatalf("expected queue to be at end but wasn't")
+	}
 
-	gkt.ConsumeString("input", "key", "value")
+	gkt.Consume("input", "key", "value")
 
 	key, value, ok := mt.Next()
 
@@ -93,7 +95,7 @@ func Test_SimplePersist(t *testing.T) {
 	}()
 
 	for i := 0; i < 100; i++ {
-		gkt.ConsumeString("input", "key", fmt.Sprintf("message - %d", i))
+		gkt.Consume("input", "key", fmt.Sprintf("message - %d", i))
 	}
 
 	value := gkt.TableValue("group-table", "key")
@@ -119,7 +121,7 @@ func Test_Persist_InitialState(t *testing.T) {
 	}()
 
 	gkt.SetTableValue("group-table", "existing", int64(150))
-	gkt.ConsumeString("input", "existing", "")
+	gkt.Consume("input", "existing", "")
 
 	if gkt.TableValue("group-table", "existing").(int64) != 151 {
 		t.Fatalf("initial state was not loaded. Expected 151, got %v", gkt.TableValue("group-table", "existing"))
@@ -182,7 +184,7 @@ func Test_MultiProcessor(t *testing.T) {
 	runProcOrFail(forward3)
 	runProcOrFail(incrementer)
 
-	gkt.ConsumeString("input", "test", "")
+	gkt.Consume("input", "test", "")
 
 	if gkt.TableValue("accu-table", "test").(int64) != 1 {
 		t.Fatalf("the message did not reached the end")
@@ -192,7 +194,7 @@ func Test_MultiProcessor(t *testing.T) {
 func Test_Loop(t *testing.T) {
 	gkt := New(t)
 
-	// first processor gets input and emits to increment topic
+	// first processor gets input and emits to increment topi c
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("looptest",
 		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
 			ctx.Loopback("loop-key", "loopvalue")
@@ -204,7 +206,7 @@ func Test_Loop(t *testing.T) {
 	)
 	runProcOrFail(proc)
 
-	gkt.ConsumeString("input", "test", "")
+	gkt.Consume("input", "test", "")
 	if gkt.TableValue("looptest-table", "loop-key").(int64) != 1 {
 		t.Fatalf("loop failed")
 	}
@@ -280,7 +282,7 @@ func Test_Join(t *testing.T) {
 	gkt.Consume("input", "sender", "message")
 }
 
-func Test_MessageTracker_Default(t *testing.T) {
+func Test_QueueTracker_Default(t *testing.T) {
 
 	gkt := New(t)
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("lookup",
@@ -292,7 +294,7 @@ func Test_MessageTracker_Default(t *testing.T) {
 		goka.WithTester(gkt),
 	)
 	runProcOrFail(proc)
-	mt := gkt.NewMessageTracker("output")
+	mt := gkt.NewQueueTracker("output")
 	gkt.Consume("input", "somekey", "124")
 	key, value, hasNext := mt.Next()
 	if key != "somekey" || value.(string) != "124" || !hasNext {
@@ -303,11 +305,13 @@ func Test_MessageTracker_Default(t *testing.T) {
 		t.Fatalf("got another emitted message which shouldn't be there")
 	}
 
-	mt.ExpectAtEnd()
+	if mt.NextOffset() != mt.Hwm() {
+		t.Fatalf("expected queue to be at end but wasn't")
+	}
 
 }
 
-func Test_MessageTracker_Extra(t *testing.T) {
+func Test_QueueTracker_Extra(t *testing.T) {
 
 	gkt := New(t)
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("lookup",
@@ -321,11 +325,13 @@ func Test_MessageTracker_Extra(t *testing.T) {
 	runProcOrFail(proc)
 	gkt.Consume("input", "somekey", "123")
 
-	tracker := gkt.NewMessageTracker("output")
+	tracker := gkt.NewQueueTracker("output")
 
 	// the new message tracker should start at the end, so the already emitted message
 	// shouldn't appear
-	tracker.ExpectAtEnd()
+	if tracker.NextOffset() != tracker.Hwm() {
+		t.Fatalf("expected queue to be at end but wasn't")
+	}
 
 	gkt.Consume("input", "somekey", "124")
 	key, value, hasNext := tracker.Next()
