@@ -21,6 +21,38 @@ var (
 	recoveredMessages int
 )
 
+// constHasher implements a hasher that will always return the specified
+// partition. Doesn't properly implement the Hash32 interface, use only in
+// tests.
+type constHasher struct {
+	partition uint32
+}
+
+func (ch *constHasher) Sum(b []byte) []byte {
+	return nil
+}
+
+func (ch *constHasher) Sum32() uint32 {
+	return ch.partition
+}
+
+func (ch *constHasher) BlockSize() int {
+	return 0
+}
+
+func (ch *constHasher) Reset() {}
+
+func (ch *constHasher) Size() int { return 4 }
+
+func (ch *constHasher) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+// NewConstHasher creates a constant hasher that hashes any value to 0.
+func NewConstHasher(part uint32) hash.Hash32 {
+	return &constHasher{partition: part}
+}
+
 func createTestView(t *testing.T, consumer kafka.Consumer, sb storage.Builder, tm kafka.TopicManager) *View {
 	recoveredMessages = 0
 	opts := &voptions{
