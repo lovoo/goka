@@ -65,7 +65,7 @@ func TestProcessor_StatelessContext(t *testing.T) {
 	}()
 	err = doTimed(t, func() {
 		// consume a random key/message, the content doesn't matter as this should fail
-		tester.Consume("input-topic", "key", "msg")
+		tester.Consume("input-topic", "key", []byte("msg"))
 		<-done
 	})
 	ensure.Nil(t, err)
