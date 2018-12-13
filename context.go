@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -60,11 +61,16 @@ type Context interface {
 
 	// Fail stops execution and shuts down the processor
 	Fail(err error)
+
+	// Context returns the underlying context used to start the processor or a
+	// subcontext.
+	Context() context.Context
 }
 
 type emitter func(topic string, key string, value []byte) *kafka.Promise
 
 type cbContext struct {
+	ctx   context.Context
 	graph *GroupGraph
 
 	commit  func()
@@ -345,4 +351,8 @@ func (ctx *cbContext) tryCommit(err error) {
 // Fail stops execution and shuts down the processor
 func (ctx *cbContext) Fail(err error) {
 	panic(err)
+}
+
+func (ctx *cbContext) Context() context.Context {
+	return ctx.ctx
 }
