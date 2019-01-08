@@ -36,6 +36,7 @@ type Processor struct {
 
 	errors *multierr.Errors
 	cancel func()
+	ctx    context.Context
 }
 
 // message to be consumed
@@ -276,6 +277,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	// create errorgroup
 	ctx, g.cancel = context.WithCancel(ctx)
 	errg, ctx := multierr.NewErrGroup(ctx)
+	g.ctx = ctx
 	defer g.cancel()
 
 	// collect all errors before leaving
@@ -692,6 +694,7 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 	g.m.RUnlock()
 
 	ctx := &cbContext{
+		ctx:   g.ctx,
 		graph: g.graph,
 
 		pstats: pstats,
@@ -699,7 +702,15 @@ func (g *Processor) process(msg *message, st storage.Storage, wg *sync.WaitGroup
 		views:  g.views,
 		wg:     wg,
 		msg:    msg,
-		failer: g.fail,
+		failer: func(err error) {
+			// only fail processor if context not already Done
+			select {
+			case <-g.ctx.Done():
+				return
+			default:
+			}
+			g.fail(err)
+		},
 		emitter: func(topic string, key string, value []byte) *kafka.Promise {
 			return g.producer.Emit(topic, key, value).Then(func(err error) {
 				if err != nil {

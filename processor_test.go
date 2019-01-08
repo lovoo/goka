@@ -249,6 +249,8 @@ func TestProcessor_process(t *testing.T) {
 
 		consumer: consumer,
 		producer: producer,
+
+		ctx: context.Background(),
 	}
 
 	// no emits
@@ -344,6 +346,7 @@ func TestProcessor_processFail(t *testing.T) {
 
 			errors: new(multierr.Errors),
 			cancel: func() { close(canceled) },
+			ctx:    context.Background(),
 		}
 
 		p.opts.log = logger.Default()
