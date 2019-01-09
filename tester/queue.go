@@ -2,6 +2,7 @@ package tester
 
 import (
 	"fmt"
+	"log"
 	"sync"
 )
 
@@ -82,8 +83,13 @@ func (q *queue) waitConsumersInit() {
 	logger.Printf("Consumers in Queue %s", q.topic)
 	for cons := range q.groupConsumers {
 		logger.Printf("waiting for group consumer %s to be running", cons.queue.topic)
-		<-cons.state.WaitForState(running)
-		logger.Printf(" --> %s is running", cons.queue.topic)
+		select {
+		case <-cons.state.WaitForState(killed):
+			log.Printf("At least one consumer was killed. No point in waiting for it")
+			return
+		case <-cons.state.WaitForState(running):
+			logger.Printf(" --> %s is running", cons.queue.topic)
+		}
 	}
 
 	for cons := range q.simpleConsumers {
@@ -91,6 +97,7 @@ func (q *queue) waitConsumersInit() {
 		select {
 		case <-cons.state.WaitForState(running):
 		case <-cons.state.WaitForState(stopped):
+		case <-cons.state.WaitForState(killed):
 		}
 		logger.Printf(" --> %s is ready", cons.queue.topic)
 	}
