@@ -1,4 +1,5 @@
 # Goka [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause) [![Build Status](https://travis-ci.org/lovoo/goka.svg?branch=master)](https://travis-ci.org/lovoo/goka) [![GoDoc](https://godoc.org/github.com/lovoo/goka?status.svg)](https://godoc.org/github.com/lovoo/goka)
+<img align="right" width="200" height="206" src="https://github.com/lovoo/goka/blob/master/logo.png?raw=true" />
 
 Goka is a compact yet powerful distributed stream processing library for [Apache Kafka] written in Go. Goka aims to reduce the complexity of building highly scalable and highly available microservices.
 
