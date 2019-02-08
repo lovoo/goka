@@ -57,7 +57,7 @@ func (mt *QueueTracker) Hwm() int64 {
 	return mt.tester.queueForTopic(mt.topic).hwm
 }
 
-// Hwm returns the tracker's next offset
+// NextOffset returns the tracker's next offset
 func (mt *QueueTracker) NextOffset() int64 {
 	return mt.nextOffset
 }

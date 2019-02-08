@@ -82,7 +82,8 @@ func (q *queue) messagesFromOffset(offset int64) []*message {
 func (q *queue) waitConsumersInit() {
 	logger.Printf("Consumers in Queue %s", q.topic)
 	for cons := range q.groupConsumers {
-		logger.Printf("waiting for group consumer %s to be running", cons.queue.topic)
+		logger.Printf("waiting for group consumer %s to be running or killed (state=%v)", cons.queue.topic, cons.state.State())
+
 		select {
 		case <-cons.state.WaitForState(killed):
 			log.Printf("At least one consumer was killed. No point in waiting for it")

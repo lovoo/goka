@@ -2,6 +2,7 @@ package tester
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -83,7 +84,7 @@ func (qc *queueConsumer) kill() {
 }
 
 func (qc *queueConsumer) startLoop(setRunning bool) {
-	logger.Printf("starting queue consumer %s", qc.queue.topic)
+	logger.Printf("starting queue consumer %s (set-running=%t)", qc.queue.topic, setRunning)
 	// not bound or already running
 	if qc.state.IsState(unbound) || qc.state.IsState(running) || qc.state.IsState(stopping) {
 		panic(fmt.Errorf("the queue consumer %s is in state %v. Cannot start", qc.queue.topic, qc.state.State()))
@@ -247,15 +248,19 @@ func (tc *consumer) Events() <-chan kafka.Event {
 // The consumerMock simply marks the topics as handled to make sure to
 // pass emitted messages back to the processor.
 func (tc *consumer) Subscribe(topics map[string]int64) error {
+	log.Printf("consumer: subscribing to topics: %v", topics)
+	var anyTopic string
 	for topic := range topics {
+		anyTopic = topic
 		if _, exists := tc.subscribedTopics[topic]; exists {
 			logger.Printf("consumer for %s already exists. This is strange", topic)
 		}
 		logger.Printf("Subscribe %s", topic)
 		tc.subscribedTopics[topic] = tc.tester.getOrCreateQueue(topic).bindConsumer(tc, true)
-		tc.subscribedTopics[topic].rebalance()
 		tc.subscribedTopics[topic].startLoop(false)
 	}
+
+	tc.subscribedTopics[anyTopic].rebalance()
 	return nil
 }
 
