@@ -15,6 +15,7 @@ type consumer struct {
 	subscribedTopics map[string]*queueConsumer
 	simpleConsumers  map[string]*queueConsumer
 	closeOnce        sync.Once
+	sync.Mutex
 }
 
 const (
@@ -283,6 +284,8 @@ func (tc *consumer) Commit(topic string, partition int32, offset int64) error {
 // AddPartition marks the topic as a table topic.
 // The mock has to know the group table topic to ignore emit calls (which would never be consumed)
 func (tc *consumer) AddPartition(topic string, partition int32, initialOffset int64) error {
+	tc.Lock()
+	defer tc.Unlock()
 	logger.Printf("AddPartition %s", topic)
 	var firstStart bool
 	if _, exists := tc.simpleConsumers[topic]; !exists {
