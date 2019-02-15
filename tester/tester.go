@@ -69,7 +69,7 @@ func (km *Tester) queueForTopic(topic string) *queue {
 	return q
 }
 
-// NewQueueTrackerFromEnd creates a message tracker that starts tracking
+// NewQueueTracker creates a message tracker that starts tracking
 // the messages from the end of the current queues
 func (km *Tester) NewQueueTracker(topic string) *QueueTracker {
 	km.waitStartup()
