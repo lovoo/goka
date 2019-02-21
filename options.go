@@ -148,6 +148,13 @@ func WithHasher(hasher func() hash.Hash32) ProcessorOption {
 	}
 }
 
+// WithGroupGraphHook allows a function to obtain the group graph when a processor is started.
+func WithGroupGraphHook(hook func(gg *GroupGraph)) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		hook(gg)
+	}
+}
+
 // NilHandling defines how nil messages should be handled by the processor.
 type NilHandling int
 
