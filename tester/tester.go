@@ -178,6 +178,12 @@ func (km *Tester) RegisterGroupGraph(gg *goka.GroupGraph) {
 
 }
 
+// RegisterView registers a view to be working with the tester.
+func (km *Tester) RegisterView(table goka.Table, c goka.Codec) {
+	km.getOrCreateQueue(string(table)).expectSimpleConsumer()
+	km.registerCodec(string(table), c)
+}
+
 // RegisterEmitter registers an emitter to be working with the tester.
 func (km *Tester) RegisterEmitter(topic goka.Stream, codec goka.Codec) {
 	km.registerCodec(string(topic), codec)
