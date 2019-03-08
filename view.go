@@ -43,7 +43,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 
 	// figure out how many partitions the group has
 	opts := new(voptions)
-	err := opts.applyOptions(topic, options...)
+	err := opts.applyOptions(topic, codec, options...)
 	if err != nil {
 		return nil, fmt.Errorf("Error applying user-defined options: %v", err)
 	}
