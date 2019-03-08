@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/Shopify/sarama"
 )
@@ -17,6 +18,7 @@ type producer struct {
 	producer sarama.AsyncProducer
 	stop     chan bool
 	done     chan bool
+	wg       sync.WaitGroup
 }
 
 // NewProducer creates new kafka producer for passed brokers.
@@ -32,17 +34,26 @@ func NewProducer(brokers []string, config *sarama.Config) (Producer, error) {
 		done:     make(chan bool),
 	}
 
-	go p.run()
+	p.run()
 
 	return &p, nil
 }
 
+// Close stops the producer and waits for the Success/Error channels to drain.
+// Emitting to a closing/closed producer results in write-to-closed-channel panic
 func (p *producer) Close() error {
-	close(p.stop)
-	<-p.done
-	return p.producer.Close()
+	// do an async close to get the rest of the success/error messages to avoid
+	// leaving unfinished promises.
+	p.producer.AsyncClose()
+
+	// wait for the channels to drain
+	p.wg.Wait()
+
+	return nil
 }
 
+// Emit emits a key-value pair to topic and returns a Promise that
+// can be checked for errors asynchronously
 func (p *producer) Emit(topic string, key string, value []byte) *Promise {
 	promise := NewPromise()
 	p.producer.Input() <- &sarama.ProducerMessage{
@@ -56,19 +67,29 @@ func (p *producer) Emit(topic string, key string, value []byte) *Promise {
 
 // resolve or reject a promise in the message's metadata on Success or Error
 func (p *producer) run() {
-	defer close(p.done)
-	for {
-		select {
-		case <-p.stop:
-			return
+	p.wg.Add(2)
+	go func() {
+		defer p.wg.Done()
+		for {
+			err, ok := <-p.producer.Errors()
 
-		case err := <-p.producer.Errors():
-			promise := err.Msg.Metadata.(*Promise)
-			promise.Finish(err.Err)
-
-		case msg := <-p.producer.Successes():
-			promise := msg.Metadata.(*Promise)
-			promise.Finish(nil)
+			// channel closed, the producer is stopping
+			if !ok {
+				return
+			}
+			err.Msg.Metadata.(*Promise).Finish(err.Err)
 		}
-	}
+	}()
+
+	go func() {
+		defer p.wg.Done()
+		for {
+			msg, ok := <-p.producer.Successes()
+			// channel closed, the producer is stopping
+			if !ok {
+				return
+			}
+			msg.Metadata.(*Promise).Finish(nil)
+		}
+	}()
 }
