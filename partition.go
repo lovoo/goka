@@ -3,6 +3,7 @@ package goka
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -139,7 +140,20 @@ func newMessage(ev *kafka.Message) *message {
 func (p *partition) run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	p.proxy.AddGroup()
-	defer wg.Wait()
+
+	defer func() {
+		done := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-time.NewTimer(10 * time.Second).C:
+			log.Printf("partition shutdown timed out. Will stop waiting.")
+		}
+	}()
 
 	for {
 		select {
@@ -185,10 +199,12 @@ func (p *partition) run(ctx context.Context) error {
 			select {
 			case p.responseStats <- p.lastStats:
 			case <-ctx.Done():
+				p.log.Printf("Partitioning exiting, context is cancelled")
 				return nil
 			}
 
 		case <-ctx.Done():
+			p.log.Printf("Partitioning exiting, context is cancelled (outer)")
 			return nil
 		}
 
