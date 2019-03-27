@@ -3,6 +3,7 @@ package kafka
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Shopify/sarama"
 )
@@ -47,7 +48,16 @@ func (p *producer) Close() error {
 	p.producer.AsyncClose()
 
 	// wait for the channels to drain
-	p.wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.NewTimer(60 * time.Second).C:
+	}
 
 	return nil
 }
