@@ -2,7 +2,11 @@ package storage
 
 type multiIterator struct {
 	current int
-	iters   []Iterator
+	// "current" iterators, that might be limited to iters that contain
+	// some Seek'ed values
+	iters []Iterator
+	// original iters
+	origIters []Iterator
 }
 
 // NewMultiIterator returns an iterator that iterates over the given iterators.
@@ -11,7 +15,11 @@ func NewMultiIterator(iters []Iterator) Iterator {
 		return &NullIter{}
 	}
 
-	return &multiIterator{current: 0, iters: iters}
+	return &multiIterator{
+		current:   0,
+		iters:     iters,
+		origIters: iters,
+	}
 }
 
 func (m *multiIterator) Next() bool {
@@ -36,18 +44,24 @@ func (m *multiIterator) Release() {
 		m.iters[i].Release()
 	}
 	m.current = 0
-	m.iters = []Iterator{&NullIter{}}
+	m.iters = nil
 }
 
 func (m *multiIterator) Seek(key []byte) bool {
 	m.current = 0
-	iters := []Iterator{}
+	m.iters = nil
+
+	// at least one iterator's seek was successful
 	ok := false
-	for i := range m.iters {
-		if m.iters[i].Seek(key) {
-			iters = append(iters, m.iters[i])
+
+	// iterate over all (original) iterators
+	for _, iter := range m.origIters {
+		// if it matches, apply it to the list of iters we'll be using for the next Next()
+		if iter.Seek(key) {
+			m.iters = append(m.iters, iter)
 			ok = true
 		}
 	}
+
 	return ok
 }
