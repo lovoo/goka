@@ -59,5 +59,10 @@ func TestIterator(t *testing.T) {
 		ensure.Nil(t, err)
 		ensure.DeepEqual(t, expected, val.(string))
 	}
+
+	if err := it.Err(); err != nil {
+		t.Fatalf("unexpected iteration error: %v", err)
+	}
+
 	ensure.DeepEqual(t, count, len(kv))
 }

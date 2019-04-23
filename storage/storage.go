@@ -18,6 +18,9 @@ const (
 type Iterator interface {
 	// Next advances the iterator to the next key.
 	Next() bool
+	// Err should be called after Next returns false to check for possible
+	// iteration errors.
+	Err() error
 	// Key gets the current key. If the iterator is exhausted, key will return
 	// nil.
 	Key() []byte

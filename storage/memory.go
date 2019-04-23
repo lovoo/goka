@@ -26,6 +26,10 @@ func (i *memiter) Next() bool {
 	return !i.exhausted()
 }
 
+func (*memiter) Err() error {
+	return nil
+}
+
 func (i *memiter) Key() []byte {
 	if i.exhausted() {
 		return nil
