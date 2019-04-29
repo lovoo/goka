@@ -523,10 +523,30 @@ func (g *Processor) newStorage(topic string, id int32, update UpdateCallback) (*
 		}, nil
 	}
 
-	st, err := g.opts.builders.storage(topic, id)
+	var (
+		err error
+		st  storage.Storage
+		wg  sync.WaitGroup
+	)
+	start := time.Now()
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		st, err = g.opts.builders.storage(topic, id)
+		g.opts.log.Printf("finished building storage for topic %s", topic)
+	}()
+	go func() {
+		for range ticker.C {
+			g.opts.log.Printf("building storage for topic %s for %s ...", topic, time.Since(start).String())
+		}
+	}()
+	wg.Wait()
 	if err != nil {
 		return nil, err
 	}
+
 	return &storageProxy{
 		Storage:   st,
 		partition: id,
