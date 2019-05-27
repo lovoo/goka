@@ -6,10 +6,15 @@ import (
 
 // Iterator allows one to iterate over the keys of a view.
 type Iterator interface {
+	// Next advances the iterator to the next KV-pair. Err should be called
+	// after Next returns false to check whether the iteration finished
+	// from exhaustion or was aborted due to an error.
 	Next() bool
 	Key() string
 	Value() (interface{}, error)
 	Release()
+	// Err returns the possible iteration error.
+	Err() error
 	Seek(key string) bool
 }
 
@@ -37,6 +42,11 @@ func (i *iterator) Value() (interface{}, error) {
 		return nil, nil
 	}
 	return i.codec.Decode(data)
+}
+
+// Err returns the possible iteration error.
+func (i *iterator) Err() error {
+	return i.iter.Err()
 }
 
 // Releases releases the iterator. The iterator is not usable anymore after calling Release.

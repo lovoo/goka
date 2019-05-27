@@ -22,6 +22,12 @@ func (i *iterator) Next() bool {
 	return next
 }
 
+// Err should be called after Next returns false to check for possible
+// iteration errors.
+func (i *iterator) Err() error {
+	return i.iter.Error()
+}
+
 // Key returns the current key.
 func (i *iterator) Key() []byte {
 	return i.iter.Key()

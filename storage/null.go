@@ -79,6 +79,10 @@ func (ni *NullIter) Next() bool {
 	return false
 }
 
+func (*NullIter) Err() error {
+	return nil
+}
+
 // Key returns always nil.
 func (ni *NullIter) Key() []byte {
 	return nil

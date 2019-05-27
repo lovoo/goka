@@ -160,6 +160,10 @@ func (i *redisIterator) Key() []byte {
 	return []byte(key)
 }
 
+func (i *redisIterator) Err() error {
+	return nil
+}
+
 func (i *redisIterator) Value() ([]byte, error) {
 	if i.exhausted() {
 		return nil, nil
