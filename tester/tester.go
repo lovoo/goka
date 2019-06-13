@@ -214,6 +214,19 @@ func (km *Tester) ProducerBuilder() kafka.ProducerBuilder {
 	}
 }
 
+// EmitterProducerBuilder creates a producer builder used for Emitters.
+// Emitters need to flush when emitting messages.
+func (km *Tester) EmitterProducerBuilder() kafka.ProducerBuilder {
+	builder := km.ProducerBuilder()
+	return func(b []string, cid string, hasher func() hash.Hash32) (kafka.Producer, error) {
+		prod, err := builder(b, cid, hasher)
+		return &flushingProducer{
+			tester:   km,
+			producer: prod,
+		}, err
+	}
+}
+
 // StorageBuilder returns the storage builder when this tester is used as an option
 // to a processor
 func (km *Tester) StorageBuilder() storage.Builder {
@@ -268,6 +281,7 @@ func (km *Tester) waitStartup() {
 // Consume a message using the topic's configured codec
 func (km *Tester) Consume(topic string, key string, msg interface{}) {
 	km.waitStartup()
+	log.Printf("startup")
 
 	// if the user wants to send a nil for some reason,
 	// just let her. Goka should handle it accordingly :)
@@ -425,4 +439,23 @@ func (p *producerMock) Emit(topic string, key string, value []byte) *kafka.Promi
 func (p *producerMock) Close() error {
 	logger.Printf("Closing producer mock")
 	return nil
+}
+
+// flushingProducer wraps the producer and
+// waits for all consumers after the Emit.
+type flushingProducer struct {
+	tester   *Tester
+	producer kafka.Producer
+}
+
+// Emit using the underlying producer
+func (e *flushingProducer) Emit(topic string, key string, value []byte) *kafka.Promise {
+	prom := e.producer.Emit(topic, key, value)
+	e.tester.waitForConsumers()
+	return prom
+}
+
+// Close using the underlying producer
+func (e *flushingProducer) Close() error {
+	return e.producer.Close()
 }
