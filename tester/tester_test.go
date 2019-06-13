@@ -498,3 +498,18 @@ func Test_ManyConsume(t *testing.T) {
 		t.Fatalf("did not receive all messages")
 	}
 }
+
+func TestEmitter(t *testing.T) {
+	gkt := New(t)
+
+	em, _ := goka.NewEmitter(nil, "test", new(codec.String), goka.WithEmitterTester(gkt))
+	est := gkt.NewQueueTracker("test")
+
+	em.Emit("key", "value")
+	gkt.Flush()
+
+	_, _, ok := est.Next()
+	if !ok {
+		t.Errorf("No message emitted")
+	}
+}

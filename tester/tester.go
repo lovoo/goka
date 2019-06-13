@@ -292,6 +292,13 @@ func (km *Tester) ConsumeData(topic string, key string, data []byte) {
 	km.waitForConsumers()
 }
 
+// Flush flushes all pending messages in the tester queues.
+// pending messages can occur when an emitter pushes messages directly to the tester
+// without using the tester's `Consume` - method.
+func (km *Tester) Flush() {
+	km.waitForConsumers()
+}
+
 func (km *Tester) pushMessage(topic string, key string, data []byte) {
 	km.queuedMessages = append(km.queuedMessages, &queuedMessage{topic: topic, key: key, value: data})
 }
