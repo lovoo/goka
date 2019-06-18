@@ -3,6 +3,7 @@ package tester
 import (
 	"context"
 	"fmt"
+	"log"
 	"reflect"
 	"sync"
 	"testing"
@@ -496,5 +497,69 @@ func Test_ManyConsume(t *testing.T) {
 	}
 	if len(received) != 100 {
 		t.Fatalf("did not receive all messages")
+	}
+}
+
+func TestEmitterStandalone(t *testing.T) {
+	gkt := New(t)
+
+	em, _ := goka.NewEmitter(nil, "test", new(codec.String), goka.WithEmitterTester(gkt))
+	est := gkt.NewQueueTracker("test")
+
+	em.Emit("key", "value")
+
+	_, _, ok := est.Next()
+	if !ok {
+		t.Errorf("No message emitted")
+	}
+}
+
+// Tests an emitter used inside a processor.
+// For this the user has to start the emitter with
+// a separate tester, otherwise it will deadlock.
+func TestEmitterInProcessor(t *testing.T) {
+
+	gktProcessor := New(t)
+
+	// create a new emitter mocked with an extra tester
+	gktEmitter := New(t)
+	em, _ := goka.NewEmitter(nil, "output", new(codec.String), goka.WithEmitterTester(gktEmitter))
+
+	// create a new processor that uses the emitter internally
+	proc, err := goka.NewProcessor(nil, goka.DefineGroup("test-group",
+		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+			log.Printf("sending")
+
+			prom, err := em.Emit(ctx.Key(), msg)
+			log.Printf("sending done")
+			if err != nil {
+				t.Errorf("Error emitting in processor: %v", err)
+			}
+			prom.Then(func(err error) {
+				if err != nil {
+					t.Errorf("Error emitting in processor (in promise): %v", err)
+				}
+			})
+			log.Printf("done")
+		}),
+	),
+		goka.WithTester(gktProcessor),
+	)
+
+	if err != nil {
+		log.Fatalf("Error creating processor: %v", err)
+	}
+	runProcOrFail(proc)
+
+	// create a queue tracker from the extra tester
+	est := gktEmitter.NewQueueTracker("output")
+
+	// consume a message
+	gktProcessor.Consume("input", "key", "value")
+
+	// ensure the message is there
+	_, _, ok := est.Next()
+	if !ok {
+		t.Errorf("No message emitted")
 	}
 }

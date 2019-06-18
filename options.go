@@ -181,6 +181,7 @@ type Tester interface {
 	StorageBuilder() storage.Builder
 	ConsumerBuilder() kafka.ConsumerBuilder
 	ProducerBuilder() kafka.ProducerBuilder
+	EmitterProducerBuilder() kafka.ProducerBuilder
 	TopicManagerBuilder() kafka.TopicManagerBuilder
 	RegisterGroupGraph(*GroupGraph)
 	RegisterEmitter(Stream, Codec)
@@ -412,12 +413,11 @@ func WithEmitterHasher(hasher func() hash.Hash32) EmitterOption {
 
 func WithEmitterTester(t Tester) EmitterOption {
 	return func(o *eoptions, topic Stream, codec Codec) {
-		o.builders.producer = t.ProducerBuilder()
+		o.builders.producer = t.EmitterProducerBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
 		t.RegisterEmitter(topic, codec)
 	}
 }
-
 func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOption) error {
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
