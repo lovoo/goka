@@ -15,6 +15,9 @@ import (
 // The partition storage shall be updated in the callback.
 type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte) error
 
+// RebalanceCallback is invoked when the processor receives a new partition assignment.
+type RebalanceCallback func(a kafka.Assignment)
+
 ///////////////////////////////////////////////////////////////////////////////
 // default values
 ///////////////////////////////////////////////////////////////////////////////
@@ -48,6 +51,11 @@ func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte)
 	return s.Set(key, value)
 }
 
+
+// DefaultRebalance is the default callback when a new partition assignment is received.
+// DefaultRebalance can be used in the function passed to WithRebalanceCallback.
+func DefaultRebalance(a kafka.Assignment) {}
+
 // DefaultHasher returns an FNV hasher builder to assign keys to partitions.
 func DefaultHasher() func() hash.Hash32 {
 	return func() hash.Hash32 {
@@ -69,6 +77,7 @@ type poptions struct {
 	clientID string
 
 	updateCallback       UpdateCallback
+	rebalanceCallback    RebalanceCallback
 	partitionChannelSize int
 	hasher               func() hash.Hash32
 	nilHandling          NilHandling
@@ -225,6 +234,14 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	}
 
 	return nil
+}
+
+// WithRebalanceCallback sets the callback for when a new partition assignment
+// is received. By default, this is an empty function.
+func WithRebalanceCallback(cb RebalanceCallback) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.rebalanceCallback = cb
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////

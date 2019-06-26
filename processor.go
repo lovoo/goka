@@ -64,6 +64,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 			WithUpdateCallback(DefaultUpdate),
 			WithPartitionChannelSize(defaultPartitionChannelSize),
 			WithStorageBuilder(storage.DefaultBuilder(DefaultProcessorStoragePath(gg.Group()))),
+			WithRebalanceCallback(DefaultRebalance),
 		},
 
 		// user-defined options (may overwrite default ones)
@@ -656,6 +657,9 @@ func (g *Processor) createPartition(errg *multierr.ErrGroup, ctx context.Context
 func (g *Processor) rebalance(errg *multierr.ErrGroup, ctx context.Context, partitions kafka.Assignment) *multierr.Errors {
 	errs := new(multierr.Errors)
 	g.opts.log.Printf("Processor: rebalancing: %+v", partitions)
+
+	// callback the new partition assignment
+	g.opts.rebalanceCallback(partitions)
 
 	for id := range partitions {
 		// create partition views
