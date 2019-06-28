@@ -26,6 +26,7 @@ import (
 
 var (
 	rawCodec = new(codec.Bytes)
+	emptyRebalanceCallback = func(a kafka.Assignment){}
 )
 
 func nullStorageBuilder() storage.Builder {
@@ -88,7 +89,7 @@ func createFailedTopicManagerBuilder(tm kafka.TopicManager) kafka.TopicManagerBu
 	}
 }
 
-func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, producer kafka.Producer, npar int) *Processor {
+func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, producer kafka.Producer, npar int, rcb func(a kafka.Assignment)) *Processor {
 	tm := mock.NewMockTopicManager(ctrl)
 
 	var partitions []int32
@@ -111,6 +112,7 @@ func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, 
 		WithConsumerBuilder(createConsumerBuilder(consumer)),
 		WithProducerBuilder(createProducerBuilder(producer)),
 		WithPartitionChannelSize(0),
+		WithRebalanceCallback(rcb),
 	)
 	return p
 }
@@ -1124,7 +1126,7 @@ func TestProcessor_StartStateless(t *testing.T) {
 		producer = mock.NewMockProducer(ctrl)
 		final    = make(chan bool)
 		ch       = make(chan kafka.Event)
-		p        = createProcessorStateless(ctrl, consumer, producer, 3)
+		p        = createProcessorStateless(ctrl, consumer, producer, 3, emptyRebalanceCallback)
 	)
 
 	// -- expectactions --
@@ -1438,6 +1440,59 @@ func TestProcessor_HasGetStateless(t *testing.T) {
 	value, err := p.Get("item1")
 	ensure.Nil(t, err)
 	ensure.True(t, value == nil)
+}
+
+func TestProcessor_RebalanceCallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	var (
+		consumer = mock.NewMockConsumer(ctrl)
+		producer = mock.NewMockProducer(ctrl)
+		final    = make(chan bool)
+		ch       = make(chan kafka.Event)
+		asmt     = (*kafka.Assignment)(&map[int32]int64{0: -1, 1: -1})
+		i        = 0
+		eAsmt    = []kafka.Assignment{{}, *asmt}
+		rcb      = func(a kafka.Assignment){
+			ensure.DeepEqual(t, a, eAsmt[i])
+			i += 1
+		}
+		p        = createProcessorStateless(ctrl, consumer, producer, 3, rcb)
+	)
+
+	// -- expectactions --
+	// 1. start
+	consumer.EXPECT().Subscribe(topOff).Return(nil)
+	consumer.EXPECT().Events().Return(ch).AnyTimes()
+	// 2. rebalance
+	consumer.EXPECT().AddGroupPartition(int32(0))
+	consumer.EXPECT().AddGroupPartition(int32(1))
+	// 3. stop processor
+	consumer.EXPECT().Close().Return(nil).Do(func() { close(ch) })
+	producer.EXPECT().Close().Return(nil)
+
+	// -- test --
+	ctx, cancel := context.WithCancel(context.Background())
+	// 1. start
+	go func() {
+		err := p.Run(ctx)
+		ensure.Nil(t, err)
+		close(final)
+	}()
+
+	// 2. rebalance
+	ensure.True(t, len(p.partitions) == 0)
+	ch <- asmt
+	err := syncWith(t, ch, -1, 1, 2)
+	ensure.Nil(t, err)
+	ensure.True(t, len(p.partitions) == 2)
+
+	// 3. stop processor
+	err = doTimed(t, func() {
+		cancel()
+		<-final
+	})
+	ensure.Nil(t, err)
 }
 
 // Example shows how to use a callback. For each partition of the topics, a new
