@@ -138,8 +138,8 @@ func (v *View) Run(ctx context.Context) error {
 	for id, p := range v.partitions {
 		pid, par := int32(id), p
 		errg.Go(func() error {
-			v.opts.log.Printf("view [%s]: partition %d started", pid)
-			defer v.opts.log.Printf("view: partition %d stopped", pid)
+			v.opts.log.Printf("view [%s]: partition %d started", v.Topic(), pid)
+			defer v.opts.log.Printf("view [%s]: partition %d stopped", v.Topic(), pid)
 			if err := par.st.Open(); err != nil {
 				return fmt.Errorf("view [%s]: error opening storage partition %d: %v", v.Topic(), pid, err)
 			}
@@ -155,7 +155,7 @@ func (v *View) Run(ctx context.Context) error {
 
 	v.opts.log.Printf("view [%s]: closing consumer", v.Topic())
 	if err := v.consumer.Close(); err != nil {
-		_ = errs.Collect(fmt.Errorf("view: failed closing consumer: %v", err))
+		_ = errs.Collect(fmt.Errorf("view [%s]: failed closing consumer: %v", v.Topic(), err))
 	}
 
 	if !v.opts.restartable {

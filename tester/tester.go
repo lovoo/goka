@@ -269,19 +269,18 @@ func (km *Tester) waitForConsumers() {
 }
 
 func (km *Tester) waitStartup() {
-	logger.Printf("Tester: Waiting for startup")
+	logger.Printf("Waiting for startup")
 	km.mQueues.RLock()
 	defer km.mQueues.RUnlock()
 	for _, queue := range km.topicQueues {
 		queue.waitConsumersInit()
 	}
-	logger.Printf("Tester: Waiting for startup done")
+	logger.Printf("Waiting for startup done")
 }
 
 // Consume a message using the topic's configured codec
 func (km *Tester) Consume(topic string, key string, msg interface{}) {
 	km.waitStartup()
-	log.Printf("startup")
 
 	// if the user wants to send a nil for some reason,
 	// just let her. Goka should handle it accordingly :)

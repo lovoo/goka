@@ -171,7 +171,7 @@ func (qc *queueConsumer) addToBuffer(event kafka.Event) {
 	qc.eventBuffer <- event
 
 	if len(qc.eventBuffer) > eventBufferQueueSize*0.9 {
-		logger.Printf("buffer nearly full: %d, %s. Will drop events.", len(qc.eventBuffer), qc.queue.topic)
+		logger.Printf("buffer nearly full: %d, %s. Will drop event.", len(qc.eventBuffer), qc.queue.topic)
 		<-qc.eventBuffer
 	}
 }
