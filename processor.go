@@ -272,8 +272,8 @@ func (g *Processor) hash(key string) (int32, error) {
 // partition, a recovery will be attempted. Cancel the context to stop the
 // processor.
 func (g *Processor) Run(ctx context.Context) (rerr error) {
-	g.opts.log.Printf("Processor: starting")
-	defer g.opts.log.Printf("Processor: stopped")
+	g.opts.log.Printf("Processor [%s]: starting", g.graph.Group())
+	defer g.opts.log.Printf("Processor [%s]: stopped", g.graph.Group())
 
 	// create errorgroup
 	ctx, g.cancel = context.WithCancel(ctx)
@@ -284,36 +284,37 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	// collect all errors before leaving
 	g.errors = new(multierr.Errors)
 	defer func() {
-		_ = g.errors.Collect(rerr)
-		rerr = g.errors.NilOrError()
+		rerr = g.errors.Collect(rerr).NilOrError()
 	}()
 
 	// create kafka consumer
-	g.opts.log.Printf("Processor: creating consumer [%s]", g.graph.Group())
+	g.opts.log.Printf("Processor [%s]: creating consumer ", g.graph.Group())
 	consumer, err := g.opts.builders.consumer(g.brokers, string(g.graph.Group()), g.opts.clientID)
 	if err != nil {
 		return fmt.Errorf(errBuildConsumer, err)
 	}
 	g.consumer = consumer
 	defer func() {
-		g.opts.log.Printf("Processor: closing consumer [%s]", g.graph.Group())
+		g.opts.log.Printf("Processor [%s]: closing consumer", g.graph.Group())
 		if err = g.consumer.Close(); err != nil {
-			_ = g.errors.Collect(fmt.Errorf("error closing consumer: %v", err))
+			g.errors.Collect(fmt.Errorf("error closing consumer: %v", err))
 		}
+		g.opts.log.Printf("Processor [%s]: closing consumer done", g.graph.Group())
 	}()
 
 	// create kafka producer
-	g.opts.log.Printf("Processor: creating producer")
+	g.opts.log.Printf("Processor [%s]: creating producer", g.graph.Group())
 	producer, err := g.opts.builders.producer(g.brokers, g.opts.clientID, g.opts.hasher)
 	if err != nil {
 		return fmt.Errorf(errBuildProducer, err)
 	}
 	g.producer = producer
 	defer func() {
-		g.opts.log.Printf("Processor: closing producer")
+		g.opts.log.Printf("Processor [%s]: closing producer", g.graph.Group())
 		if err := g.producer.Close(); err != nil {
-			_ = g.errors.Collect(fmt.Errorf("error closing producer: %v", err))
+			g.errors.Collect(fmt.Errorf("error closing producer: %v", err))
 		}
+		g.opts.log.Printf("Processor [%s]: closing producer done.", g.graph.Group())
 	}()
 
 	// start all views
@@ -325,7 +326,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 			}
 			return nil
 		})
-		defer func() { _ = g.errors.Collect(v.Terminate()) }()
+		defer func() { g.errors.Collect(v.Terminate()) }()
 	}
 
 	// subscribe for streams
@@ -338,7 +339,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	}
 	if err := g.consumer.Subscribe(topics); err != nil {
 		g.cancel()
-		_ = g.errors.Merge(errg.Wait())
+		g.errors.Merge(errg.Wait())
 		return fmt.Errorf("error subscribing topics: %v", err)
 	}
 
@@ -349,15 +350,13 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	})
 
 	// wait for goroutines to return
-	_ = g.errors.Merge(errg.Wait())
+	g.errors.Merge(errg.Wait())
 
 	// remove all partitions first
-	g.opts.log.Printf("Processor: removing partitions")
-	for partition := range g.partitions {
-		_ = g.errors.Merge(g.removePartition(partition))
-	}
+	g.opts.log.Printf("Processor [%s]: removing partitions", g.graph.Group())
+	g.errors.Merge(g.removePartitions())
 
-	return nil
+	return
 }
 
 func (g *Processor) pushToPartition(ctx context.Context, part int32, ev kafka.Event) error {
@@ -392,6 +391,7 @@ func (g *Processor) waitAssignment(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			g.opts.log.Printf("Processor [%s]: context cancelled, will stop the assignment loop", g.graph.Group())
 			return nil
 		case a := <-g.asCh:
 			if err := g.runAssignment(ctx, a); err != nil {
@@ -421,10 +421,10 @@ func (g *Processor) runAssignment(ctx context.Context, a kafka.Assignment) error
 	})
 
 	// wait until dispatcher or partitions have returned
-	_ = errs.Merge(errg.Wait())
+	errs.Merge(errg.Wait())
 
 	// all partitions should have returned at this point, so clean up
-	_ = errs.Merge(g.removePartitions())
+	errs.Merge(g.removePartitions())
 
 	return errs.NilOrError()
 }
@@ -495,7 +495,7 @@ func (g *Processor) dispatcher(ctx context.Context) error {
 
 func (g *Processor) fail(err error) {
 	g.opts.log.Printf("failing: %v", err)
-	_ = g.errors.Collect(err)
+	g.errors.Collect(err)
 	g.cancel()
 }
 
@@ -556,9 +556,6 @@ func (g *Processor) newStorage(topic string, id int32, update UpdateCallback) (*
 }
 
 func (g *Processor) createPartitionViews(errg *multierr.ErrGroup, ctx context.Context, id int32) error {
-	g.m.Lock()
-	defer g.m.Unlock()
-
 	if _, has := g.partitionViews[id]; !has {
 		g.partitionViews[id] = make(map[string]*partition)
 	}
@@ -658,8 +655,14 @@ func (g *Processor) rebalance(errg *multierr.ErrGroup, ctx context.Context, part
 	errs := new(multierr.Errors)
 	g.opts.log.Printf("Processor: rebalancing: %+v", partitions)
 
+
 	// callback the new partition assignment
 	g.opts.rebalanceCallback(partitions)
+
+
+	g.m.Lock()
+	defer g.m.Unlock()
+
 
 	for id := range partitions {
 		// create partition views
@@ -675,9 +678,11 @@ func (g *Processor) rebalance(errg *multierr.ErrGroup, ctx context.Context, part
 }
 
 func (g *Processor) removePartitions() *multierr.Errors {
+	g.m.Lock()
+	defer g.m.Unlock()
 	errs := new(multierr.Errors)
 	for partition := range g.partitions {
-		_ = errs.Merge(g.removePartition(partition))
+		errs.Merge(g.removePartition(partition))
 	}
 	return errs
 }
@@ -688,7 +693,7 @@ func (g *Processor) removePartition(partition int32) *multierr.Errors {
 
 	// remove partition processor
 	if err := g.partitions[partition].st.Close(); err != nil {
-		_ = errs.Collect(fmt.Errorf("error closing storage partition %d: %v", partition, err))
+		errs.Collect(fmt.Errorf("error closing storage partition %d: %v", partition, err))
 	}
 	delete(g.partitions, partition)
 
@@ -700,7 +705,7 @@ func (g *Processor) removePartition(partition int32) *multierr.Errors {
 
 	for topic, p := range pv {
 		if err := p.st.Close(); err != nil {
-			_ = errs.Collect(fmt.Errorf("error closing storage %s/%d: %v", topic, partition, err))
+			errs.Collect(fmt.Errorf("error closing storage %s/%d: %v", topic, partition, err))
 		}
 	}
 	delete(g.partitionViews, partition)
