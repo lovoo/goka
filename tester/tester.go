@@ -55,6 +55,7 @@ type Tester struct {
 	codecs      map[string]goka.Codec
 	topicQueues map[string]*queue
 	mQueues     sync.RWMutex
+	mStorages   sync.RWMutex
 
 	queuedMessages []*queuedMessage
 }
@@ -235,7 +236,9 @@ func (km *Tester) StorageBuilder() storage.Builder {
 			return st, nil
 		}
 		st := storage.NewMemory()
+		km.mStorages.Lock()
 		km.storages[topic] = st
+		km.mStorages.Unlock()
 		return st, nil
 	}
 }
