@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
@@ -70,6 +71,8 @@ type memory struct {
 	storage   map[string][]byte
 	offset    *int64
 	recovered bool
+	// mutex to protect map reads/writes
+	rwm sync.RWMutex
 }
 
 // NewMemory returns a new in-memory storage.
@@ -81,12 +84,16 @@ func NewMemory() Storage {
 }
 
 func (m *memory) Has(key string) (bool, error) {
+	m.rwm.RLock()
 	_, has := m.storage[key]
+	m.rwm.RUnlock()
 	return has, nil
 }
 
 func (m *memory) Get(key string) ([]byte, error) {
+	m.rwm.RLock()
 	value, _ := m.storage[key]
+	m.rwm.RUnlock()
 	return value, nil
 }
 
@@ -94,12 +101,16 @@ func (m *memory) Set(key string, value []byte) error {
 	if value == nil {
 		return fmt.Errorf("cannot write nil value")
 	}
+	m.rwm.Lock()
 	m.storage[key] = value
+	m.rwm.Unlock()
 	return nil
 }
 
 func (m *memory) Delete(key string) error {
+	m.rwm.Lock()
 	delete(m.storage, key)
+	m.rwm.Unlock()
 	return nil
 }
 
