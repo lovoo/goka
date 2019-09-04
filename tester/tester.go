@@ -55,6 +55,7 @@ type Tester struct {
 	codecs      map[string]goka.Codec
 	topicQueues map[string]*queue
 	mQueues     sync.RWMutex
+	mStorages   sync.RWMutex
 
 	queuedMessages []*queuedMessage
 }
@@ -231,11 +232,16 @@ func (km *Tester) EmitterProducerBuilder() kafka.ProducerBuilder {
 // to a processor
 func (km *Tester) StorageBuilder() storage.Builder {
 	return func(topic string, partition int32) (storage.Storage, error) {
+		km.mStorages.RLock()
 		if st, exists := km.storages[topic]; exists {
+			km.mStorages.RUnlock()
 			return st, nil
 		}
+		km.mStorages.RUnlock()
 		st := storage.NewMemory()
+		km.mStorages.Lock()
 		km.storages[topic] = st
+		km.mStorages.Unlock()
 		return st, nil
 	}
 }
@@ -323,7 +329,9 @@ func (km *Tester) TableValue(table goka.Table, key string) interface{} {
 	km.waitStartup()
 
 	topic := string(table)
+	km.mStorages.RLock()
 	st, exists := km.storages[topic]
+	km.mStorages.RUnlock()
 	if !exists {
 		panic(fmt.Errorf("topic %s does not exist", topic))
 	}
@@ -348,7 +356,9 @@ func (km *Tester) SetTableValue(table goka.Table, key string, value interface{})
 	logger.Printf("setting value is not implemented yet.")
 
 	topic := string(table)
+	km.mStorages.RLock()
 	st, exists := km.storages[topic]
+	km.mStorages.RUnlock()
 	if !exists {
 		panic(fmt.Errorf("storage for topic %s does not exist", topic))
 	}
@@ -370,6 +380,7 @@ func (km *Tester) ReplaceEmitHandler(emitter EmitHandler) {
 
 // ClearValues resets all table values
 func (km *Tester) ClearValues() {
+	km.mStorages.Lock()
 	for topic, st := range km.storages {
 		logger.Printf("clearing all values from storage for topic %s", topic)
 		it, _ := st.Iterator()
@@ -377,6 +388,7 @@ func (km *Tester) ClearValues() {
 			st.Delete(string(it.Key()))
 		}
 	}
+	km.mStorages.Unlock()
 }
 
 type topicMgrMock struct {
