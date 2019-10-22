@@ -28,9 +28,15 @@ type ComponentPathProvider interface {
 	BasePath() string
 }
 
+// NewServer creates a new Server with the default Logger
 func NewServer(basePath string, router *mux.Router) *Server {
+	return NewServerWithLogger(basePath, router, logger.Default())
+}
+
+// NewServerWithLogger creates a new Server with a custom logger
+func NewServerWithLogger(basePath string, router *mux.Router, logger logger.Logger) *Server {
 	srv := &Server{
-		log:      logger.Default(),
+		log:      logger,
 		basePath: basePath,
 	}
 

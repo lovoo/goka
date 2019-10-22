@@ -51,7 +51,6 @@ func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte)
 	return s.Set(key, value)
 }
 
-
 // DefaultRebalance is the default callback when a new partition assignment is received.
 // DefaultRebalance can be used in the function passed to WithRebalanceCallback.
 func DefaultRebalance(a kafka.Assignment) {}
@@ -211,8 +210,12 @@ func WithTester(t Tester) ProcessorOption {
 }
 
 func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error {
+	return opt.applyOptionsWithLogger(gg, logger.Default(), opts...)
+}
+
+func (opt *poptions) applyOptionsWithLogger(gg *GroupGraph, logger logger.Logger, opts ...ProcessorOption) error {
 	opt.clientID = defaultClientID
-	opt.log = logger.Default()
+	opt.log = logger
 	opt.hasher = DefaultHasher()
 
 	for _, o := range opts {
@@ -349,8 +352,12 @@ func WithViewTester(t Tester) ViewOption {
 }
 
 func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) error {
+	return opt.applyOptionsWithLogger(topic, codec, logger.Default(), opts...)
+}
+
+func (opt *voptions) applyOptionsWithLogger(topic Table, codec Codec, logger logger.Logger, opts ...ViewOption) error {
 	opt.clientID = defaultClientID
-	opt.log = logger.Default()
+	opt.log = logger
 	opt.hasher = DefaultHasher()
 
 	for _, o := range opts {
@@ -435,9 +442,14 @@ func WithEmitterTester(t Tester) EmitterOption {
 		t.RegisterEmitter(topic, codec)
 	}
 }
+
 func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOption) error {
+	return opt.applyOptionsWithLogger(topic, codec, logger.Default(), opts...)
+}
+
+func (opt *eoptions) applyOptionsWithLogger(topic Stream, codec Codec, logger logger.Logger, opts ...EmitterOption) error {
 	opt.clientID = defaultClientID
-	opt.log = logger.Default()
+	opt.log = logger
 	opt.hasher = DefaultHasher()
 
 	for _, o := range opts {

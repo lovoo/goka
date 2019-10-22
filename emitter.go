@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/lovoo/goka/logger"
+
 	"github.com/lovoo/goka/kafka"
 )
 
@@ -19,6 +21,11 @@ type Emitter struct {
 
 // NewEmitter creates a new emitter using passed brokers, topic, codec and possibly options.
 func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterOption) (*Emitter, error) {
+	return NewEmitterWithLogger(brokers, topic, codec, logger.Default(), options...)
+}
+
+// NewEmitterWithLogger creates a new emitter using passed brokers, topic, codec, a custom logger and possibly options.
+func NewEmitterWithLogger(brokers []string, topic Stream, codec Codec, logger logger.Logger, options ...EmitterOption) (*Emitter, error) {
 	options = append(
 		// default options comes first
 		[]EmitterOption{},
@@ -29,7 +36,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 
 	opts := new(eoptions)
 
-	err := opts.applyOptions(topic, codec, options...)
+	err := opts.applyOptionsWithLogger(topic, codec, logger, options...)
 	if err != nil {
 		return nil, fmt.Errorf(errApplyOptions, err)
 	}

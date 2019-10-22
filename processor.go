@@ -55,12 +55,19 @@ type ProcessCallback func(ctx Context, msg interface{})
 
 // NewProcessor creates a processor instance in a group given the address of
 // Kafka brokers, the consumer group name, a list of subscriptions (topics,
-// codecs, and callbacks), and series of options.
+// codecs, and callbacks), and series of options. Uses the default logger
 func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) (*Processor, error) {
+	return NewProcessorWithLogger(brokers, gg, logger.Default(), options...)
+}
+
+// NewProcessorWithLogger creates a processor instance in a group given the address of
+// Kafka brokers, the consumer group name, a list of subscriptions (topics,
+// codecs, and callbacks), and series of options.
+func NewProcessorWithLogger(brokers []string, gg *GroupGraph, logger logger.Logger, options ...ProcessorOption) (*Processor, error) {
 	options = append(
 		// default options comes first
 		[]ProcessorOption{
-			WithLogger(logger.Default()),
+			WithLogger(logger),
 			WithUpdateCallback(DefaultUpdate),
 			WithPartitionChannelSize(defaultPartitionChannelSize),
 			WithStorageBuilder(storage.DefaultBuilder(DefaultProcessorStoragePath(gg.Group()))),
@@ -76,7 +83,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	}
 
 	opts := new(poptions)
-	err := opts.applyOptions(gg, options...)
+	err := opts.applyOptionsWithLogger(gg, logger, options...)
 	if err != nil {
 		return nil, fmt.Errorf(errApplyOptions, err)
 	}
@@ -655,14 +662,11 @@ func (g *Processor) rebalance(errg *multierr.ErrGroup, ctx context.Context, part
 	errs := new(multierr.Errors)
 	g.opts.log.Printf("Processor: rebalancing: %+v", partitions)
 
-
 	// callback the new partition assignment
 	g.opts.rebalanceCallback(partitions)
 
-
 	g.m.Lock()
 	defer g.m.Unlock()
-
 
 	for id := range partitions {
 		// create partition views

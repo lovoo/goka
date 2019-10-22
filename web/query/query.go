@@ -53,10 +53,15 @@ type Server struct {
 	humanizer Humanizer
 }
 
-// NewServer creates a server with the given options.
+// NewServer creates a server with the default logger and the given options
 func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
+	return NewServerWithLogger(basePath, router, logger.Default(), opts...)
+}
+
+// NewServerWithLogger creates a server with the given options.
+func NewServerWithLogger(basePath string, router *mux.Router, logger logger.Logger, opts ...Option) *Server {
 	srv := &Server{
-		log:       logger.Default(),
+		log:       logger,
 		basePath:  basePath,
 		loader:    &templates.BinLoader{},
 		sources:   make(map[string]goka.Getter),

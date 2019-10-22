@@ -27,10 +27,15 @@ type View struct {
 
 // NewView creates a new View object from a group.
 func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) (*View, error) {
+	return NewViewWithLogger(brokers, topic, codec, logger.Default(), options...)
+}
+
+// NewViewWithLogger creates a new View object from a group with a custom ,logger.
+func NewViewWithLogger(brokers []string, topic Table, codec Codec, logger logger.Logger, options ...ViewOption) (*View, error) {
 	options = append(
 		// default options comes first
 		[]ViewOption{
-			WithViewLogger(logger.Default()),
+			WithViewLogger(logger),
 			WithViewCallback(DefaultUpdate),
 			WithViewPartitionChannelSize(defaultPartitionChannelSize),
 			WithViewStorageBuilder(storage.DefaultBuilder(DefaultViewStoragePath())),
@@ -42,7 +47,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 
 	// figure out how many partitions the group has
 	opts := new(voptions)
-	err := opts.applyOptions(topic, codec, options...)
+	err := opts.applyOptionsWithLogger(topic, codec, logger, options...)
 	if err != nil {
 		return nil, fmt.Errorf("Error applying user-defined options: %v", err)
 	}

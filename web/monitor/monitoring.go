@@ -28,10 +28,15 @@ type Server struct {
 	processors []*goka.Processor
 }
 
-// NewServer creates a new Server
+// NewServer creates a new server with the default logger
 func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
+	return NewServerWithLogger(basePath, router, logger.Default(), opts...)
+}
+
+// NewServerWithLogger creates a new Server with a custom logger
+func NewServerWithLogger(basePath string, router *mux.Router, logger logger.Logger, opts ...Option) *Server {
 	srv := &Server{
-		log:      logger.Default(),
+		log:      logger,
 		basePath: basePath,
 	}
 
