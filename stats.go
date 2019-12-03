@@ -50,12 +50,65 @@ type PartitionStats struct {
 	Output map[string]OutputStats
 }
 
+// PartitionStats represents metrics and measurements of a partition.
+type PartitionProcStats struct {
+	Now time.Time
+
+	Input  map[string]InputStats
+	Output map[string]OutputStats
+}
+
+type TableStats struct {
+	Status  PartitionStatus
+	Stalled bool
+
+	Offset int64 // last offset processed or recovered
+	Hwm    int64 // next offset to be written
+
+	StartTime    time.Time
+	RecoveryTime time.Time
+
+	Input  map[string]InputStats
+	Output map[string]OutputStats
+}
+
 func newPartitionStats() *PartitionStats {
 	return &PartitionStats{
 		Now:    time.Now(),
 		Input:  make(map[string]InputStats),
 		Output: make(map[string]OutputStats),
 	}
+}
+
+func newPartitionProcStats() *PartitionProcStats {
+	return &PartitionProcStats{
+		Now:    time.Now(),
+		Input:  make(map[string]InputStats),
+		Output: make(map[string]OutputStats),
+	}
+}
+
+func newTableStats() *TableStats {
+	return &TableStats{
+		Input:  make(map[string]InputStats),
+		Output: make(map[string]OutputStats),
+	}
+}
+
+func (ts *TableStats) reset() {
+	ts.Input = make(map[string]InputStats)
+	ts.Output = make(map[string]OutputStats)
+}
+
+func (s *PartitionProcStats) init(o *PartitionProcStats) *PartitionProcStats {
+	s.Now = time.Now()
+	for k, v := range o.Input {
+		s.Input[k] = v
+	}
+	for k, v := range o.Output {
+		s.Output[k] = v
+	}
+	return s
 }
 
 func (s *PartitionStats) init(o *PartitionStats, offset, hwm int64) *PartitionStats {
