@@ -1,6 +1,10 @@
 package logger
 
-import "log"
+import (
+	"fmt"
+	"log"
+	"strings"
+)
 
 var (
 	defaultLogger = &std{}
@@ -15,17 +19,45 @@ type Logger interface {
 	// assertion which should never fail. Regular errors will be returned out
 	// from the library.
 	Panicf(string, ...interface{})
+
+	// PrefixedLogger returns a logger that prefixes all messages with passed prefix
+	Prefix(string) Logger
 }
 
 // std bridges the logger calls to the standard library log.
-type std struct{}
+type std struct {
+	prefixPath []string
+	prefix     string
+}
 
 func (s *std) Printf(msg string, args ...interface{}) {
-	log.Printf(msg, args...)
+	log.Printf(fmt.Sprintf("%s%s", s.prefix, msg), args...)
 }
 
 func (s *std) Panicf(msg string, args ...interface{}) {
-	log.Panicf(msg, args...)
+	log.Panicf(fmt.Sprintf("%s%s", s.prefix, msg), args...)
+}
+
+func (s *std) Prefix(prefix string) Logger {
+	var prefPath []string
+	// append existing path
+	prefPath = append(prefPath, s.prefixPath...)
+
+	// if new is not empty, append to path
+	if prefix != "" {
+		prefPath = append(prefPath, prefix)
+	}
+
+	// make new prefix
+	newPrefix := strings.Join(prefPath, " > ")
+	if newPrefix != "" {
+		newPrefix = "[" + newPrefix + "] "
+	}
+
+	return &std{
+		prefixPath: prefPath,
+		prefix:     newPrefix,
+	}
 }
 
 // Default returns the standard library logger
