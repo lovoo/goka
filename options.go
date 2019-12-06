@@ -83,10 +83,12 @@ type poptions struct {
 	nilHandling          NilHandling
 
 	builders struct {
-		storage  storage.Builder
-		consumer kafka.ConsumerBuilder
-		producer kafka.ProducerBuilder
-		topicmgr kafka.TopicManagerBuilder
+		storage        storage.Builder
+		consumerSarama ConsumerBuilder
+		consumerGroup  ConsumerGroupBuilder
+		consumer       kafka.ConsumerBuilder
+		producer       kafka.ProducerBuilder
+		topicmgr       kafka.TopicManagerBuilder
 	}
 }
 
@@ -123,6 +125,20 @@ func WithTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ProcessorOption {
 func WithConsumerBuilder(cb kafka.ConsumerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.consumer = cb
+	}
+}
+
+// WithConsumerGroupBuilder replaces the default consumer group builder
+func WithConsumerGroupBuilder(cgb ConsumerGroupBuilder) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.builders.consumerGroup = cgb
+	}
+}
+
+// WithConsumerSaramaBuilder replaces the default consumer group builder
+func WithConsumerSaramaBuilder(cgb ConsumerBuilder) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.builders.consumerSarama = cgb
 	}
 }
 
@@ -232,7 +248,12 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
 	}
-
+	if opt.builders.consumerGroup == nil {
+		opt.builders.consumerGroup = DefaultConsumerGroupBuilder
+	}
+	if opt.builders.consumerSarama == nil {
+		opt.builders.consumerSarama = DefaultConsumerBuilder
+	}
 	return nil
 }
 

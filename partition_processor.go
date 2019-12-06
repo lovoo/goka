@@ -3,7 +3,6 @@ package goka
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -72,7 +71,8 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor2,
 		callbacks[t] = graph.callback(t)
 	}
 
-	return &PartitionProcessor{
+	partProc := &PartitionProcessor{
+		log:           proc.log.Prefix(fmt.Sprintf("PartitionProcessor (%d)", partition)),
 		opts:          proc.opts,
 		partition:     partition,
 		state:         NewSignal(PPStateIdle, PPStateRecovering), // add the rest as we need them
@@ -87,12 +87,15 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor2,
 		requestStats:  make(chan bool),
 		responseStats: make(chan *PartitionProcStats, 1),
 		session:       session,
-		table: newPartitionTable(graph.GroupTable().Topic(),
+	}
+	if graph.GroupTable() != nil {
+		partProc.table = newPartitionTable(graph.GroupTable().Topic(),
 			proc.saramaConsumer,
 			proc.opts.updateCallback,
 			proc.opts.builders.storage,
-			proc.opts.log),
+			proc.opts.log)
 	}
+	return partProc
 }
 
 func (pp *PartitionProcessor) EnqueueMessage(msg *sarama.ConsumerMessage) {
@@ -158,12 +161,13 @@ func (pp *PartitionProcessor) startJoinTable(ctx context.Context, table *Partiti
 }
 
 func (pp *PartitionProcessor) Stop() error {
+	pp.log.Printf("stop called")
 	pp.cancelRunnerGroup()
 	return pp.runnerGroup.Wait().NilOrError()
 }
 
 func (pp *PartitionProcessor) run(ctx context.Context) error {
-
+	pp.log.Printf("starting")
 	var (
 		// syncFailer is called synchronously from the callback within *this*
 		// goroutine
@@ -197,7 +201,7 @@ func (pp *PartitionProcessor) run(ctx context.Context) error {
 		select {
 		case <-done:
 		case <-time.NewTimer(10 * time.Second).C:
-			log.Printf("partition shutdown timed out. Will stop waiting.")
+			pp.log.Printf("partition shutdown timed out. Will stop waiting.")
 		}
 	}()
 
@@ -219,13 +223,14 @@ func (pp *PartitionProcessor) run(ctx context.Context) error {
 			select {
 			case pp.responseStats <- lastStats:
 			case <-ctx.Done():
-				pp.log.Printf("Partitioning exiting, context is cancelled")
+				pp.log.Printf("exiting, context is cancelled")
 				return nil
 			}
 
 		case <-ctx.Done():
-			pp.log.Printf("Partitioning exiting, context is cancelled (outer)")
+			pp.log.Printf("exiting, context is cancelled")
 			return nil
+
 		case err := <-asyncErrors:
 			// close it so the other messages that might write to the channel will panic
 			// TODO: is there a more elegant solution?
@@ -241,7 +246,6 @@ func (pp *PartitionProcessor) getPartitionStats() *PartitionStats {
 }
 
 func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitGroup, msg *sarama.ConsumerMessage, syncFailer func(err error), asyncFailer func(err error)) error {
-
 	msgContext := &cbContext2{
 		ctx:   ctx,
 		graph: pp.graph,

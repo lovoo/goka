@@ -20,6 +20,7 @@ import (
 // A group is composed by multiple processor instances.
 type Processor2 struct {
 	opts    *poptions
+	log     logger.Logger
 	brokers []string
 
 	// partition processor
@@ -95,6 +96,7 @@ func NewProcessor2(brokers []string, gg *GroupGraph, options ...ProcessorOption)
 	// combine things together
 	processor := &Processor2{
 		opts:    opts,
+		log:     opts.log.Prefix(fmt.Sprintf("Processor %s", gg.Group())),
 		brokers: brokers,
 
 		partitions:     make(map[int32]*PartitionProcessor),
@@ -187,8 +189,8 @@ func (g *Processor2) hash(key string) (int32, error) {
 }
 
 func (g *Processor2) Run(ctx context.Context) (rerr error) {
-	g.opts.log.Printf("Processor: starting")
-	defer g.opts.log.Printf("Processor: stopped")
+	g.log.Printf("starting")
+	defer g.log.Printf("stopped")
 
 	// create errorgroup
 	ctx, g.cancel = context.WithCancel(ctx)
@@ -204,11 +206,7 @@ func (g *Processor2) Run(ctx context.Context) (rerr error) {
 	}()
 
 	// create kafka consumer
-	g.opts.log.Printf("Processor: creating group consumer [%s]", g.graph.Group())
-
-	config := sarama.NewConfig()
-	config.ClientID = g.opts.clientID
-	consumerGroup, err := sarama.NewConsumerGroup(g.brokers, string(g.graph.Group()), config)
+	consumerGroup, err := g.opts.builders.consumerGroup(g.brokers, string(g.graph.Group()), g.opts.clientID)
 	if err != nil {
 		return fmt.Errorf(errBuildConsumer, err)
 	}
@@ -220,7 +218,7 @@ func (g *Processor2) Run(ctx context.Context) (rerr error) {
 
 	go func() {
 		for err := range consumerGroup.Errors() {
-			g.opts.log.Printf("Error executing group consumer [%s]", g.graph.Group(), err)
+			g.log.Printf("Error executing group consumer: %v", err)
 			g.errors.Collect(err)
 		}
 	}()
@@ -230,27 +228,19 @@ func (g *Processor2) Run(ctx context.Context) (rerr error) {
 		topics = append(topics, e.Topic())
 	}
 
-	g.saramaConsumer, err = sarama.NewConsumer(g.brokers, config)
+	g.saramaConsumer, err = g.opts.builders.consumerSarama(g.brokers, g.opts.clientID)
 	if err != nil {
 		return fmt.Errorf("Error creating consumer for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
 	}
-	// g.consumer = consumer
-	// defer func() {
-	// 	g.opts.log.Printf("Processor: closing consumer [%s]", g.graph.Group())
-	// 	if err = g.consumer.Close(); err != nil {
-	// 		_ = g.errors.Collect(fmt.Errorf("error closing consumer: %v", err))
-	// 	}
-	// }()
-	//
 	// create kafka producer
-	g.opts.log.Printf("Processor: creating producer")
+	g.log.Printf("creating producer")
 	producer, err := g.opts.builders.producer(g.brokers, g.opts.clientID, g.opts.hasher)
 	if err != nil {
 		return fmt.Errorf(errBuildProducer, err)
 	}
 	g.producer = producer
 	defer func() {
-		g.opts.log.Printf("Processor: closing producer")
+		g.log.Printf("closing producer")
 		if err := g.producer.Close(); err != nil {
 			_ = g.errors.Collect(fmt.Errorf("error closing producer: %v", err))
 		}
@@ -271,9 +261,29 @@ func (g *Processor2) Run(ctx context.Context) (rerr error) {
 	// run the main rebalance-consume-loop
 	errg.Go(func() error {
 		for {
-			err := consumerGroup.Consume(ctx, topics, g)
+			var (
+				err  error
+				done = make(chan struct{})
+			)
+			go func() {
+				defer close(done)
+				g.log.Printf("consuming from consumer loop")
+				err = consumerGroup.Consume(ctx, topics, g)
+			}()
+			select {
+			case <-done:
+				break
+			case <-ctx.Done():
+				g.log.Printf("context closed, waiting for processor to finish up")
+				<-done
+				g.log.Printf("context closed, processor finished")
+				if err != nil {
+					return fmt.Errorf("error running consumergroup: %v", err)
+				}
+				return nil
+			}
 			if err != nil {
-				return fmt.Errorf("Error running consumergroup [%s]: %v", g.graph.Group(), err)
+				return fmt.Errorf("error running consumergroup: %v", err)
 			}
 		}
 	})
@@ -283,7 +293,7 @@ func (g *Processor2) Run(ctx context.Context) (rerr error) {
 
 // Setup is run at the beginning of a new session, before ConsumeClaim.
 func (g *Processor2) Setup(session sarama.ConsumerGroupSession) error {
-	g.opts.log.Printf("Processor [%s] setup generation %d", g.graph.Group(), session.GenerationID())
+	g.log.Printf("setup generation %d", session.GenerationID())
 	errs := new(multierr.Errors)
 	var partitions []int32
 	for _, claim := range session.Claims() {
@@ -303,10 +313,10 @@ func (g *Processor2) Setup(session sarama.ConsumerGroupSession) error {
 	}
 
 	// setup all processors
-	errg, ctx := multierr.NewErrGroup(session.Context())
+	errg, _ := multierr.NewErrGroup(session.Context())
 	for _, partition := range g.partitions {
 		errg.Go(func() error {
-			return partition.Setup(ctx)
+			return partition.Setup(session.Context())
 		})
 	}
 
@@ -318,7 +328,6 @@ func (g *Processor2) Setup(session sarama.ConsumerGroupSession) error {
 // Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
 // but before the offsets are committed for the very last time.
 func (g *Processor2) Cleanup(session sarama.ConsumerGroupSession) error {
-
 	errg, _ := multierr.NewErrGroup(session.Context())
 	for part, pproc := range g.partitions {
 		errg.Go(func() error {
@@ -338,12 +347,10 @@ func (g *Processor2) Cleanup(session sarama.ConsumerGroupSession) error {
 // Once the Messages() channel is closed, the Handler must finish its processing
 // loop and exit.
 func (g *Processor2) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-
 	part, has := g.partitions[claim.Partition()]
 	if !has {
 		return fmt.Errorf("No partition (%d) to handle input in topic %s", claim.Partition(), claim.Topic())
 	}
-
 	for msg := range claim.Messages() {
 		part.EnqueueMessage(msg)
 	}
