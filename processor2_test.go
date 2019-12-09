@@ -72,13 +72,12 @@ func TestProcessor2_Run(t *testing.T) {
 		procErr = newProc.Run(ctx)
 	}()
 
-	time.Sleep(1000 * time.Millisecond)
+	time.Sleep(time.Second)
 
-	cg.SendMessage(&sarama.ConsumerMessage{Topic: "input",
+	<-cg.SendMessage(&sarama.ConsumerMessage{Topic: "input",
 		Value: []byte("testmessage"),
 		Key:   []byte("testkey"),
 	})
-	time.Sleep(1000 * time.Millisecond)
 
 	if consumedMessage != "testmessage" {
 		log.Printf("did not receive message")
