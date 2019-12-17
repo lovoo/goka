@@ -51,7 +51,6 @@ func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte)
 	return s.Set(key, value)
 }
 
-
 // DefaultRebalance is the default callback when a new partition assignment is received.
 // DefaultRebalance can be used in the function passed to WithRebalanceCallback.
 func DefaultRebalance(a kafka.Assignment) {}
@@ -282,9 +281,10 @@ type voptions struct {
 	restartable          bool
 
 	builders struct {
-		storage  storage.Builder
-		consumer kafka.ConsumerBuilder
-		topicmgr kafka.TopicManagerBuilder
+		storage        storage.Builder
+		consumerSarama ConsumerBuilder
+		consumer       kafka.ConsumerBuilder
+		topicmgr       kafka.TopicManagerBuilder
 	}
 }
 
@@ -315,6 +315,13 @@ func WithViewStorageBuilder(sb storage.Builder) ViewOption {
 func WithViewConsumerBuilder(cb kafka.ConsumerBuilder) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
 		o.builders.consumer = cb
+	}
+}
+
+// WithViewConsumerSaramaBuilder replaces the default sarama consumer builder
+func WithViewConsumerSaramaBuilder(cgb ConsumerBuilder) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.builders.consumerSarama = cgb
 	}
 }
 
@@ -385,6 +392,11 @@ func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) 
 	if opt.builders.consumer == nil {
 		opt.builders.consumer = kafka.DefaultConsumerBuilder
 	}
+
+	if opt.builders.consumerSarama == nil {
+		opt.builders.consumerSarama = DefaultConsumerBuilder
+	}
+
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
 	}

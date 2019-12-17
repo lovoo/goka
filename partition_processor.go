@@ -16,7 +16,7 @@ const (
 	PPStateIdle State = iota
 	PPStateRecovering
 	PPStateRunning
-	PPStateDone
+	PPStateStopping
 )
 
 type PartitionProcessor struct {
@@ -75,9 +75,9 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor2,
 		log:           proc.log.Prefix(fmt.Sprintf("PartitionProcessor (%d)", partition)),
 		opts:          proc.opts,
 		partition:     partition,
-		state:         NewSignal(PPStateIdle, PPStateRecovering), // add the rest as we need them
+		state:         NewSignal(PPStateIdle, PPStateRecovering, PPStateRunning, PPStateStopping).SetState(PPStateIdle),
 		callbacks:     callbacks,
-		lookups:       proc.views,
+		lookups:       proc.lookupTables,
 		consumer:      proc.saramaConsumer,
 		joins:         make(map[string]*PartitionTable),
 		input:         make(chan *sarama.ConsumerMessage, proc.opts.partitionChannelSize),
@@ -90,6 +90,7 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor2,
 	}
 	if graph.GroupTable() != nil {
 		partProc.table = newPartitionTable(graph.GroupTable().Topic(),
+			partition,
 			proc.saramaConsumer,
 			proc.opts.updateCallback,
 			proc.opts.builders.storage,
@@ -107,6 +108,9 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 
 	pp.runnerGroup, _ = multierr.NewErrGroup(ctx)
 
+	pp.state.SetState(PPStateRecovering)
+	defer pp.state.SetState(PPStateRunning)
+
 	setupErrg, setupCtx := multierr.NewErrGroup(ctx)
 
 	if pp.table != nil {
@@ -116,7 +120,9 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	}
 
 	for _, join := range pp.graph.JointTables() {
-		table := newPartitionTable(join.Topic(), pp.consumer, pp.opts.updateCallback, pp.opts.builders.storage, pp.opts.log)
+		table := newPartitionTable(join.Topic(),
+			pp.partition,
+			pp.consumer, pp.opts.updateCallback, pp.opts.builders.storage, pp.opts.log)
 		pp.joins[join.Topic()] = table
 		setupErrg.Go(func() error {
 			return pp.startJoinTable(setupCtx, table)
@@ -138,7 +144,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 
 func (pp *PartitionProcessor) startJoinTable(ctx context.Context, table *PartitionTable) error {
 
-	recoveredChan, errorChan, err := table.SetupAndCatchupForever(ctx)
+	recoveredChan, errorChan, err := table.SetupAndCatchupForever(ctx, false)
 	if err != nil {
 		return fmt.Errorf("Error setting up joined table for topc/partition %s/%d: %v", table.topic, pp.partition, err)
 	}
@@ -162,6 +168,9 @@ func (pp *PartitionProcessor) startJoinTable(ctx context.Context, table *Partiti
 
 func (pp *PartitionProcessor) Stop() error {
 	pp.log.Printf("stop called")
+	pp.state.SetState(PPStateStopping)
+	defer pp.state.SetState(PPStateIdle)
+
 	pp.cancelRunnerGroup()
 	return pp.runnerGroup.Wait().NilOrError()
 }

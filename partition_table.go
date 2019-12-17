@@ -29,7 +29,12 @@ type PartitionTable struct {
 	hwm    int64
 }
 
-func newPartitionTable(topic string, consumer sarama.Consumer, updateCallback UpdateCallback, builder storage.Builder, log logger.Logger) *PartitionTable {
+func newPartitionTable(topic string,
+	partition int32,
+	consumer sarama.Consumer,
+	updateCallback UpdateCallback,
+	builder storage.Builder,
+	log logger.Logger) *PartitionTable {
 
 	return &PartitionTable{
 		state:          NewSignal(State(PartitionRecovering), State(PartitionPreparing), State(PartitionRunning)),
@@ -49,7 +54,7 @@ func (p *PartitionTable) SetupAndCatchup(ctx context.Context) error {
 	return p.catchupToHwm(ctx)
 }
 
-func (p *PartitionTable) SetupAndCatchupForever(ctx context.Context) (chan struct{}, chan error, error) {
+func (p *PartitionTable) SetupAndCatchupForever(ctx context.Context, restartOnError bool) (chan struct{}, chan error, error) {
 	err := p.Setup(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -57,9 +62,24 @@ func (p *PartitionTable) SetupAndCatchupForever(ctx context.Context) (chan struc
 
 	errChan := make(chan error)
 
-	go func() {
-		errChan <- p.catchupForever(ctx)
-	}()
+	if restartOnError {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case err, ok := <-errChan:
+					if ok {
+						p.log.Printf("Error while catching up, but we'll try to keep it running: %v", err)
+					}
+				}
+			}
+		}()
+	} else {
+		go func() {
+			errChan <- p.catchupForever(ctx)
+		}()
+	}
 
 	return p.WaitRecovered(), errChan, nil
 }
@@ -195,12 +215,12 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	}
 
 	if stopAfterCatchup {
-		errs.Collect(p.markRecovered2(ctx))
+		errs.Collect(p.markRecovered(ctx))
 	}
 	return
 }
 
-func (p *PartitionTable) markRecovered2(ctx context.Context) error {
+func (p *PartitionTable) markRecovered(ctx context.Context) error {
 	var (
 		start  = time.Now()
 		ticker = time.NewTicker(10 * time.Second)

@@ -5,7 +5,6 @@ import (
 	"hash"
 	"log"
 	"testing"
-	"time"
 
 	"github.com/Shopify/sarama"
 	smock "github.com/Shopify/sarama/mocks"
@@ -72,7 +71,7 @@ func TestProcessor2_Run(t *testing.T) {
 		procErr = newProc.Run(ctx)
 	}()
 
-	time.Sleep(time.Second)
+	newProc.WaitForReady()
 
 	<-cg.SendMessage(&sarama.ConsumerMessage{Topic: "input",
 		Value: []byte("testmessage"),

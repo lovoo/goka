@@ -464,13 +464,13 @@ func TestContext_Lookup(t *testing.T) {
 					tableCodec: c,
 					hasher:     DefaultHasher(),
 				},
-				partitions: []*partition{
-					&partition{
-						st: &storageProxy{
-							Storage: st,
-						},
-					},
-				},
+				// partitions: []*partition{
+				// 	&partition{
+				// 		st: &storageProxy{
+				// 			Storage: st,
+				// 		},
+				// 	},
+				// },
 			},
 		},
 	}

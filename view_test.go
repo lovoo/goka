@@ -488,9 +488,9 @@ func TestView_Evict(t *testing.T) {
 	ensure.Nil(t, err)
 
 	v := &View{
-		partitions: []*partition{
-			{st: &storageProxy{partition: 0, Storage: st}},
-		},
+		// partitions: []*partition{
+		// 	{st: &storageProxy{partition: 0, Storage: st}},
+		// },
 		opts: &voptions{
 			hasher: func() hash.Hash32 {
 				return NewConstHasher(0)
