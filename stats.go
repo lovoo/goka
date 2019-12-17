@@ -50,7 +50,7 @@ type PartitionStats struct {
 	Output map[string]OutputStats
 }
 
-// PartitionStats represents metrics and measurements of a partition.
+// PartitionProcStats represents metrics and measurements of a partition processor
 type PartitionProcStats struct {
 	Now time.Time
 
@@ -58,6 +58,7 @@ type PartitionProcStats struct {
 	Output map[string]OutputStats
 }
 
+// TableStats represents stats for a table partition
 type TableStats struct {
 	Status  PartitionStatus
 	Stalled bool

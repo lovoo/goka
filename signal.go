@@ -11,7 +11,7 @@ type State int
 // Signal allows synchronization on a state, waiting for that state and checking
 // the current state
 type Signal struct {
-	sync.Mutex
+	m             sync.Mutex
 	state         State
 	waitChans     map[State][]chan struct{}
 	allowedStates map[State]bool
@@ -33,8 +33,8 @@ func NewSignal(states ...State) *Signal {
 // SetState changes the state of the signal
 // and notifies all goroutines waiting for the new state
 func (s *Signal) SetState(state State) *Signal {
-	s.Lock()
-	defer s.Unlock()
+	s.m.Lock()
+	defer s.m.Unlock()
 	if !s.allowedStates[state] {
 		panic(fmt.Errorf("trying to set illegal state %v", state))
 	}
@@ -62,8 +62,8 @@ func (s *Signal) State() State {
 // WaitForState returns a channel that closes when the signal reaches passed
 // state.
 func (s *Signal) WaitForState(state State) chan struct{} {
-	s.Lock()
-	defer s.Unlock()
+	s.m.Lock()
+	defer s.m.Unlock()
 	cb := make(chan struct{})
 
 	if s.IsState(state) {

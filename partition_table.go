@@ -117,10 +117,10 @@ WaitLoop:
 			p.log.Printf("creating storage for topic %s for %.1f minutes ...", p.topic, time.Since(start).Minutes())
 		case <-done:
 			p.log.Printf("finished building storage for topic %s", p.topic)
-			break WaitLoop
 			if err != nil {
 				return nil, fmt.Errorf("error building storage: %v", err)
 			}
+			break WaitLoop
 		}
 	}
 
@@ -336,8 +336,6 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 			return
 		}
 	}
-
-	return
 }
 
 func (p *PartitionTable) storeEvent(key string, value []byte, offset int64) error {
