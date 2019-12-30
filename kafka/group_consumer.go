@@ -211,6 +211,12 @@ func (c *groupConsumer) waitForMessages() bool {
 				return false
 			}
 		case msg := <-c.consumer.Messages():
+
+			headers := make(map[string][]byte)
+			for _, header := range msg.Headers {
+				headers[string(header.Key)] = header.Value
+			}
+
 			select {
 			case c.events <- &Message{
 				Topic:     msg.Topic,
@@ -219,6 +225,7 @@ func (c *groupConsumer) waitForMessages() bool {
 				Timestamp: msg.Timestamp,
 				Key:       string(msg.Key),
 				Value:     msg.Value,
+				Header:    headers,
 			}:
 			case <-c.stop:
 				return false

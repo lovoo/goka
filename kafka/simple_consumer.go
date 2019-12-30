@@ -139,6 +139,12 @@ func (c *simpleConsumer) run(pc sarama.PartitionConsumer, topic string, partitio
 				// drained.
 				continue
 			}
+
+			headers := make(map[string][]byte)
+			for _, header := range m.Headers {
+				headers[string(header.Key)] = header.Value
+			}
+
 			select {
 			case c.events <- &Message{
 				Topic:     m.Topic,
@@ -147,6 +153,7 @@ func (c *simpleConsumer) run(pc sarama.PartitionConsumer, topic string, partitio
 				Key:       string(m.Key),
 				Value:     m.Value,
 				Timestamp: m.Timestamp,
+				Header:    headers,
 			}:
 			case <-c.dying:
 				return

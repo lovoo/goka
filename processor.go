@@ -47,6 +47,7 @@ type message struct {
 	Partition int32
 	Offset    int64
 	Timestamp time.Time
+	Header    map[string][]byte
 }
 
 // ProcessCallback function is called for every message received by the
@@ -655,14 +656,11 @@ func (g *Processor) rebalance(errg *multierr.ErrGroup, ctx context.Context, part
 	errs := new(multierr.Errors)
 	g.opts.log.Printf("Processor: rebalancing: %+v", partitions)
 
-
 	// callback the new partition assignment
 	g.opts.rebalanceCallback(partitions)
 
-
 	g.m.Lock()
 	defer g.m.Unlock()
-
 
 	for id := range partitions {
 		// create partition views
