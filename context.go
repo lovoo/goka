@@ -33,6 +33,9 @@ type Context interface {
 	// Value returns the value of the key in the group table.
 	Value() interface{}
 
+	// Headers returns the headers of the input message
+	Headers() map[string][]byte
+
 	// SetValue updates the value of the key in the group table.
 	SetValue(value interface{})
 
@@ -194,6 +197,10 @@ func (ctx *cbContext) Offset() int64 {
 
 func (ctx *cbContext) Partition() int32 {
 	return ctx.msg.Partition
+}
+
+func (ctx *cbContext) Headers() map[string][]byte {
+	return ctx.msg.Header
 }
 
 func (ctx *cbContext) Join(topic Table) interface{} {

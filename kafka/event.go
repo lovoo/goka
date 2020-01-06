@@ -48,6 +48,7 @@ type Message struct {
 	Partition int32
 	Offset    int64
 	Timestamp time.Time
+	Header    map[string][]byte
 
 	Key   string
 	Value []byte

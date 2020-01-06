@@ -161,6 +161,11 @@ func (c *confluent) run() {
 					partition = e.TopicPartition.Partition
 				)
 
+				headers := make(map[string][]byte)
+				for _, header := range e.Headers {
+					headers[header.Key] = header.Value
+				}
+
 				c.events <- &kafka.Message{
 					Topic:     topic,
 					Partition: partition,
@@ -168,6 +173,7 @@ func (c *confluent) run() {
 					Key:       string(e.Key),
 					Value:     e.Value,
 					Timestamp: e.Timestamp,
+					Header:    headers,
 				}
 
 			case rdkafka.PartitionEOF:

@@ -255,6 +255,7 @@ func TestGroupConsumer_GroupConsumeMessages(t *testing.T) {
 		Offset:    0,
 		Key:       string(key),
 		Value:     value,
+		Header:    make(map[string][]byte),
 	})
 
 	ensure.DeepEqual(t, c.partitionMap, map[int32]bool{
@@ -458,6 +459,7 @@ func TestGroupConsumer_GroupNotificationsAfterMessages(t *testing.T) {
 		Offset:    0,
 		Key:       string(key),
 		Value:     value,
+		Header:    make(map[string][]byte),
 	})
 
 	ensure.DeepEqual(t, c.partitionMap, map[int32]bool{
@@ -564,6 +566,7 @@ func TestGroupConsumer_GroupEmptyNotifications(t *testing.T) {
 		Offset:    0,
 		Key:       string(key),
 		Value:     value,
+		Header:    make(map[string][]byte),
 	})
 
 	ensure.DeepEqual(t, c.partitionMap, map[int32]bool{

@@ -134,6 +134,7 @@ func newMessage(ev *kafka.Message) *message {
 		Timestamp: ev.Timestamp,
 		Data:      ev.Value,
 		Key:       ev.Key,
+		Header:    ev.Header,
 	}
 }
 
