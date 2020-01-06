@@ -17,8 +17,6 @@ type Producer interface {
 
 type producer struct {
 	producer sarama.AsyncProducer
-	stop     chan bool
-	done     chan bool
 	wg       sync.WaitGroup
 }
 
@@ -31,8 +29,6 @@ func NewProducer(brokers []string, config *sarama.Config) (Producer, error) {
 
 	p := producer{
 		producer: aprod,
-		stop:     make(chan bool),
-		done:     make(chan bool),
 	}
 
 	p.run()
