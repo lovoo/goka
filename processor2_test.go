@@ -30,6 +30,14 @@ func createTestConsumerBuilder(t *testing.T) (ConsumerBuilder, *smock.Consumer) 
 	}, cons
 }
 
+func createMockTopicManagerBuilder(t *testing.T) (kafka.TopicManagerBuilder, *mock.TopicManager) {
+	tm := mock.NewTopicManager(20, 2)
+
+	return func(broker []string) (kafka.TopicManager, error) {
+		return tm, nil
+	}, tm
+}
+
 func TestProcessor2_Run(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
@@ -47,9 +55,10 @@ func TestProcessor2_Run(t *testing.T) {
 
 	groupBuilder, cg := createTestConsumerGroupBuilder(t)
 	consBuilder, cons := createTestConsumerBuilder(t)
-
+	tmBuilder, tm := createMockTopicManagerBuilder(t)
 	_ = cg
 	_ = cons
+	_ = tm
 	ctx, cancel := context.WithCancel(context.Background())
 
 	newProc, err := NewProcessor2([]string{"localhost:9092"}, graph,
@@ -58,6 +67,7 @@ func TestProcessor2_Run(t *testing.T) {
 		WithProducerBuilder(func(brokers []string, clientID string, hasher func() hash.Hash32) (kafka.Producer, error) {
 			return producerMock, nil
 		}),
+		WithTopicManagerBuilder(tmBuilder),
 	)
 	ensure.Nil(t, err)
 	var (
