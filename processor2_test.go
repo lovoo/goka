@@ -23,7 +23,7 @@ func createTestConsumerGroupBuilder(t *testing.T) (ConsumerGroupBuilder, *mock.C
 }
 
 func createTestConsumerBuilder(t *testing.T) (ConsumerBuilder, *smock.Consumer) {
-	cons := smock.NewConsumer(t, sarama.NewConfig())
+	cons := smock.NewConsumer(t, nil)
 
 	return func(brokers []string, clientID string) (sarama.Consumer, error) {
 		return cons, nil
@@ -47,11 +47,16 @@ func createMockProducer(t *testing.T) (kafka.ProducerBuilder, *mock.Producer) {
 }
 
 func TestProcessor2_Run(t *testing.T) {
-
 	var consumedMessage string
 	graph := DefineGroup("test",
 		Input("input", new(codec.String), func(ctx Context, msg interface{}) {
 			consumedMessage = msg.(string)
+			val := ctx.Value()
+			if val == nil {
+				ctx.SetValue(1)
+			} else {
+				ctx.SetValue(val.(int64) + 1)
+			}
 		}),
 		Persist(new(codec.Int64)),
 	)
@@ -79,12 +84,17 @@ func TestProcessor2_Run(t *testing.T) {
 		done    = make(chan struct{})
 	)
 
+	// cons.ExpectConsumePartition("test-table", 0, sarama.OffsetOldest)
+
 	go func() {
 		defer close(done)
 		procErr = newProc.Run(ctx)
 	}()
-
 	newProc.WaitForReady()
+
+	// if there was an error during startup, no point in sending messages
+	// and waiting for them to be delivered
+	ensure.Nil(t, procErr)
 
 	cg.SendMessageWait(&sarama.ConsumerMessage{Topic: "input",
 		Value: []byte("testmessage"),

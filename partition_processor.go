@@ -88,6 +88,7 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor2,
 		responseStats: make(chan *PartitionProcStats, 1),
 		session:       session,
 	}
+
 	if graph.GroupTable() != nil {
 		partProc.table = newPartitionTable(graph.GroupTable().Topic(),
 			partition,

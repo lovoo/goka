@@ -8,19 +8,24 @@ import (
 // State types a state of the Signal
 type State int
 
+type waiter struct {
+	done     chan struct{}
+	state    State
+	minState bool
+}
+
 // Signal allows synchronization on a state, waiting for that state and checking
 // the current state
 type Signal struct {
 	m             sync.Mutex
 	state         State
-	waitChans     map[State][]chan struct{}
+	waiters       []*waiter
 	allowedStates map[State]bool
 }
 
 // NewSignal creates a new Signal based on the states
 func NewSignal(states ...State) *Signal {
 	s := &Signal{
-		waitChans:     make(map[State][]chan struct{}),
 		allowedStates: make(map[State]bool),
 	}
 	for _, state := range states {
@@ -41,10 +46,15 @@ func (s *Signal) SetState(state State) *Signal {
 
 	// set the state and notify all channels waiting for it.
 	s.state = state
-	for _, waitChan := range s.waitChans[state] {
-		close(waitChan)
+	var newWaiters []*waiter
+	for _, w := range s.waiters {
+		if w.state == state || (w.minState && state >= w.state) {
+			close(w.done)
+			continue
+		}
+		newWaiters = append(newWaiters, w)
 	}
-	delete(s.waitChans, state)
+	s.waiters = newWaiters
 
 	return s
 }
@@ -59,18 +69,42 @@ func (s *Signal) State() State {
 	return s.state
 }
 
+func (s *Signal) WaitForStateMin(state State) chan struct{} {
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	w := &waiter{
+		done:     make(chan struct{}),
+		state:    state,
+		minState: true,
+	}
+
+	return s.waitForWaiter(state, w)
+}
+
 // WaitForState returns a channel that closes when the signal reaches passed
 // state.
 func (s *Signal) WaitForState(state State) chan struct{} {
 	s.m.Lock()
 	defer s.m.Unlock()
-	cb := make(chan struct{})
 
-	if s.IsState(state) {
-		close(cb)
-	} else {
-		s.waitChans[state] = append(s.waitChans[state], cb)
+	w := &waiter{
+		done:  make(chan struct{}),
+		state: state,
 	}
 
-	return cb
+	return s.waitForWaiter(state, w)
+}
+
+func (s *Signal) waitForWaiter(state State, w *waiter) chan struct{} {
+
+	// if the signal is currently in that state (or in a higher state if minState is set)
+	// then close the waiter immediately
+	if curState := s.State(); state == curState || (w.minState && curState >= state) {
+		close(w.done)
+	} else {
+		s.waiters = append(s.waiters, w)
+	}
+
+	return w.done
 }

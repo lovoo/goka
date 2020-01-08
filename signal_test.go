@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"log"
 	"testing"
 )
 
@@ -45,5 +46,26 @@ func TestSignal_Wait(t *testing.T) {
 	sig.SetState(1)
 	// wait for the goroutine to catchup with the state
 	<-done
+	assertTrue(t, hasState)
+}
+
+func TestSignalWaitMin(t *testing.T) {
+	sig := NewSignal(0, 1, 2)
+
+	var (
+		done     = make(chan struct{})
+		hasState bool
+	)
+	go func() {
+		defer close(done)
+		<-sig.WaitForStateMin(1)
+		hasState = true
+	}()
+
+	assertFalse(t, hasState)
+	sig.SetState(2)
+	// wait for the goroutine to catchup with the state
+	<-done
+	log.Printf("hasdf")
 	assertTrue(t, hasState)
 }

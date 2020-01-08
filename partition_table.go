@@ -35,11 +35,11 @@ func newPartitionTable(topic string,
 	updateCallback UpdateCallback,
 	builder storage.Builder,
 	log logger.Logger) *PartitionTable {
-
 	return &PartitionTable{
 		state:          NewSignal(State(PartitionRecovering), State(PartitionPreparing), State(PartitionRunning)),
 		stats:          newTableStats(),
 		consumer:       consumer,
+		topic:          topic,
 		updateCallback: updateCallback,
 		builder:        builder,
 		log:            log,
@@ -84,6 +84,7 @@ func (p *PartitionTable) SetupAndCatchupForever(ctx context.Context, restartOnEr
 	return p.WaitRecovered(), errChan, nil
 }
 
+// Setup creates the storage for the partition table
 func (p *PartitionTable) Setup(ctx context.Context) error {
 
 	storage, err := p.createStorage(ctx)

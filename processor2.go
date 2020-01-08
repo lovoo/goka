@@ -16,6 +16,7 @@ import (
 
 const (
 	ProcStateIdle State = iota
+	ProcStateStarting
 	ProcStateSetup
 	ProcStateRunning
 	ProcStateStopping
@@ -112,7 +113,7 @@ func NewProcessor2(brokers []string, gg *GroupGraph, options ...ProcessorOption)
 
 		graph: gg,
 
-		state: NewSignal(ProcStateIdle, ProcStateSetup, ProcStateRunning, ProcStateStopping),
+		state: NewSignal(ProcStateIdle, ProcStateStarting, ProcStateSetup, ProcStateRunning, ProcStateStopping).SetState(ProcStateIdle),
 	}
 
 	return processor, nil
@@ -205,6 +206,10 @@ func (g *Processor2) Run(ctx context.Context) (rerr error) {
 	g.ctx = ctx
 	defer g.cancel()
 
+	// set a starting state. From this point on we know that there's a cancel and a valid context set
+	// in the processor which we can use for waiting
+	g.state.SetState(ProcStateStarting)
+
 	// collect all errors before leaving
 	errors := new(multierr.Errors)
 	defer func() {
@@ -281,6 +286,10 @@ func (g *Processor2) Run(ctx context.Context) (rerr error) {
 			}()
 			select {
 			case <-done:
+				g.log.Printf("Consumer group loop done, will stop here")
+				if err != nil {
+					return fmt.Errorf("error running consumergroup: %v", err)
+				}
 				break
 			case <-ctx.Done():
 				g.log.Printf("context closed, waiting for processor to finish up")
@@ -356,7 +365,7 @@ func (g *Processor2) Setup(session sarama.ConsumerGroupSession) error {
 
 	// no partitions configured, we cannot setup anything
 	if len(partitions) == 0 {
-		return errs.Collect(fmt.Errorf("No partitions assigned. Claims were: %#v", session.Claims()))
+		return errs.Collect(fmt.Errorf("No partitions assigned. Claims were: %#v", session.Claims())).NilOrError()
 	}
 
 	// create partition views for all partitions
@@ -398,12 +407,21 @@ func (g *Processor2) Cleanup(session sarama.ConsumerGroupSession) error {
 }
 
 func (g *Processor2) WaitForReady() {
+	// wait for the processor to be started
+	<-g.state.WaitForStateMin(ProcStateStarting)
+
 	// wait that the processor is actually running
-	<-g.state.WaitForState(ProcStateRunning)
+	select {
+	case <-g.state.WaitForState(ProcStateRunning):
+	case <-g.ctx.Done():
+	}
 
 	// wait for all partitionprocessors to be running
 	for _, part := range g.partitions {
-		<-part.state.WaitForState(PPStateRunning)
+		select {
+		case <-part.state.WaitForState(PPStateRunning):
+		case <-g.ctx.Done():
+		}
 	}
 }
 
@@ -423,6 +441,7 @@ func (g *Processor2) ConsumeClaim(session sarama.ConsumerGroupSession, claim sar
 
 // creates the partition that is responsible for the group processor's table
 func (g *Processor2) createPartitionProcessor(ctx context.Context, partition int32, session sarama.ConsumerGroupSession) error {
+	g.log.Printf("Creating partition processor for partition %d", partition)
 	if _, has := g.partitions[partition]; has {
 		return fmt.Errorf("processor [%s]: partition %d already exists", g.graph.Group(), partition)
 	}
