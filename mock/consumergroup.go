@@ -186,6 +186,9 @@ func (cg *ConsumerGroup) SendError(err error) {
 	cg.errs <- err
 }
 
+// SendMessage sends a message to the consumergroup
+// returns a channel that will be closed when the message has been committed
+// by the group
 func (cg *ConsumerGroup) SendMessage(message *sarama.ConsumerMessage) <-chan struct{} {
 	cg.mMessages.Lock()
 	defer cg.mMessages.Unlock()
@@ -208,6 +211,11 @@ func (cg *ConsumerGroup) SendMessage(message *sarama.ConsumerMessage) <-chan str
 	}()
 
 	return done
+}
+
+// SendMessageWait sends a message to the consumergroup waiting for the message for being committed
+func (cg *ConsumerGroup) SendMessageWait(message *sarama.ConsumerMessage) {
+	<-cg.SendMessage(message)
 }
 
 func (cg *ConsumerGroup) Errors() <-chan error {

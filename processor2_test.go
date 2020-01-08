@@ -9,10 +9,10 @@ import (
 	"github.com/Shopify/sarama"
 	smock "github.com/Shopify/sarama/mocks"
 	"github.com/facebookgo/ensure"
-	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/mock"
+	"github.com/lovoo/goka/storage"
 )
 
 func createTestConsumerGroupBuilder(t *testing.T) (ConsumerGroupBuilder, *mock.ConsumerGroup) {
@@ -38,35 +38,39 @@ func createMockTopicManagerBuilder(t *testing.T) (kafka.TopicManagerBuilder, *mo
 	}, tm
 }
 
+func createMockProducer(t *testing.T) (kafka.ProducerBuilder, *mock.Producer) {
+	pb := mock.NewProducer(t)
+
+	return func(brokers []string, clientID string, hasher func() hash.Hash32) (kafka.Producer, error) {
+		return pb, nil
+	}, pb
+}
+
 func TestProcessor2_Run(t *testing.T) {
-
-	ctrl := gomock.NewController(t)
-
-	defer ctrl.Finish()
-
-	producerMock := mock.NewMockProducer(ctrl)
 
 	var consumedMessage string
 	graph := DefineGroup("test",
 		Input("input", new(codec.String), func(ctx Context, msg interface{}) {
 			consumedMessage = msg.(string)
 		}),
+		Persist(new(codec.Int64)),
 	)
 
 	groupBuilder, cg := createTestConsumerGroupBuilder(t)
 	consBuilder, cons := createTestConsumerBuilder(t)
 	tmBuilder, tm := createMockTopicManagerBuilder(t)
+	prodBuilder, prod := createMockProducer(t)
 	_ = cg
 	_ = cons
 	_ = tm
+	_ = prod
 	ctx, cancel := context.WithCancel(context.Background())
 
 	newProc, err := NewProcessor2([]string{"localhost:9092"}, graph,
 		WithConsumerGroupBuilder(groupBuilder),
 		WithConsumerSaramaBuilder(consBuilder),
-		WithProducerBuilder(func(brokers []string, clientID string, hasher func() hash.Hash32) (kafka.Producer, error) {
-			return producerMock, nil
-		}),
+		WithProducerBuilder(prodBuilder),
+		WithStorageBuilder(storage.MemoryBuilder()),
 		WithTopicManagerBuilder(tmBuilder),
 	)
 	ensure.Nil(t, err)
@@ -74,7 +78,6 @@ func TestProcessor2_Run(t *testing.T) {
 		procErr error
 		done    = make(chan struct{})
 	)
-	producerMock.EXPECT().Close().Return(nil)
 
 	go func() {
 		defer close(done)
@@ -83,7 +86,7 @@ func TestProcessor2_Run(t *testing.T) {
 
 	newProc.WaitForReady()
 
-	<-cg.SendMessage(&sarama.ConsumerMessage{Topic: "input",
+	cg.SendMessageWait(&sarama.ConsumerMessage{Topic: "input",
 		Value: []byte("testmessage"),
 		Key:   []byte("testkey"),
 	})
@@ -93,8 +96,12 @@ func TestProcessor2_Run(t *testing.T) {
 		t.Errorf("did not receive message")
 	}
 
-	cancel()
+	val, err := newProc.Get("testkey")
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, val.(int64), 1)
 
+	// shutdown
+	cancel()
 	<-done
 	ensure.Nil(t, procErr)
 
