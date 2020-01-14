@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
+	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
@@ -31,6 +32,7 @@ type View struct {
 	opts       *voptions
 	partitions []*PartitionTable
 	consumer   sarama.Consumer
+	tmgr       kafka.TopicManager
 	terminated bool
 	state      *Signal
 }
@@ -62,11 +64,17 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	}
 	opts.tableCodec = codec
 
+	tmgr, err := opts.builders.topicmgr(brokers)
+	if err != nil {
+		return nil, fmt.Errorf("Error creating topic manager: %v", err)
+	}
+
 	v := &View{
 		brokers:  brokers,
 		topic:    string(topic),
 		opts:     opts,
 		consumer: consumer,
+		tmgr:     tmgr,
 		state:    NewSignal(ViewStateIdle, ViewStateCatchUp, ViewStateRunning).SetState(ViewStateIdle),
 	}
 
@@ -113,6 +121,7 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 		v.partitions = append(v.partitions, newPartitionTable(v.topic,
 			p,
 			v.consumer,
+			v.tmgr,
 			v.opts.updateCallback,
 			v.opts.builders.storage,
 			v.opts.log))

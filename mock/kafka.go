@@ -208,6 +208,21 @@ func (mr *MockTopicManagerMockRecorder) EnsureTopicExists(arg0, arg1, arg2, arg3
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureTopicExists", reflect.TypeOf((*MockTopicManager)(nil).EnsureTopicExists), arg0, arg1, arg2, arg3)
 }
 
+// GetOffset mocks base method
+func (m *MockTopicManager) GetOffset(arg0 string, arg1 int32, arg2 int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOffset", arg0, arg1, arg2)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOffset indicates an expected call of GetOffset
+func (mr *MockTopicManagerMockRecorder) GetOffset(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOffset", reflect.TypeOf((*MockTopicManager)(nil).GetOffset), arg0, arg1, arg2)
+}
+
 // Partitions mocks base method
 func (m *MockTopicManager) Partitions(arg0 string) ([]int32, error) {
 	m.ctrl.T.Helper()

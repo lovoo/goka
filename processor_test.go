@@ -25,8 +25,8 @@ import (
 )
 
 var (
-	rawCodec = new(codec.Bytes)
-	emptyRebalanceCallback = func(a kafka.Assignment){}
+	rawCodec               = new(codec.Bytes)
+	emptyRebalanceCallback = func(a kafka.Assignment) {}
 )
 
 func nullStorageBuilder() storage.Builder {
@@ -1453,11 +1453,11 @@ func TestProcessor_RebalanceCallback(t *testing.T) {
 		asmt     = (*kafka.Assignment)(&map[int32]int64{0: -1, 1: -1})
 		i        = 0
 		eAsmt    = []kafka.Assignment{{}, *asmt}
-		rcb      = func(a kafka.Assignment){
+		rcb      = func(a kafka.Assignment) {
 			ensure.DeepEqual(t, a, eAsmt[i])
 			i += 1
 		}
-		p        = createProcessorStateless(ctrl, consumer, producer, 3, rcb)
+		p = createProcessorStateless(ctrl, consumer, producer, 3, rcb)
 	)
 
 	// -- expectactions --

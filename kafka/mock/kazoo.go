@@ -90,6 +90,21 @@ func (mr *MockTopicManagerMockRecorder) Partitions(topic interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Partitions", reflect.TypeOf((*MockTopicManager)(nil).Partitions), topic)
 }
 
+// GetOffset mocks base method
+func (m *MockTopicManager) GetOffset(topic string, partitionID int32, time int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOffset", topic, partitionID, time)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOffset indicates an expected call of GetOffset
+func (mr *MockTopicManagerMockRecorder) GetOffset(topic, partitionID, time interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOffset", reflect.TypeOf((*MockTopicManager)(nil).GetOffset), topic, partitionID, time)
+}
+
 // Close mocks base method
 func (m *MockTopicManager) Close() error {
 	m.ctrl.T.Helper()

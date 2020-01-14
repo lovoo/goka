@@ -3,6 +3,7 @@ package goka
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -40,6 +41,7 @@ type PartitionProcessor struct {
 	cancelRunnerGroup func()
 
 	consumer sarama.Consumer
+	tmgr     kafka.TopicManager
 	stats    *PartitionProcStats
 
 	requestStats  chan bool
@@ -79,6 +81,8 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor2,
 		callbacks:     callbacks,
 		lookups:       proc.lookupTables,
 		consumer:      proc.saramaConsumer,
+		producer:      proc.producer,
+		tmgr:          proc.tmgr,
 		joins:         make(map[string]*PartitionTable),
 		input:         make(chan *sarama.ConsumerMessage, proc.opts.partitionChannelSize),
 		inputTopics:   topicList,
@@ -93,6 +97,7 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor2,
 		partProc.table = newPartitionTable(graph.GroupTable().Topic(),
 			partition,
 			proc.saramaConsumer,
+			proc.tmgr,
 			proc.opts.updateCallback,
 			proc.opts.builders.storage,
 			proc.opts.log)
@@ -116,6 +121,8 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 
 	if pp.table != nil {
 		setupErrg.Go(func() error {
+			log.Printf("catching up table")
+			defer log.Printf("catching up table dnoe")
 			return pp.table.SetupAndCatchup(setupCtx)
 		})
 	}
@@ -123,7 +130,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	for _, join := range pp.graph.JointTables() {
 		table := newPartitionTable(join.Topic(),
 			pp.partition,
-			pp.consumer, pp.opts.updateCallback, pp.opts.builders.storage, pp.opts.log)
+			pp.consumer, pp.tmgr, pp.opts.updateCallback, pp.opts.builders.storage, pp.opts.log)
 		pp.joins[join.Topic()] = table
 		setupErrg.Go(func() error {
 			return pp.startJoinTable(setupCtx, table)
@@ -328,6 +335,10 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	// call finish with the panic or with nil depending on a pending panic
 	defer func() {
 		if r := recover(); r != nil {
+
+			// if handling the message panicked, we will still mark the
+			// context as done, so we don't wait in the waitgroup forever
+			msgContext.markDone()
 			msgContext.finish(fmt.Errorf("panic: %v", r))
 			panic(r) // propagate panic up
 		} else {

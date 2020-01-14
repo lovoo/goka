@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
@@ -21,6 +22,7 @@ type PartitionTable struct {
 	builder        storage.Builder
 	st             *storageProxy
 	consumer       sarama.Consumer
+	tmgr           kafka.TopicManager
 	updateCallback UpdateCallback
 
 	offsetM sync.Mutex
@@ -32,6 +34,7 @@ type PartitionTable struct {
 func newPartitionTable(topic string,
 	partition int32,
 	consumer sarama.Consumer,
+	tmgr kafka.TopicManager,
 	updateCallback UpdateCallback,
 	builder storage.Builder,
 	log logger.Logger) *PartitionTable {
@@ -39,6 +42,7 @@ func newPartitionTable(topic string,
 		state:          NewSignal(State(PartitionRecovering), State(PartitionPreparing), State(PartitionRunning)),
 		stats:          newTableStats(),
 		consumer:       consumer,
+		tmgr:           tmgr,
 		topic:          topic,
 		updateCallback: updateCallback,
 		builder:        builder,
@@ -151,6 +155,33 @@ func (p *PartitionTable) catchupForever(ctx context.Context) error {
 	return p.load(ctx, false)
 }
 
+func (p *PartitionTable) findOffsetToLoad(localOffset int64) (int64, int64, error) {
+	oldest, err := p.tmgr.GetOffset(p.topic, p.partition, sarama.OffsetOldest)
+	if err != nil {
+		return 0, 0, fmt.Errorf("Error getting oldest offset for topic/partition %s/%d: %v", p.topic, p.partition, err)
+	}
+	hwm, err := p.tmgr.GetOffset(p.topic, p.partition, sarama.OffsetNewest)
+	if err != nil {
+		return 0, 0, fmt.Errorf("Error getting newest offset for topic/partition %s/%d: %v", p.topic, p.partition, err)
+	}
+
+	start := localOffset
+
+	if localOffset == sarama.OffsetOldest {
+		start = oldest
+	} else if localOffset == sarama.OffsetNewest {
+		start = hwm
+	}
+
+	if start > hwm {
+		start = hwm
+	}
+	if start < oldest {
+		start = oldest
+	}
+	return start, hwm, nil
+}
+
 func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr error) {
 	var (
 		localOffset  int64
@@ -175,21 +206,24 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		return
 	}
 
-	hwms := p.consumer.HighWaterMarks()
-	partitionHwm = hwms[p.topic][p.partition]
+	loadOffset, hwm, err := p.findOffsetToLoad(localOffset)
+	if err != nil {
+		errs.Collect(err)
+		return
+	}
 
-	if localOffset >= partitionHwm {
+	if loadOffset >= hwm {
 		errs.Collect(fmt.Errorf("local offset is higher than partition offset. topic %s, partition %d, hwm %d, local offset %d", p.topic, p.partition, partitionHwm, localOffset))
 		return
 	}
 
 	// we are exactly where we're supposed to be
 	// AND we're here for catchup, so let's stop here
-	if stopAfterCatchup && localOffset == partitionHwm-1 {
+	if stopAfterCatchup && loadOffset == hwm-1 {
 		return nil
 	}
 
-	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, localOffset)
+	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, loadOffset)
 	if err != nil {
 		errs.Collect(fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, localOffset, err))
 		return

@@ -1,5 +1,7 @@
 package mock
 
+import "github.com/Shopify/sarama"
+
 // Topic holds all infos about a topic
 type Topic struct {
 	Topic             string
@@ -7,6 +9,8 @@ type Topic struct {
 	ReplicationFactor int
 	Config            map[string]string
 	Table             bool // false -> stream, true -> table
+	OldestOffset      int64
+	Hwm               int64
 }
 
 // TopicManager mimicks the behavior of the real topic manager
@@ -69,6 +73,37 @@ func (tm *TopicManager) Partitions(topic string) ([]int32, error) {
 		parts = append(parts, int32(i))
 	}
 	return parts, nil
+}
+
+func (tm *TopicManager) SetOffset(topicName string, oldest, hwm int64) {
+	topic, ok := tm.Topics[topicName]
+	if !ok {
+		topic = &Topic{
+			Topic:             topicName,
+			NumPartitions:     tm.DefaultNumPartitions,
+			ReplicationFactor: tm.DefaultReplicationFactor,
+			Config:            map[string]string{},
+		}
+		tm.Topics[topicName] = topic
+	}
+	topic.Hwm = hwm
+	topic.OldestOffset = oldest
+}
+
+// GetOffset returns the offset closest to the passed time (or exactly time, if the offsets are empty)
+func (tm *TopicManager) GetOffset(topicName string, partitionID int32, time int64) (int64, error) {
+	topic, ok := tm.Topics[topicName]
+	if !ok {
+		return time, nil
+	}
+
+	if topic.OldestOffset != 0 && time == sarama.OffsetOldest {
+		return topic.OldestOffset, nil
+	}
+	if topic.Hwm != 0 && time == sarama.OffsetNewest {
+		return topic.Hwm, nil
+	}
+	return time, nil
 }
 
 // Close has no action on the mock

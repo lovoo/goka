@@ -63,28 +63,36 @@ func TestTopicManager_updateChroot(t *testing.T) {
 
 }
 
-func TestCheckPartitions(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	client := mock.NewMockClient(ctrl)
+func TestSaramaTopicManager(t *testing.T) {
 
-	topic := "topic"
-	npar := 3
+	t.Run("checkpartitions", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		client := mock.NewMockClient(ctrl)
 
-	client.EXPECT().Partitions(topic).Return([]int32{0, 1, 2}, nil)
-	err := checkPartitions(client, topic, npar)
-	fmt.Println(err)
-	ensure.Nil(t, err)
+		mgr := &saramaTopicManager{
+			client: client,
+		}
+		topic := "topic"
+		npar := 3
 
-	client.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	err = checkPartitions(client, topic, npar)
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "partitions instead")
+		client.EXPECT().Partitions(topic).Return([]int32{0, 1, 2}, nil)
+		exists, err := mgr.checkTopicExistsWithPartitions(topic, npar)
+		ensure.Nil(t, err)
+		ensure.True(t, exists)
 
-	client.EXPECT().Partitions(topic).Return([]int32{0, 1, 2}, fmt.Errorf("some error in the wire"))
-	err = checkPartitions(client, topic, npar)
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "Error fetching")
+		client.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
+		exists, err = mgr.checkTopicExistsWithPartitions(topic, npar)
+		ensure.NotNil(t, err)
+		ensure.False(t, exists)
+		ensure.StringContains(t, err.Error(), "partitions instead")
+
+		client.EXPECT().Partitions(topic).Return([]int32{0, 1, 2}, fmt.Errorf("some error in the wire"))
+		exists, err = mgr.checkTopicExistsWithPartitions(topic, npar)
+		ensure.NotNil(t, err)
+		ensure.False(t, exists)
+		ensure.StringContains(t, err.Error(), "some error in the wire")
+	})
 }
 
 func TestTopicManager_hasTopic(t *testing.T) {

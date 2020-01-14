@@ -31,7 +31,7 @@ func createTestConsumerBuilder(t *testing.T) (ConsumerBuilder, *smock.Consumer) 
 }
 
 func createMockTopicManagerBuilder(t *testing.T) (kafka.TopicManagerBuilder, *mock.TopicManager) {
-	tm := mock.NewTopicManager(20, 2)
+	tm := mock.NewTopicManager(1, 1)
 
 	return func(broker []string) (kafka.TopicManager, error) {
 		return tm, nil
@@ -53,7 +53,7 @@ func TestProcessor2_Run(t *testing.T) {
 			consumedMessage = msg.(string)
 			val := ctx.Value()
 			if val == nil {
-				ctx.SetValue(1)
+				ctx.SetValue(int64(1))
 			} else {
 				ctx.SetValue(val.(int64) + 1)
 			}
@@ -84,7 +84,8 @@ func TestProcessor2_Run(t *testing.T) {
 		done    = make(chan struct{})
 	)
 
-	// cons.ExpectConsumePartition("test-table", 0, sarama.OffsetOldest)
+	tm.SetOffset("test-table", sarama.OffsetOldest, 0)
+	cons.ExpectConsumePartition("test-table", 0, sarama.OffsetOldest)
 
 	go func() {
 		defer close(done)
@@ -108,7 +109,7 @@ func TestProcessor2_Run(t *testing.T) {
 
 	val, err := newProc.Get("testkey")
 	ensure.Nil(t, err)
-	ensure.DeepEqual(t, val.(int64), 1)
+	ensure.DeepEqual(t, val.(int64), int64(1))
 
 	// shutdown
 	cancel()

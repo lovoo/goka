@@ -42,6 +42,7 @@ type Processor2 struct {
 
 	saramaConsumer sarama.Consumer
 	producer       kafka.Producer
+	tmgr           kafka.TopicManager
 
 	state *Signal
 
@@ -238,6 +239,12 @@ func (g *Processor2) Run(ctx context.Context) (rerr error) {
 	if err != nil {
 		return fmt.Errorf("Error creating consumer for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
 	}
+
+	g.tmgr, err = g.opts.builders.topicmgr(g.brokers)
+	if err != nil {
+		return fmt.Errorf("Error creating topic manager for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
+	}
+
 	// create kafka producer
 	g.log.Printf("creating producer")
 	producer, err := g.opts.builders.producer(g.brokers, g.opts.clientID, g.opts.hasher)
@@ -354,6 +361,7 @@ func (g *Processor2) Setup(session sarama.ConsumerGroupSession) error {
 	g.state.SetState(ProcStateSetup)
 	defer g.state.SetState(ProcStateRunning)
 	g.log.Printf("setup generation %d", session.GenerationID())
+	defer g.log.Printf("setup generation %d ... done", session.GenerationID())
 	errs := new(multierr.Errors)
 	var partitions []int32
 	for _, claim := range session.Claims() {

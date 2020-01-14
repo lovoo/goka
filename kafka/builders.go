@@ -50,16 +50,15 @@ func ProducerBuilderWithConfig(config *cluster.Config) ProducerBuilder {
 type TopicManagerBuilder func(brokers []string) (TopicManager, error)
 
 // DefaultTopicManagerBuilder creates TopicManager using the Sarama library.
-// This topic manager cannot create topics.
 func DefaultTopicManagerBuilder(brokers []string) (TopicManager, error) {
-	return NewSaramaTopicManager(brokers, sarama.NewConfig())
+	return NewSaramaTopicManager(brokers, sarama.NewConfig(), NewTopicManagerConfig())
 }
 
 // TopicManagerBuilderWithConfig creates TopicManager using the Sarama library.
 // This topic manager cannot create topics.
-func TopicManagerBuilderWithConfig(config *cluster.Config) TopicManagerBuilder {
+func TopicManagerBuilderWithConfig(config *sarama.Config, tmConfig *TopicManagerConfig) TopicManagerBuilder {
 	return func(brokers []string) (TopicManager, error) {
-		return NewSaramaTopicManager(brokers, &config.Config)
+		return NewSaramaTopicManager(brokers, config, tmConfig)
 	}
 }
 

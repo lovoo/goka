@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/lovoo/goka/multierr"
 	kazoo "github.com/wvanbergen/kazoo-go"
 )
 
@@ -24,30 +25,46 @@ type TopicManager interface {
 	// instance, i.e. it doesn't represent all partitions of a topic.
 	Partitions(topic string) ([]int32, error)
 
+	GetOffset(topic string, partitionID int32, time int64) (int64, error)
+
 	// Close closes the topic manager
 	Close() error
 }
 
 type saramaTopicManager struct {
-	brokers []string
-	client  sarama.Client
+	brokers            []string
+	broker             *sarama.Broker
+	client             sarama.Client
+	topicManagerConfig *TopicManagerConfig
 }
 
 // NewSaramaTopicManager creates a new topic manager using the sarama library
-func NewSaramaTopicManager(brokers []string, config *sarama.Config) (TopicManager, error) {
-	client, err := sarama.NewClient(brokers, config)
+func NewSaramaTopicManager(brokers []string, saramaConfig *sarama.Config, topicManagerConfig *TopicManagerConfig) (TopicManager, error) {
+	client, err := sarama.NewClient(brokers, saramaConfig)
 	if err != nil {
 		return nil, fmt.Errorf("Error creating the kafka client: %v", err)
 	}
 
+	broker := sarama.NewBroker(brokers[0])
+	connected, err := broker.Connected()
+	if !connected || err != nil {
+		return nil, fmt.Errorf("cannot connect to broker %s: %v", brokers[0], err)
+	}
+
 	return &saramaTopicManager{
-		brokers: brokers,
-		client:  client,
+		brokers:            brokers,
+		client:             client,
+		broker:             broker,
+		topicManagerConfig: topicManagerConfig,
 	}, nil
 }
 
 func (m *saramaTopicManager) Close() error {
-	return m.client.Close()
+	errs := new(multierr.Errors)
+	errs.Collect(m.client.Close())
+	errs.Collect(m.broker.Close())
+
+	return errs.NilOrError()
 }
 
 func (m *saramaTopicManager) Partitions(topic string) ([]int32, error) {
@@ -55,22 +72,94 @@ func (m *saramaTopicManager) Partitions(topic string) ([]int32, error) {
 }
 
 func (m *saramaTopicManager) EnsureStreamExists(topic string, npar int) error {
-	return m.EnsureTableExists(topic, npar)
+	exists, err := m.checkTopicExistsWithPartitions(topic, npar)
+	if err != nil {
+		return fmt.Errorf("error checking topic exists: %v", err)
+	}
+	if exists {
+		return nil
+	}
+	return m.createTopic(topic,
+		npar,
+		m.topicManagerConfig.Stream.Replication,
+		map[string]string{
+			"retention.ms": fmt.Sprintf("%d", m.topicManagerConfig.Stream.Retention),
+		})
 }
 
-func (m *saramaTopicManager) EnsureTableExists(topic string, npar int) error {
+func (m *saramaTopicManager) GetOffset(topic string, partitionID int32, time int64) (int64, error) {
+	return m.client.GetOffset(topic, partitionID, time)
+}
+
+func (m *saramaTopicManager) checkTopicExistsWithPartitions(topic string, npar int) (bool, error) {
 	par, err := m.client.Partitions(topic)
 	if err != nil {
-		return fmt.Errorf("could not ensure %s exists: %v", topic, err)
+		if err == sarama.ErrUnknownTopicOrPartition {
+			return false, nil
+		}
+		return false, fmt.Errorf("Error checking partitions for topic %s: %v", topic, err)
 	}
 	if len(par) != npar {
-		return fmt.Errorf("topic %s has %d partitions instead of %d", topic, len(par), npar)
+		return false, fmt.Errorf("topic %s has %d partitions instead of %d", topic, len(par), npar)
 	}
+	return true, nil
+}
+
+func (m *saramaTopicManager) createTopic(topic string, npar, rfactor int, config map[string]string) error {
+	topicDetail := &sarama.TopicDetail{}
+	topicDetail.NumPartitions = int32(npar)
+	topicDetail.ReplicationFactor = int16(rfactor)
+	topicDetail.ConfigEntries = make(map[string]*string)
+
+	topicDetails := make(map[string]*sarama.TopicDetail)
+	topicDetails[topic] = topicDetail
+
+	request := sarama.CreateTopicsRequest{
+		Timeout:      time.Second * 15,
+		TopicDetails: topicDetails,
+	}
+	response, err := m.broker.CreateTopics(&request)
+
+	if err != nil {
+		var errs []string
+		for k, topicErr := range response.TopicErrors {
+			errs = append(errs, fmt.Sprintf("%s: %v (%v)", k, topicErr.Error(), topicErr.ErrMsg))
+		}
+		return fmt.Errorf("error creating topic %s, npar=%d, rfactor=%d, config=%#v: %v\ntopic errors:\n%s",
+			topic, npar, rfactor, config, err, strings.Join(errs, "\n"))
+	}
+
 	return nil
 }
 
 func (m *saramaTopicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
-	return fmt.Errorf("not implemented in SaramaTopicManager")
+	exists, err := m.checkTopicExistsWithPartitions(topic, npar)
+	if err != nil {
+		return fmt.Errorf("error checking topic exists: %v", err)
+	}
+	if exists {
+		return nil
+	}
+	return m.createTopic(topic,
+		npar,
+		rfactor,
+		map[string]string{})
+}
+
+func (m *saramaTopicManager) EnsureTableExists(topic string, npar int) error {
+	exists, err := m.checkTopicExistsWithPartitions(topic, npar)
+	if err != nil {
+		return fmt.Errorf("error checking topic exists: %v", err)
+	}
+	if exists {
+		return nil
+	}
+	return m.createTopic(topic,
+		npar,
+		m.topicManagerConfig.Table.Replication,
+		map[string]string{
+			"cleanup.policy": "compact",
+		})
 }
 
 // TopicManagerConfig contains the configuration to access the Zookeeper servers
@@ -85,7 +174,7 @@ type TopicManagerConfig struct {
 	}
 }
 
-type topicManager struct {
+type zkTopicManager struct {
 	zk      kzoo
 	servers []string
 	config  *TopicManagerConfig
@@ -120,17 +209,21 @@ func NewTopicManager(servers []string, config *TopicManagerConfig) (TopicManager
 		return nil, fmt.Errorf("could not connect to ZooKeeper: %v", err)
 	}
 
-	return &topicManager{
+	return &zkTopicManager{
 		zk:     kzoo,
 		config: config,
 	}, nil
 }
 
-func (m *topicManager) Close() error {
+func (m *zkTopicManager) Close() error {
 	return m.zk.Close()
 }
 
-func (m *topicManager) EnsureTableExists(topic string, npar int) error {
+func (m *zkTopicManager) GetOffset(topic string, partitionID int32, time int64) (int64, error) {
+	return 0, fmt.Errorf("Not implemented")
+}
+
+func (m *zkTopicManager) EnsureTableExists(topic string, npar int) error {
 	err := checkTopic(
 		m.zk, topic, npar,
 		m.config.Table.Replication,
@@ -144,7 +237,7 @@ func (m *topicManager) EnsureTableExists(topic string, npar int) error {
 	return m.checkPartitions(topic, npar)
 }
 
-func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
+func (m *zkTopicManager) EnsureStreamExists(topic string, npar int) error {
 	retention := int(m.config.Stream.Retention.Nanoseconds() / time.Millisecond.Nanoseconds())
 	err := checkTopic(
 		m.zk, topic, npar,
@@ -155,17 +248,18 @@ func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
 	if err != nil {
 		return err
 	}
+
 	return m.checkPartitions(topic, npar)
 }
 
-func (m *topicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
+func (m *zkTopicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
 	if err := checkTopic(m.zk, topic, npar, rfactor, config, true); err != nil {
 		return err
 	}
 	return m.checkPartitions(topic, npar)
 }
 
-func (m *topicManager) Partitions(topic string) ([]int32, error) {
+func (m *zkTopicManager) Partitions(topic string) ([]int32, error) {
 	tl, err := m.zk.Topics()
 	if err != nil {
 		return nil, err
@@ -229,7 +323,7 @@ func hasTopic(kz kzoo, topic string) (bool, error) {
 }
 
 // check that the number of paritions match npar using kazoo library
-func (m *topicManager) checkPartitions(topic string, npar int) error {
+func (m *zkTopicManager) checkPartitions(topic string, npar int) error {
 	t := m.zk.Topic(topic)
 
 	partitions, err := t.Partitions()
@@ -238,19 +332,6 @@ func (m *topicManager) checkPartitions(topic string, npar int) error {
 	}
 	if len(partitions) != npar {
 		return fmt.Errorf("Topic %s does not have %d partitions", topic, npar)
-	}
-	return nil
-}
-
-// check that the number of paritions match
-func checkPartitions(client sarama.Client, topic string, npar int) error {
-	// check if topic has npar partitions
-	partitions, err := client.Partitions(topic)
-	if err != nil {
-		return fmt.Errorf("Error fetching partitions for topic %s: %v", topic, err)
-	}
-	if len(partitions) != npar {
-		return fmt.Errorf("Topic %s has %d partitions instead of %d", topic, len(partitions), npar)
 	}
 	return nil
 }

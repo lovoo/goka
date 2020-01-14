@@ -410,6 +410,10 @@ func (tm *topicMgrMock) EnsureTopicExists(topic string, npar, rfactor int, confi
 	return nil
 }
 
+func (tm *topicMgrMock) GetOffset(topic string, partitionID int32, time int64) (int64, error) {
+	return time, nil
+}
+
 // Partitions returns the number of partitions of a topic, that are assigned to the running
 // instance, i.e. it doesn't represent all partitions of a topic.
 func (tm *topicMgrMock) Partitions(topic string) ([]int32, error) {

@@ -346,6 +346,11 @@ func (ctx *cbContext2) tryCommit(err error) {
 	}
 
 	// no further callback will be called from this context
+	ctx.markDone()
+}
+
+// markdone marks the context as done
+func (ctx *cbContext2) markDone() {
 	ctx.wg.Done()
 }
 
