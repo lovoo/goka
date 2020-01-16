@@ -110,13 +110,25 @@ type ConsumerGroup struct {
 	messages   map[int64]int64
 	wgMessages sync.WaitGroup
 
+	// state *Signal
+
 	sessions map[string]*ConsumerGroupSession
 }
+
+//
+// const (
+// 	Stopped State = iota
+// 	Consuming
+// )
 
 func NewConsumerGroup(t *testing.T) *ConsumerGroup {
 	return &ConsumerGroup{
 		errs:     make(chan error, 1),
 		sessions: make(map[string]*ConsumerGroupSession),
+
+		// state: NewSignal(Stopped, Consuming).SetState(Stopped),
+
+		// TODO: check if we can remove that field
 		messages: make(map[int64]int64),
 	}
 }
@@ -145,6 +157,8 @@ func (cg *ConsumerGroup) markMessage(msg *sarama.ConsumerMessage) {
 }
 
 func (cg *ConsumerGroup) Consume(ctx context.Context, topics []string, handler sarama.ConsumerGroupHandler) error {
+	// cg.state.SetState(Consuming)
+	// defer cg.state.SetState(Stopped)
 	session := newConsumerGroupSession(ctx, cg, topics)
 	key := cg.topicKey(topics)
 	cg.sessions[key] = session

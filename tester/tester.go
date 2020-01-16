@@ -147,7 +147,7 @@ func (km *Tester) codecForTopic(topic string) goka.Codec {
 // RegisterGroupGraph is called by a processor when the tester is passed via
 // `WithTester(..)`.
 // This will setup the tester with the neccessary consumer structure
-func (km *Tester) RegisterGroupGraph(gg *goka.GroupGraph) {
+func (km *Tester) RegisterGroupGraph(gg *goka.GroupGraph) string {
 	if gg.GroupTable() != nil {
 		km.getOrCreateQueue(gg.GroupTable().Topic()).expectSimpleConsumer()
 		km.registerCodec(gg.GroupTable().Topic(), gg.GroupTable().Codec())
@@ -176,7 +176,7 @@ func (km *Tester) RegisterGroupGraph(gg *goka.GroupGraph) {
 		km.getOrCreateQueue(lookup.Topic()).expectSimpleConsumer()
 		km.registerCodec(lookup.Topic(), lookup.Codec())
 	}
-
+	return "test-client"
 }
 
 // RegisterView registers a view to be working with the tester.

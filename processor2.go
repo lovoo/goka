@@ -51,7 +51,7 @@ type Processor2 struct {
 	ctx    context.Context
 }
 
-// NewProcessor creates a processor instance in a group given the address of
+// NewProcessor2 creates a processor instance in a group given the address of
 // Kafka brokers, the consumer group name, a list of subscriptions (topics,
 // codecs, and callbacks), and series of options.
 func NewProcessor2(brokers []string, gg *GroupGraph, options ...ProcessorOption) (*Processor2, error) {
@@ -224,7 +224,9 @@ func (g *Processor2) Run(ctx context.Context) (rerr error) {
 		return fmt.Errorf(errBuildConsumer, err)
 	}
 
-	defer errors.Collect(consumerGroup.Close())
+	defer func() {
+		errors.Collect(consumerGroup.Close())
+	}()
 
 	go func() {
 		for err := range consumerGroup.Errors() {
@@ -279,6 +281,9 @@ func (g *Processor2) Run(ctx context.Context) (rerr error) {
 		var topics []string
 		for _, e := range g.graph.InputStreams() {
 			topics = append(topics, e.Topic())
+		}
+		if g.graph.LoopStream() != nil {
+			topics = append(topics, g.graph.LoopStream().Topic())
 		}
 
 		for {

@@ -7,12 +7,15 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/kafka"
 )
 
 var (
 	brokers             = []string{"localhost:9092"}
 	topic   goka.Stream = "example-stream"
 	group   goka.Group  = "example-group"
+
+	config = kafka.NewSaramaConfig()
 )
 
 // emits a single message and leave
@@ -54,7 +57,15 @@ func runProcessor() {
 		goka.Persist(new(codec.Int64)),
 	)
 
-	p, err := goka.NewProcessor(brokers, g)
+	tmc := kafka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+
+	p, err := goka.NewProcessor2(brokers,
+		g,
+		goka.WithTopicManagerBuilder(kafka.TopicManagerBuilderWithConfig(config, tmc)),
+		goka.WithConsumerGroupBuilder(kafka.ConsumerGroupBuilderWithConfig(config)),
+	)
 	if err != nil {
 		log.Fatalf("error creating processor: %v", err)
 	}

@@ -83,8 +83,8 @@ type poptions struct {
 
 	builders struct {
 		storage        storage.Builder
-		consumerSarama ConsumerBuilder
-		consumerGroup  ConsumerGroupBuilder
+		consumerSarama kafka.SaramaConsumerBuilder
+		consumerGroup  kafka.ConsumerGroupBuilder
 		consumer       kafka.ConsumerBuilder
 		producer       kafka.ProducerBuilder
 		topicmgr       kafka.TopicManagerBuilder
@@ -128,14 +128,14 @@ func WithConsumerBuilder(cb kafka.ConsumerBuilder) ProcessorOption {
 }
 
 // WithConsumerGroupBuilder replaces the default consumer group builder
-func WithConsumerGroupBuilder(cgb ConsumerGroupBuilder) ProcessorOption {
+func WithConsumerGroupBuilder(cgb kafka.ConsumerGroupBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.consumerGroup = cgb
 	}
 }
 
 // WithConsumerSaramaBuilder replaces the default consumer group builder
-func WithConsumerSaramaBuilder(cgb ConsumerBuilder) ProcessorOption {
+func WithConsumerSaramaBuilder(cgb kafka.SaramaConsumerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.consumerSarama = cgb
 	}
@@ -207,7 +207,7 @@ type Tester interface {
 	ProducerBuilder() kafka.ProducerBuilder
 	EmitterProducerBuilder() kafka.ProducerBuilder
 	TopicManagerBuilder() kafka.TopicManagerBuilder
-	RegisterGroupGraph(*GroupGraph)
+	RegisterGroupGraph(*GroupGraph) string
 	RegisterEmitter(Stream, Codec)
 	RegisterView(Table, Codec)
 }
@@ -221,7 +221,7 @@ func WithTester(t Tester) ProcessorOption {
 		o.builders.producer = t.ProducerBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
 		o.partitionChannelSize = 0
-		t.RegisterGroupGraph(gg)
+		o.clientID = t.RegisterGroupGraph(gg)
 	}
 }
 
@@ -248,10 +248,10 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
 	}
 	if opt.builders.consumerGroup == nil {
-		opt.builders.consumerGroup = DefaultConsumerGroupBuilder
+		opt.builders.consumerGroup = kafka.DefaultConsumerGroupBuilder
 	}
 	if opt.builders.consumerSarama == nil {
-		opt.builders.consumerSarama = DefaultConsumerBuilder
+		opt.builders.consumerSarama = kafka.DefaultSaramaConsumerBuilder
 	}
 	return nil
 }
@@ -282,7 +282,7 @@ type voptions struct {
 
 	builders struct {
 		storage        storage.Builder
-		consumerSarama ConsumerBuilder
+		consumerSarama kafka.SaramaConsumerBuilder
 		consumer       kafka.ConsumerBuilder
 		topicmgr       kafka.TopicManagerBuilder
 	}
@@ -319,7 +319,7 @@ func WithViewConsumerBuilder(cb kafka.ConsumerBuilder) ViewOption {
 }
 
 // WithViewConsumerSaramaBuilder replaces the default sarama consumer builder
-func WithViewConsumerSaramaBuilder(cgb ConsumerBuilder) ProcessorOption {
+func WithViewConsumerSaramaBuilder(cgb kafka.SaramaConsumerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.consumerSarama = cgb
 	}
@@ -394,7 +394,7 @@ func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) 
 	}
 
 	if opt.builders.consumerSarama == nil {
-		opt.builders.consumerSarama = DefaultConsumerBuilder
+		opt.builders.consumerSarama = kafka.DefaultSaramaConsumerBuilder
 	}
 
 	if opt.builders.topicmgr == nil {

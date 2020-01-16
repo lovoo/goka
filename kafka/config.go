@@ -8,7 +8,7 @@ import (
 // NewConfig creates a (bsm) sarama configuration with default values.
 func NewConfig() *cluster.Config {
 	config := cluster.NewConfig()
-	config.Version = sarama.V0_10_1_0
+	config.Version = sarama.V0_11_0_1
 
 	// consumer configuration
 	config.Consumer.Return.Errors = true
@@ -29,5 +29,11 @@ func NewConfig() *cluster.Config {
 	// consumer group configuration
 	config.Group.Return.Notifications = true
 
+	return config
+}
+
+func NewSaramaConfig() *sarama.Config {
+	config := sarama.NewConfig()
+	config.Version = sarama.V2_0_0_0
 	return config
 }

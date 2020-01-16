@@ -45,10 +45,23 @@ func NewSaramaTopicManager(brokers []string, saramaConfig *sarama.Config, topicM
 		return nil, fmt.Errorf("Error creating the kafka client: %v", err)
 	}
 
-	broker := sarama.NewBroker(brokers[0])
+	activeBrokers := client.Brokers()
+	if len(activeBrokers) == 0 {
+		return nil, fmt.Errorf("No brokers active in current client")
+	}
+
+	broker := activeBrokers[0]
+	err = broker.Open(saramaConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error opening broker connection: %v", err)
+	}
 	connected, err := broker.Connected()
-	if !connected || err != nil {
+	if err != nil {
 		return nil, fmt.Errorf("cannot connect to broker %s: %v", brokers[0], err)
+	}
+
+	if !connected {
+		return nil, fmt.Errorf("cannot connect to broker %s: not connected", brokers[0])
 	}
 
 	return &saramaTopicManager{
@@ -62,7 +75,6 @@ func NewSaramaTopicManager(brokers []string, saramaConfig *sarama.Config, topicM
 func (m *saramaTopicManager) Close() error {
 	errs := new(multierr.Errors)
 	errs.Collect(m.client.Close())
-	errs.Collect(m.broker.Close())
 
 	return errs.NilOrError()
 }
@@ -123,7 +135,7 @@ func (m *saramaTopicManager) createTopic(topic string, npar, rfactor int, config
 	if err != nil {
 		var errs []string
 		for k, topicErr := range response.TopicErrors {
-			errs = append(errs, fmt.Sprintf("%s: %v (%v)", k, topicErr.Error(), topicErr.ErrMsg))
+			errs = append(errs, fmt.Sprintf("%s: %s (%v)", k, topicErr.Err.Error(), topicErr.ErrMsg))
 		}
 		return fmt.Errorf("error creating topic %s, npar=%d, rfactor=%d, config=%#v: %v\ntopic errors:\n%s",
 			topic, npar, rfactor, config, err, strings.Join(errs, "\n"))

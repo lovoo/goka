@@ -3,7 +3,6 @@ package goka
 import (
 	"context"
 	"hash"
-	"log"
 	"testing"
 
 	"github.com/Shopify/sarama"
@@ -15,14 +14,14 @@ import (
 	"github.com/lovoo/goka/storage"
 )
 
-func createTestConsumerGroupBuilder(t *testing.T) (ConsumerGroupBuilder, *mock.ConsumerGroup) {
+func createTestConsumerGroupBuilder(t *testing.T) (kafka.ConsumerGroupBuilder, *mock.ConsumerGroup) {
 	mock := mock.NewConsumerGroup(t)
 	return func(brokers []string, group, clientID string) (sarama.ConsumerGroup, error) {
 		return mock, nil
 	}, mock
 }
 
-func createTestConsumerBuilder(t *testing.T) (ConsumerBuilder, *smock.Consumer) {
+func createTestConsumerBuilder(t *testing.T) (kafka.SaramaConsumerBuilder, *smock.Consumer) {
 	cons := smock.NewConsumer(t, nil)
 
 	return func(brokers []string, clientID string) (sarama.Consumer, error) {
@@ -103,7 +102,6 @@ func TestProcessor2_Run(t *testing.T) {
 	})
 
 	if consumedMessage != "testmessage" {
-		log.Printf("did not receive message")
 		t.Errorf("did not receive message")
 	}
 

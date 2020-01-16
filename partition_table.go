@@ -3,6 +3,7 @@ package goka
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -191,6 +192,9 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		errs         = new(multierr.Errors)
 	)
 
+	p.log.Printf("Loading ...")
+	defer p.log.Printf("... Loading done")
+
 	// deferred error handling
 	defer func() {
 		errs.Collect(rerr)
@@ -212,13 +216,16 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		return
 	}
 
-	if loadOffset >= hwm {
+	if localOffset >= hwm {
 		errs.Collect(fmt.Errorf("local offset is higher than partition offset. topic %s, partition %d, hwm %d, local offset %d", p.topic, p.partition, partitionHwm, localOffset))
 		return
 	}
 
+	log.Printf("loading from %d, hwm=%d", loadOffset, hwm)
+
 	// we are exactly where we're supposed to be
 	// AND we're here for catchup, so let's stop here
+	// and do not attempt to load anything
 	if stopAfterCatchup && loadOffset == hwm-1 {
 		return nil
 	}
@@ -332,6 +339,8 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 			}
 
 			if p.state.IsState(State(PartitionRunning)) && stopAfterCatchup {
+				// TODO: should we really ignore the message?
+				// Shouldn't we instead break here to avoid losing messages or fail or just consume it?
 				p.log.Printf("received message in topic %s, partition %s after catchup. Another processor is still producing messages. Ignoring message.", p.topic, p.partition)
 				continue
 			}
