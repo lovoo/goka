@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/kafka"
@@ -18,8 +19,6 @@ var (
 	brokers             = []string{"localhost:9092"}
 	topic   goka.Stream = "example-stream"
 	group   goka.Group  = "example-group"
-
-	config = kafka.NewSaramaConfig()
 )
 
 // emits a single message and leave
@@ -34,7 +33,7 @@ func runEmitter() {
 		if err != nil {
 			log.Fatalf("error emitting message: %v", err)
 		}
-		fmt.Println("message emitted")
+		log.Println("message emitted")
 		time.Sleep(time.Second)
 	}
 }
@@ -64,14 +63,16 @@ func runProcessor() {
 		goka.Persist(new(codec.Int64)),
 	)
 
+	// This sets the default replication to 1. If you have more then one broker
+	// the default configuration can be used.
 	tmc := kafka.NewTopicManagerConfig()
 	tmc.Table.Replication = 1
 	tmc.Stream.Replication = 1
 
 	p, err := goka.NewProcessor(brokers,
 		g,
-		goka.WithTopicManagerBuilder(kafka.TopicManagerBuilderWithConfig(config, tmc)),
-		goka.WithConsumerGroupBuilder(kafka.ConsumerGroupBuilderWithConfig(config)),
+		goka.WithTopicManagerBuilder(kafka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
+		goka.WithConsumerGroupBuilder(kafka.DefaultConsumerGroupBuilder),
 	)
 	if err != nil {
 		log.Fatalf("error creating processor: %v", err)
@@ -92,14 +93,14 @@ func runProcessor() {
 
 	<-sigs
 	cancel()
-
 	<-done
 }
 
 func main() {
-	go func() {
-		time.Sleep(time.Second * 3)
-		runEmitter() // emits one message and stops
-	}()
+	config := kafka.DefaultConfig()
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	kafka.ReplaceGlobalConfig(config)
+
+	runEmitter()   // emits one message and stops
 	runProcessor() // press ctrl-c to stop
 }

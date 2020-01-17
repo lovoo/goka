@@ -6,6 +6,10 @@ import (
 	"github.com/Shopify/sarama"
 )
 
+var (
+	globalConfig = *DefaultConfig()
+)
+
 const (
 	// size of sarama buffer for consumer and producer
 	defaultChannelBufferSize = 256
@@ -19,7 +23,7 @@ const (
 	defaultProducerMaxRetries = 10
 )
 
-func NewSaramaConfig() *sarama.Config {
+func DefaultConfig() *sarama.Config {
 	config := sarama.NewConfig()
 	config.Version = sarama.V2_0_0_0
 
@@ -39,4 +43,13 @@ func NewSaramaConfig() *sarama.Config {
 	config.Producer.Return.Errors = true
 	config.Producer.Retry.Max = defaultProducerMaxRetries
 	return config
+}
+
+// ReplaceGlobalConfig registeres a standard config used during building if no
+// other config is specified
+func ReplaceGlobalConfig(config *sarama.Config) {
+	if config == nil {
+		panic("nil config registered as global config")
+	}
+	globalConfig = *config
 }
