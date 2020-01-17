@@ -7,10 +7,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/multierr"
-	"github.com/lovoo/goka/storage"
 )
+
+type emitter func(topic string, key string, value []byte) *kafka.Promise
 
 // Context provides access to the processor's table and emit capabilities to
 // arbitrary topics in kafka.
@@ -67,8 +69,6 @@ type Context interface {
 	Context() context.Context
 }
 
-type emitter func(topic string, key string, value []byte) *kafka.Promise
-
 type cbContext struct {
 	ctx   context.Context
 	graph *GroupGraph
@@ -77,13 +77,16 @@ type cbContext struct {
 	emitter emitter
 	failer  func(err error)
 
-	storage storage.Storage
-	pviews  map[string]*partition
-	views   map[string]*View
+	table *PartitionTable
+	// joins
+	pviews map[string]*PartitionTable
+	// lookup tables
+	views map[string]*View
 
-	pstats *PartitionStats
+	partProcStats *PartitionProcStats
+	tableStats    *TableStats
 
-	msg      *message
+	msg      *sarama.ConsumerMessage
 	done     bool
 	counters struct {
 		emits  int
@@ -147,10 +150,10 @@ func (ctx *cbContext) emit(topic string, key string, value []byte) {
 		ctx.emitDone(err)
 	})
 
-	s := ctx.pstats.Output[topic]
+	s := ctx.partProcStats.Output[topic]
 	s.Count++
 	s.Bytes += len(value)
-	ctx.pstats.Output[topic] = s
+	ctx.partProcStats.Output[topic] = s
 }
 
 func (ctx *cbContext) Delete() {
@@ -161,7 +164,7 @@ func (ctx *cbContext) Delete() {
 
 // Value returns the value of the key in the group table.
 func (ctx *cbContext) Value() interface{} {
-	val, err := ctx.valueForKey(ctx.msg.Key)
+	val, err := ctx.valueForKey(ctx.Key())
 	if err != nil {
 		ctx.Fail(err)
 	}
@@ -170,7 +173,7 @@ func (ctx *cbContext) Value() interface{} {
 
 // SetValue updates the value of the key in the group table.
 func (ctx *cbContext) SetValue(value interface{}) {
-	if err := ctx.setValueForKey(ctx.msg.Key, value); err != nil {
+	if err := ctx.setValueForKey(ctx.Key(), value); err != nil {
 		ctx.Fail(err)
 	}
 }
@@ -181,7 +184,7 @@ func (ctx *cbContext) Timestamp() time.Time {
 }
 
 func (ctx *cbContext) Key() string {
-	return ctx.msg.Key
+	return string(ctx.msg.Key)
 }
 
 func (ctx *cbContext) Topic() Stream {
@@ -235,11 +238,11 @@ func (ctx *cbContext) Lookup(topic Table, key string) interface{} {
 
 // valueForKey returns the value of key in the processor state.
 func (ctx *cbContext) valueForKey(key string) (interface{}, error) {
-	if ctx.storage == nil {
+	if ctx.table == nil {
 		return nil, fmt.Errorf("Cannot access state in stateless processor")
 	}
 
-	data, err := ctx.storage.Get(key)
+	data, err := ctx.table.Get(key)
 	if err != nil {
 		return nil, fmt.Errorf("error reading value: %v", err)
 	} else if data == nil {
@@ -259,7 +262,7 @@ func (ctx *cbContext) deleteKey(key string) error {
 	}
 
 	ctx.counters.stores++
-	if err := ctx.storage.Delete(key); err != nil {
+	if err := ctx.table.Delete(key); err != nil {
 		return fmt.Errorf("error deleting key (%s) from storage: %v", key, err)
 	}
 
@@ -287,7 +290,7 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 	}
 
 	ctx.counters.stores++
-	if err = ctx.storage.Set(key, encodedValue); err != nil {
+	if err = ctx.table.Set(key, encodedValue); err != nil {
 		return fmt.Errorf("error storing value: %v", err)
 	}
 
@@ -297,10 +300,10 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 		ctx.emitDone(err)
 	})
 
-	s := ctx.pstats.Output[table]
+	s := ctx.partProcStats.Output[table]
 	s.Count++
 	s.Bytes += len(encodedValue)
-	ctx.pstats.Output[table] = s
+	ctx.partProcStats.Output[table] = s
 
 	return nil
 }
@@ -327,6 +330,7 @@ func (ctx *cbContext) start() {
 
 // calls ctx.commit once all emits have successfully finished, or fails context
 // if some emit failed.
+// this function must be called from a locked function.
 func (ctx *cbContext) tryCommit(err error) {
 	if err != nil {
 		_ = ctx.errors.Collect(err)
@@ -345,6 +349,11 @@ func (ctx *cbContext) tryCommit(err error) {
 	}
 
 	// no further callback will be called from this context
+	ctx.markDone()
+}
+
+// markdone marks the context as done
+func (ctx *cbContext) markDone() {
 	ctx.wg.Done()
 }
 

@@ -9,7 +9,10 @@ import (
 	"github.com/lovoo/goka/codec"
 )
 
-var c = new(codec.String)
+var (
+	c  = new(codec.String)
+	cb = func(ctx Context, msg interface{}) {}
+)
 
 func TestGroupGraph_Validate(t *testing.T) {
 	g := DefineGroup("group")

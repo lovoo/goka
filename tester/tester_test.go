@@ -14,7 +14,7 @@ import (
 )
 
 // simple consume function that is used in different tests
-func increment(ctx goka.Context, msg interface{}) {
+func increment(ctx goka.Context2, msg interface{}) {
 	value := ctx.Value()
 	var state int64
 	if value != nil {
@@ -24,7 +24,7 @@ func increment(ctx goka.Context, msg interface{}) {
 	ctx.SetValue(state)
 }
 
-func runProcOrFail(proc *goka.Processor) {
+func runProcOrFail(proc *goka.Processor2) {
 	go func() {
 		err := proc.Run(context.Background())
 		panic(fmt.Errorf("Processor run errors: %v", err))
@@ -35,7 +35,7 @@ func Test_SimpleConsume(t *testing.T) {
 	gkt := New(t)
 
 	var receivedMessage string
-	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
+	proc, _ := goka.NewProcessor2([]string{}, goka.DefineGroup("group",
 		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
 			receivedMessage = msg.(string)
 		}),

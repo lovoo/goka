@@ -9,9 +9,6 @@ services:
         ZOO_MY_ID: 1
         ZOO_PORT: 2181
         ZOO_SERVERS: server.1=zoo1:2888:3888
-    volumes:
-      - /tmp/goka-kafka-test/zoo1/data:/data
-      - /tmp/goka-kafka-test/zoo1/datalog:/datalog
   kafka1:
     image: confluentinc/cp-kafka:5.4.0
     hostname: kafka1
@@ -24,8 +21,6 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: "zoo1:2181"
       KAFKA_BROKER_ID: 1
       KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
-    volumes:
-      - /tmp/goka-kafka-test/kafka1/data:/var/lib/kafka/data
     depends_on:
       - zoo1
   kafka2:
@@ -40,8 +35,6 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: "zoo1:2181"
       KAFKA_BROKER_ID: 2
       KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
-    volumes:
-      - /tmp/goka-kafka-test/kafka2/data:/var/lib/kafka/data
     depends_on:
       - zoo1
   kafka3:
@@ -56,7 +49,5 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: "zoo1:2181"
       KAFKA_BROKER_ID: 3
       KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
-    volumes:
-      - /tmp/goka-kafka-test/kafka3/data:/var/lib/kafka/data
     depends_on:
       - zoo1

@@ -13,6 +13,12 @@ import (
 	"github.com/lovoo/goka/storage"
 )
 
+const (
+	defaultPartitionChannelSize = 10
+	stallPeriod                 = 30 * time.Second
+	stalledTimeout              = 2 * time.Minute
+)
+
 type PartitionTable struct {
 	log            logger.Logger
 	topic          string

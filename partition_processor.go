@@ -53,7 +53,7 @@ type PartitionProcessor struct {
 	opts *poptions
 }
 
-func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor2, session sarama.ConsumerGroupSession) *PartitionProcessor {
+func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor, session sarama.ConsumerGroupSession) *PartitionProcessor {
 
 	// collect all topics I am responsible for
 	topicMap := make(map[string]bool)
@@ -263,7 +263,7 @@ func (pp *PartitionProcessor) getPartitionStats() *PartitionStats {
 }
 
 func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitGroup, msg *sarama.ConsumerMessage, syncFailer func(err error), asyncFailer func(err error)) error {
-	msgContext := &cbContext2{
+	msgContext := &cbContext{
 		ctx:   ctx,
 		graph: pp.graph,
 

@@ -85,7 +85,6 @@ type poptions struct {
 		storage        storage.Builder
 		consumerSarama kafka.SaramaConsumerBuilder
 		consumerGroup  kafka.ConsumerGroupBuilder
-		consumer       kafka.ConsumerBuilder
 		producer       kafka.ProducerBuilder
 		topicmgr       kafka.TopicManagerBuilder
 	}
@@ -117,13 +116,6 @@ func WithStorageBuilder(sb storage.Builder) ProcessorOption {
 func WithTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.topicmgr = tmb
-	}
-}
-
-// WithConsumerBuilder replaces the default consumer builder.
-func WithConsumerBuilder(cb kafka.ConsumerBuilder) ProcessorOption {
-	return func(o *poptions, gg *GroupGraph) {
-		o.builders.consumer = cb
 	}
 }
 
@@ -203,7 +195,6 @@ func WithNilHandling(nh NilHandling) ProcessorOption {
 // the tester.
 type Tester interface {
 	StorageBuilder() storage.Builder
-	ConsumerBuilder() kafka.ConsumerBuilder
 	ProducerBuilder() kafka.ProducerBuilder
 	EmitterProducerBuilder() kafka.ProducerBuilder
 	TopicManagerBuilder() kafka.TopicManagerBuilder
@@ -217,7 +208,6 @@ type Tester interface {
 func WithTester(t Tester) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.storage = t.StorageBuilder()
-		o.builders.consumer = t.ConsumerBuilder()
 		o.builders.producer = t.ProducerBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
 		o.partitionChannelSize = 0
@@ -237,9 +227,6 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	// StorageBuilder should always be set as a default option in NewProcessor
 	if opt.builders.storage == nil {
 		return fmt.Errorf("StorageBuilder not set")
-	}
-	if opt.builders.consumer == nil {
-		opt.builders.consumer = kafka.DefaultConsumerBuilder
 	}
 	if opt.builders.producer == nil {
 		opt.builders.producer = kafka.DefaultProducerBuilder
@@ -283,7 +270,6 @@ type voptions struct {
 	builders struct {
 		storage        storage.Builder
 		consumerSarama kafka.SaramaConsumerBuilder
-		consumer       kafka.ConsumerBuilder
 		topicmgr       kafka.TopicManagerBuilder
 	}
 }
@@ -311,16 +297,9 @@ func WithViewStorageBuilder(sb storage.Builder) ViewOption {
 	}
 }
 
-// WithViewConsumerBuilder replaces default view consumer.
-func WithViewConsumerBuilder(cb kafka.ConsumerBuilder) ViewOption {
-	return func(o *voptions, table Table, codec Codec) {
-		o.builders.consumer = cb
-	}
-}
-
 // WithViewConsumerSaramaBuilder replaces the default sarama consumer builder
-func WithViewConsumerSaramaBuilder(cgb kafka.SaramaConsumerBuilder) ProcessorOption {
-	return func(o *poptions, gg *GroupGraph) {
+func WithViewConsumerSaramaBuilder(cgb kafka.SaramaConsumerBuilder) ViewOption {
+	return func(o *voptions, table Table, codec Codec) {
 		o.builders.consumerSarama = cgb
 	}
 }
@@ -369,7 +348,6 @@ func WithViewRestartable() ViewOption {
 func WithViewTester(t Tester) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
 		o.builders.storage = t.StorageBuilder()
-		o.builders.consumer = t.ConsumerBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
 		o.partitionChannelSize = 0
 		t.RegisterView(table, codec)
@@ -388,9 +366,6 @@ func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) 
 	// StorageBuilder should always be set as a default option in NewView
 	if opt.builders.storage == nil {
 		return fmt.Errorf("StorageBuilder not set")
-	}
-	if opt.builders.consumer == nil {
-		opt.builders.consumer = kafka.DefaultConsumerBuilder
 	}
 
 	if opt.builders.consumerSarama == nil {

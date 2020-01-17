@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
@@ -28,11 +29,14 @@ func runEmitter() {
 		log.Fatalf("error creating emitter: %v", err)
 	}
 	defer emitter.Finish()
-	err = emitter.EmitSync("some-key", "some-value")
-	if err != nil {
-		log.Fatalf("error emitting message: %v", err)
+	for i := 0; i < 10; i++ {
+		err = emitter.EmitSync("some-key", fmt.Sprintf("some-value %d", i))
+		if err != nil {
+			log.Fatalf("error emitting message: %v", err)
+		}
+		fmt.Println("message emitted")
+		time.Sleep(time.Second)
 	}
-	fmt.Println("message emitted")
 }
 
 // process messages until ctrl-c is pressed
@@ -64,7 +68,7 @@ func runProcessor() {
 	tmc.Table.Replication = 1
 	tmc.Stream.Replication = 1
 
-	p, err := goka.NewProcessor2(brokers,
+	p, err := goka.NewProcessor(brokers,
 		g,
 		goka.WithTopicManagerBuilder(kafka.TopicManagerBuilderWithConfig(config, tmc)),
 		goka.WithConsumerGroupBuilder(kafka.ConsumerGroupBuilderWithConfig(config)),
@@ -93,6 +97,9 @@ func runProcessor() {
 }
 
 func main() {
-	runEmitter()   // emits one message and stops
+	go func() {
+		time.Sleep(time.Second * 3)
+		runEmitter() // emits one message and stops
+	}()
 	runProcessor() // press ctrl-c to stop
 }

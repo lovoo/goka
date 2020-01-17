@@ -199,14 +199,6 @@ func (km *Tester) TopicManagerBuilder() kafka.TopicManagerBuilder {
 	}
 }
 
-// ConsumerBuilder returns the consumer builder when this tester is used as an option
-// to a processor
-func (km *Tester) ConsumerBuilder() kafka.ConsumerBuilder {
-	return func(b []string, group, clientID string) (kafka.Consumer, error) {
-		return newConsumer(km), nil
-	}
-}
-
 // ProducerBuilder returns the producer builder when this tester is used as an option
 // to a processor
 func (km *Tester) ProducerBuilder() kafka.ProducerBuilder {

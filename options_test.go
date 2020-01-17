@@ -6,7 +6,14 @@ import (
 	"testing"
 
 	"github.com/facebookgo/ensure"
+	"github.com/lovoo/goka/storage"
 )
+
+func nullStorageBuilder() storage.Builder {
+	return func(topic string, partition int32) (storage.Storage, error) {
+		return &storage.Null{}, nil
+	}
+}
 
 func newMockOptions(t *testing.T) *poptions {
 	opts := new(poptions)

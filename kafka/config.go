@@ -1,14 +1,27 @@
 package kafka
 
 import (
+	"time"
+
 	"github.com/Shopify/sarama"
-	cluster "github.com/bsm/sarama-cluster"
 )
 
-// NewConfig creates a (bsm) sarama configuration with default values.
-func NewConfig() *cluster.Config {
-	config := cluster.NewConfig()
-	config.Version = sarama.V0_11_0_1
+const (
+	// size of sarama buffer for consumer and producer
+	defaultChannelBufferSize = 256
+
+	// time sarama-cluster assumes the processing of an event may take
+	defaultMaxProcessingTime = 1 * time.Second
+
+	// producer flush configuration
+	defaultFlushFrequency     = 100 * time.Millisecond
+	defaultFlushBytes         = 64 * 1024
+	defaultProducerMaxRetries = 10
+)
+
+func NewSaramaConfig() *sarama.Config {
+	config := sarama.NewConfig()
+	config.Version = sarama.V2_0_0_0
 
 	// consumer configuration
 	config.Consumer.Return.Errors = true
@@ -25,15 +38,5 @@ func NewConfig() *cluster.Config {
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.Retry.Max = defaultProducerMaxRetries
-
-	// consumer group configuration
-	config.Group.Return.Notifications = true
-
-	return config
-}
-
-func NewSaramaConfig() *sarama.Config {
-	config := sarama.NewConfig()
-	config.Version = sarama.V2_0_0_0
 	return config
 }

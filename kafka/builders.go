@@ -4,44 +4,25 @@ import (
 	"hash"
 
 	"github.com/Shopify/sarama"
-	cluster "github.com/bsm/sarama-cluster"
 )
-
-// ConsumerBuilder creates a Kafka consumer.
-type ConsumerBuilder func(brokers []string, group, clientID string) (Consumer, error)
-
-// DefaultConsumerBuilder creates a Kafka consumer using the Sarama library.
-func DefaultConsumerBuilder(brokers []string, group, clientID string) (Consumer, error) {
-	config := NewConfig()
-	config.ClientID = clientID
-	return NewSaramaConsumer(brokers, group, config)
-}
-
-// ConsumerBuilderWithConfig creates a Kafka consumer using the Sarama library.
-func ConsumerBuilderWithConfig(config *cluster.Config) ConsumerBuilder {
-	return func(brokers []string, group, clientID string) (Consumer, error) {
-		config.ClientID = clientID
-		return NewSaramaConsumer(brokers, group, config)
-	}
-}
 
 // ProducerBuilder create a Kafka producer.
 type ProducerBuilder func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error)
 
 // DefaultProducerBuilder creates a Kafka producer using the Sarama library.
 func DefaultProducerBuilder(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
-	config := NewConfig()
+	config := NewSaramaConfig()
 	config.ClientID = clientID
 	config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
-	return NewProducer(brokers, &config.Config)
+	return NewProducer(brokers, config)
 }
 
 // ProducerBuilderWithConfig creates a Kafka consumer using the Sarama library.
-func ProducerBuilderWithConfig(config *cluster.Config) ProducerBuilder {
+func ProducerBuilderWithConfig(config *sarama.Config) ProducerBuilder {
 	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
 		config.ClientID = clientID
 		config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
-		return NewProducer(brokers, &config.Config)
+		return NewProducer(brokers, config)
 	}
 }
 
