@@ -17,7 +17,6 @@ var (
 	brokers             = []string{"127.0.0.1:9092"}
 	topic   goka.Stream = "user-click"
 	group   goka.Group  = "mini-group"
-	config              = kafka.NewSaramaConfig()
 )
 
 // A user is the object that is stored in the processor's group table
@@ -92,10 +91,10 @@ func runProcessor() {
 	tmc := kafka.NewTopicManagerConfig()
 	tmc.Table.Replication = 1
 	tmc.Stream.Replication = 1
-	p, err := goka.NewProcessor2(brokers,
+	p, err := goka.NewProcessor(brokers,
 		g,
-		goka.WithTopicManagerBuilder(kafka.TopicManagerBuilderWithConfig(config, tmc)),
-		goka.WithConsumerGroupBuilder(kafka.ConsumerGroupBuilderWithConfig(config)),
+		goka.WithTopicManagerBuilder(kafka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
+		goka.WithConsumerGroupBuilder(kafka.DefaultConsumerGroupBuilder),
 	)
 	if err != nil {
 		panic(err)
