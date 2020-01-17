@@ -3,7 +3,6 @@ package goka
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -221,12 +220,10 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		return
 	}
 
-	log.Printf("loading from %d, hwm=%d", loadOffset, hwm)
-
 	// we are exactly where we're supposed to be
 	// AND we're here for catchup, so let's stop here
 	// and do not attempt to load anything
-	if stopAfterCatchup && loadOffset == hwm-1 {
+	if stopAfterCatchup && loadOffset == hwm {
 		return nil
 	}
 

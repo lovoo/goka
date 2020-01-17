@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -402,6 +403,9 @@ func (g *Processor2) Setup(session sarama.ConsumerGroupSession) error {
 // Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
 // but before the offsets are committed for the very last time.
 func (g *Processor2) Cleanup(session sarama.ConsumerGroupSession) error {
+	g.log.Printf("Cleaning up for %d", session.GenerationID())
+	defer g.log.Printf("Cleaning up for %d ... done", session.GenerationID())
+
 	g.state.SetState(ProcStateStopping)
 	defer g.state.SetState(ProcStateIdle)
 	errg, _ := multierr.NewErrGroup(session.Context())
@@ -442,11 +446,15 @@ func (g *Processor2) WaitForReady() {
 // Once the Messages() channel is closed, the Handler must finish its processing
 // loop and exit.
 func (g *Processor2) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	g.log.Printf("ConsumeClaim for topic/partition %s/%d, hwm=%d", claim.Topic(), claim.Partition(), claim.HighWaterMarkOffset())
+	defer g.log.Printf("ConsumeClaim done for topic/partition %s/%d", claim.Topic(), claim.Partition())
 	part, has := g.partitions[claim.Partition()]
 	if !has {
 		return fmt.Errorf("No partition (%d) to handle input in topic %s", claim.Partition(), claim.Topic())
 	}
+
 	for msg := range claim.Messages() {
+		log.Printf("enqueuing message")
 		part.EnqueueMessage(msg)
 	}
 	return nil
