@@ -1,6 +1,10 @@
 package mock
 
-import "github.com/Shopify/sarama"
+import (
+	"fmt"
+
+	"github.com/Shopify/sarama"
+)
 
 // Topic holds all infos about a topic
 type Topic struct {
@@ -86,8 +90,8 @@ func (tm *TopicManager) SetOffset(topicName string, oldest, hwm int64) {
 		}
 		tm.Topics[topicName] = topic
 	}
-	topic.Hwm = hwm
 	topic.OldestOffset = oldest
+	topic.Hwm = hwm
 }
 
 // GetOffset returns the offset closest to the passed time (or exactly time, if the offsets are empty)
@@ -97,13 +101,14 @@ func (tm *TopicManager) GetOffset(topicName string, partitionID int32, time int6
 		return time, nil
 	}
 
-	if topic.OldestOffset != 0 && time == sarama.OffsetOldest {
+	if time == sarama.OffsetOldest {
 		return topic.OldestOffset, nil
 	}
-	if topic.Hwm != 0 && time == sarama.OffsetNewest {
+	if time == sarama.OffsetNewest {
 		return topic.Hwm, nil
 	}
-	return time, nil
+
+	return 0, fmt.Errorf("only oldest and newest are supported in the mock")
 }
 
 // Close has no action on the mock
