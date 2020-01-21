@@ -12,20 +12,24 @@ import (
 	"github.com/lovoo/goka/multierr"
 )
 
+// ConsumerGroupSession mocks the consumer group session used for testing
 type ConsumerGroupSession struct {
-	ctx    context.Context
-	topics []string
-	claims map[string]*ConsumerGroupClaim
+	ctx        context.Context
+	generation int32
+	topics     []string
+	claims     map[string]*ConsumerGroupClaim
 
 	consumerGroup *ConsumerGroup
 }
 
+// ConsumerGroupClaim mocks the claim...
 type ConsumerGroupClaim struct {
 	topic     string
 	partition int32
 	msgs      chan *sarama.ConsumerMessage
 }
 
+// NewConsumerGroupClaim creates a new mock
 func NewConsumerGroupClaim(topic string, partition int32) *ConsumerGroupClaim {
 	return &ConsumerGroupClaim{
 		topic:     topic,
@@ -34,31 +38,42 @@ func NewConsumerGroupClaim(topic string, partition int32) *ConsumerGroupClaim {
 	}
 }
 
+// Topic returns the current topic of the claim
 func (cgc *ConsumerGroupClaim) Topic() string {
 	return cgc.topic
 }
+
+// Partition returns the partition
 func (cgc *ConsumerGroupClaim) Partition() int32 {
 	return cgc.partition
 }
+
+// InitialOffset returns the initial offset
 func (cgc *ConsumerGroupClaim) InitialOffset() int64 {
 	return 0
 }
+
+// HighWaterMarkOffset returns the hwm offset
 func (cgc *ConsumerGroupClaim) HighWaterMarkOffset() int64 {
 	return 0
 }
+
+// Messages returns the message channel that must be
 func (cgc *ConsumerGroupClaim) Messages() <-chan *sarama.ConsumerMessage {
 	return cgc.msgs
 }
 
-func newConsumerGroupSession(ctx context.Context, cg *ConsumerGroup, topics []string) *ConsumerGroupSession {
+func newConsumerGroupSession(ctx context.Context, generation int32, cg *ConsumerGroup, topics []string) *ConsumerGroupSession {
 	return &ConsumerGroupSession{
 		ctx:           ctx,
+		generation:    generation,
 		consumerGroup: cg,
 		topics:        topics,
 		claims:        make(map[string]*ConsumerGroupClaim),
 	}
 }
 
+// Claims returns the number of partitions assigned in the group session for each topic
 func (cgs *ConsumerGroupSession) Claims() map[string][]int32 {
 	claims := make(map[string][]int32)
 	for _, topic := range cgs.topics {
@@ -67,12 +82,13 @@ func (cgs *ConsumerGroupSession) Claims() map[string][]int32 {
 	return claims
 }
 
-func (cgs *ConsumerGroupSession) CreateGroupClaim(topic string, partition int32) *ConsumerGroupClaim {
+func (cgs *ConsumerGroupSession) createGroupClaim(topic string, partition int32) *ConsumerGroupClaim {
 	cgs.claims[topic] = NewConsumerGroupClaim(topic, 0)
 
 	return cgs.claims[topic]
 }
 
+// SendMessage sends a message to the consumer
 func (cgs *ConsumerGroupSession) SendMessage(msg *sarama.ConsumerMessage) {
 
 	for topic, claim := range cgs.claims {
@@ -82,53 +98,57 @@ func (cgs *ConsumerGroupSession) SendMessage(msg *sarama.ConsumerMessage) {
 	}
 }
 
+// MemberID returns the member ID
+// TOOD: clarify what that actually means and whether we need to mock taht somehow
 func (cgs *ConsumerGroupSession) MemberID() string {
-	return "test"
+	panic("MemberID not provided by mock")
 }
+
+// GenerationID returns the generation ID of the group consumer
 func (cgs *ConsumerGroupSession) GenerationID() int32 {
-	return 0
+	return cgs.generation
 }
+
+// MarkOffset marks the passed offset consumed in topic/partition
 func (cgs *ConsumerGroupSession) MarkOffset(topic string, partition int32, offset int64, metadata string) {
 }
+
+// ResetOffset resets the offset to be consumed from
 func (cgs *ConsumerGroupSession) ResetOffset(topic string, partition int32, offset int64, metadata string) {
+	panic("reset offset is not implemented by the mock")
 }
+
+// MarkMessage marks the passed message as consumed
 func (cgs *ConsumerGroupSession) MarkMessage(msg *sarama.ConsumerMessage, metadata string) {
 	cgs.consumerGroup.markMessage(msg)
 }
 
+// Context returns the consumer group's context
 func (cgs *ConsumerGroupSession) Context() context.Context {
 	return cgs.ctx
 }
 
+// ConsumerGroup mocks the consumergroup
 type ConsumerGroup struct {
 	errs chan error
 
 	// use the same offset counter for all topics
-	offset int64
+	offset            int64
+	currentGeneration int32
+
 	// messages we sent to the consumergroup and need to wait for
 	mMessages  sync.Mutex
 	messages   map[int64]int64
 	wgMessages sync.WaitGroup
 
-	// state *Signal
-
 	sessions map[string]*ConsumerGroupSession
 }
 
-//
-// const (
-// 	Stopped State = iota
-// 	Consuming
-// )
-
+// NewConsumerGroup creates a new consumer group
 func NewConsumerGroup(t *testing.T) *ConsumerGroup {
 	return &ConsumerGroup{
 		errs:     make(chan error, 1),
 		sessions: make(map[string]*ConsumerGroupSession),
-
-		// state: NewSignal(Stopped, Consuming).SetState(Stopped),
-
-		// TODO: check if we can remove that field
 		messages: make(map[int64]int64),
 	}
 }
@@ -156,46 +176,63 @@ func (cg *ConsumerGroup) markMessage(msg *sarama.ConsumerMessage) {
 	cg.wgMessages.Done()
 }
 
+// Consume starts consuming from the consumergroup
 func (cg *ConsumerGroup) Consume(ctx context.Context, topics []string, handler sarama.ConsumerGroupHandler) error {
-	// cg.state.SetState(Consuming)
-	// defer cg.state.SetState(Stopped)
-	session := newConsumerGroupSession(ctx, cg, topics)
+
 	key := cg.topicKey(topics)
-	cg.sessions[key] = session
+	for {
+		cg.currentGeneration++
+		session := newConsumerGroupSession(ctx, cg.currentGeneration, cg, topics)
 
-	err := handler.Setup(session)
-	if err != nil {
-		return fmt.Errorf("Error setting up: %v", err)
-	}
-	errg, _ := multierr.NewErrGroup(ctx)
-	for _, topic := range topics {
-		claim := session.CreateGroupClaim(topic, 0)
-		errg.Go(func() error {
-			<-ctx.Done()
-			close(claim.msgs)
+		cg.sessions[key] = session
+
+		err := handler.Setup(session)
+		if err != nil {
+			return fmt.Errorf("Error setting up: %v", err)
+		}
+		errg, _ := multierr.NewErrGroup(ctx)
+		for _, topic := range topics {
+			claim := session.createGroupClaim(topic, 0)
+			errg.Go(func() error {
+				<-ctx.Done()
+				close(claim.msgs)
+				return nil
+			})
+			errg.Go(func() error {
+				err := handler.ConsumeClaim(session, claim)
+				return err
+			})
+		}
+
+		errs := new(multierr.Errors)
+
+		// wait for runner errors and collect error
+		errs.Collect(errg.Wait().NilOrError())
+
+		// cleanup and collect errors
+		errs.Collect(handler.Cleanup(session))
+
+		// remove current sessions
+		delete(cg.sessions, key)
+
+		err = errs.NilOrError()
+		if err != nil {
+			return fmt.Errorf("Error running or cleaning: %v", err)
+		}
+
+		select {
+		// if the session was terminated because of a cancelled context,
+		// stop the loop
+		case <-ctx.Done():
 			return nil
-		})
-		errg.Go(func() error {
-			err := handler.ConsumeClaim(session, claim)
-			return err
-		})
+
+			// otherwise just continue with the next generation
+		default:
+		}
 	}
-
-	errs := new(multierr.Errors)
-
-	// wait for runner errors and collect error
-	errs.Collect(errg.Wait().NilOrError())
-
-	// cleanup and collect errors
-	errs.Collect(handler.Cleanup(session))
-
-	// remove current sessions
-	delete(cg.sessions, key)
-
-	// return collected errors
-	return errs.NilOrError()
 }
 
+// SendError sends an error the consumergroup
 func (cg *ConsumerGroup) SendError(err error) {
 	cg.errs <- err
 }
@@ -232,9 +269,12 @@ func (cg *ConsumerGroup) SendMessageWait(message *sarama.ConsumerMessage) {
 	<-cg.SendMessage(message)
 }
 
+// Errors returns the errors channel
 func (cg *ConsumerGroup) Errors() <-chan error {
 	return cg.errs
 }
+
+// Close closes the consumergroup
 func (cg *ConsumerGroup) Close() error {
 	return nil
 }
