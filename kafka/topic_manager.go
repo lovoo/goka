@@ -45,6 +45,10 @@ func NewSaramaTopicManager(brokers []string, saramaConfig *sarama.Config, topicM
 		return nil, fmt.Errorf("Error creating the kafka client: %v", err)
 	}
 
+	if topicManagerConfig == nil {
+		return nil, fmt.Errorf("Cannot create topic manager with nil config")
+	}
+
 	activeBrokers := client.Brokers()
 	if len(activeBrokers) == 0 {
 		return nil, fmt.Errorf("No brokers active in current client")

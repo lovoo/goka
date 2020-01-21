@@ -17,7 +17,17 @@ var (
 	brokers             = []string{"localhost:9092"}
 	topic   goka.Stream = "example-stream"
 	group   goka.Group  = "example-group"
+
+	tmc *kafka.TopicManagerConfig
 )
+
+func init() {
+	// This sets the default replication to 1. If you have more then one broker
+	// the default configuration can be used.
+	tmc = kafka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+}
 
 // emits a single message and leave
 func runEmitter() {
@@ -58,12 +68,6 @@ func runProcessor() {
 		goka.Persist(new(codec.Int64)),
 	)
 
-	// This sets the default replication to 1. If you have more then one broker
-	// the default configuration can be used.
-	tmc := kafka.NewTopicManagerConfig()
-	tmc.Table.Replication = 1
-	tmc.Stream.Replication = 1
-
 	p, err := goka.NewProcessor(brokers,
 		g,
 		goka.WithTopicManagerBuilder(kafka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
@@ -98,6 +102,15 @@ func main() {
 	config := kafka.DefaultConfig()
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	kafka.ReplaceGlobalConfig(config)
+
+	tm, err := kafka.NewSaramaTopicManager(brokers, kafka.DefaultConfig(), tmc)
+	if err != nil {
+		log.Fatalf("Error creating topic manager: %v", err)
+	}
+	err = tm.EnsureStreamExists(string(topic), 8)
+	if err != nil {
+		log.Printf("Error creating kafka topic %s: %v", topic, err)
+	}
 
 	runEmitter()   // emits one message and stops
 	runProcessor() // press ctrl-c to stop
