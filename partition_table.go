@@ -45,6 +45,7 @@ func newPartitionTable(topic string,
 	builder storage.Builder,
 	log logger.Logger) *PartitionTable {
 	return &PartitionTable{
+		partition:      partition,
 		state:          NewSignal(State(PartitionRecovering), State(PartitionPreparing), State(PartitionRunning)),
 		stats:          newTableStats(),
 		consumer:       consumer,
@@ -57,7 +58,7 @@ func newPartitionTable(topic string,
 }
 
 func (p *PartitionTable) SetupAndCatchup(ctx context.Context) error {
-	err := p.Setup(ctx)
+	err := p.setup(ctx)
 	if err != nil {
 		return err
 	}
@@ -65,7 +66,7 @@ func (p *PartitionTable) SetupAndCatchup(ctx context.Context) error {
 }
 
 func (p *PartitionTable) SetupAndCatchupForever(ctx context.Context, restartOnError bool) (chan struct{}, chan error, error) {
-	err := p.Setup(ctx)
+	err := p.setup(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -95,8 +96,7 @@ func (p *PartitionTable) SetupAndCatchupForever(ctx context.Context, restartOnEr
 }
 
 // Setup creates the storage for the partition table
-func (p *PartitionTable) Setup(ctx context.Context) error {
-
+func (p *PartitionTable) setup(ctx context.Context) error {
 	storage, err := p.createStorage(ctx)
 	if err != nil {
 		return fmt.Errorf("error setting up partition table: %v", err)
@@ -105,6 +105,14 @@ func (p *PartitionTable) Setup(ctx context.Context) error {
 	p.st = storage
 	return nil
 }
+
+func (p *PartitionTable) Close() error {
+	if p.st != nil {
+		return p.st.Close()
+	}
+	return nil
+}
+
 func (p *PartitionTable) createStorage(ctx context.Context) (*storageProxy, error) {
 	var (
 		err  error
@@ -125,9 +133,9 @@ WaitLoop:
 		case <-ctx.Done():
 			return nil, nil
 		case <-ticker.C:
-			p.log.Printf("creating storage for topic %s for %.1f minutes ...", p.topic, time.Since(start).Minutes())
+			p.log.Printf("creating storage for topic %s/%d for %.1f minutes ...", p.topic, p.partition, time.Since(start).Minutes())
 		case <-done:
-			p.log.Printf("finished building storage for topic %s", p.topic)
+			p.log.Printf("finished building storage for topic %s/%d", p.topic, p.partition)
 			if err != nil {
 				return nil, fmt.Errorf("error building storage: %v", err)
 			}
@@ -171,6 +179,8 @@ func (p *PartitionTable) findOffsetToLoad(localOffset int64) (int64, int64, erro
 		return 0, 0, fmt.Errorf("Error getting newest offset for topic/partition %s/%d: %v", p.topic, p.partition, err)
 	}
 
+	p.log.Printf("topic manager gives us oldest: %d, hwm: %d", oldest, hwm)
+
 	start := localOffset
 
 	if localOffset == sarama.OffsetOldest {
@@ -196,9 +206,6 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		err          error
 		errs         = new(multierr.Errors)
 	)
-
-	p.log.Printf("Loading ...")
-	defer p.log.Printf("... Loading done")
 
 	// deferred error handling
 	defer func() {
@@ -232,6 +239,9 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	if stopAfterCatchup && loadOffset == hwm {
 		return nil
 	}
+
+	p.log.Printf("Loading partition table from %d (hwm=%d)", loadOffset, hwm)
+	defer p.log.Printf("... Loading done")
 
 	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, loadOffset)
 	if err != nil {

@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka"
@@ -28,14 +26,11 @@ func runEmitter() {
 		log.Fatalf("error creating emitter: %v", err)
 	}
 	defer emitter.Finish()
-	for i := 0; i < 10; i++ {
-		err = emitter.EmitSync("some-key", fmt.Sprintf("some-value %d", i))
-		if err != nil {
-			log.Fatalf("error emitting message: %v", err)
-		}
-		log.Println("message emitted")
-		time.Sleep(time.Second)
+	err = emitter.EmitSync("some-key", "some-value")
+	if err != nil {
+		log.Fatalf("error emitting message: %v", err)
 	}
+	log.Println("message emitted")
 }
 
 // process messages until ctrl-c is pressed
@@ -91,7 +86,10 @@ func runProcessor() {
 		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 	}()
 
-	<-sigs
+	select {
+	case <-sigs:
+	case <-done:
+	}
 	cancel()
 	<-done
 }

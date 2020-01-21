@@ -3,7 +3,6 @@ module github.com/lovoo/goka
 go 1.13
 
 require (
-	github.com/DataDog/zstd v1.4.4 // indirect
 	github.com/Shopify/sarama v1.25.0
 	github.com/confluentinc/confluent-kafka-go v1.3.0
 	github.com/eapache/go-resiliency v1.2.0 // indirect

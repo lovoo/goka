@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -51,7 +50,6 @@ type Processor struct {
 
 	state *Signal
 
-	errors *multierr.Errors
 	cancel func()
 	ctx    context.Context
 }
@@ -236,7 +234,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	go func() {
 		for err := range consumerGroup.Errors() {
 			g.log.Printf("Error executing group consumer: %v", err)
-			g.errors.Collect(err)
+			errors.Collect(err)
 			// TODO decide here whether we need to stop the processor or if the dispatcher takes care of
 			// recreating/rebalancing.
 		}
@@ -383,9 +381,9 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 
 	// no partitions configured, we cannot setup anything
 	if len(partitions) == 0 {
-		return errs.Collect(fmt.Errorf("No partitions assigned. Claims were: %#v", session.Claims())).NilOrError()
+		g.log.Printf("No partitions assigned. Claims were: %#v. Will probably sleep this generation", session.Claims())
+		return nil
 	}
-
 	// create partition views for all partitions
 	for _, partition := range partitions {
 		// create partition processor for our partition
@@ -395,8 +393,9 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	// setup all processors
 	errg, _ := multierr.NewErrGroup(session.Context())
 	for _, partition := range g.partitions {
+		pproc := partition
 		errg.Go(func() error {
-			return partition.Setup(session.Context())
+			return pproc.Setup(session.Context())
 		})
 	}
 
@@ -413,11 +412,12 @@ func (g *Processor) Cleanup(session sarama.ConsumerGroupSession) error {
 	g.state.SetState(ProcStateStopping)
 	defer g.state.SetState(ProcStateIdle)
 	errg, _ := multierr.NewErrGroup(session.Context())
-	for part, pproc := range g.partitions {
+	for part, partition := range g.partitions {
+		partID, pproc := part, partition
 		errg.Go(func() error {
 			err := pproc.Stop()
 			if err != nil {
-				return fmt.Errorf("error stopping partition processor %d: %v", part, err)
+				return fmt.Errorf("error stopping partition processor %d: %v", partID, err)
 			}
 			return nil
 		})
@@ -450,7 +450,7 @@ func (g *Processor) WaitForReady() {
 // Once the Messages() channel is closed, the Handler must finish its processing
 // loop and exit.
 func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	g.log.Printf("ConsumeClaim for topic/partition %s/%d, hwm=%d, initialOffset=%d", claim.Topic(), claim.Partition(), claim.HighWaterMarkOffset(), claim.InitialOffset())
+	g.log.Printf("ConsumeClaim for topic/partition %s/%d, initialOffset=%d", claim.Topic(), claim.Partition(), claim.InitialOffset())
 	defer g.log.Printf("ConsumeClaim done for topic/partition %s/%d", claim.Topic(), claim.Partition())
 	part, has := g.partitions[claim.Partition()]
 	if !has {
@@ -458,7 +458,6 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 	}
 
 	for msg := range claim.Messages() {
-		log.Printf("enqueuing message")
 		part.EnqueueMessage(msg)
 	}
 	return nil
@@ -466,6 +465,7 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 
 // creates the partition that is responsible for the group processor's table
 func (g *Processor) createPartitionProcessor(ctx context.Context, partition int32, session sarama.ConsumerGroupSession) error {
+
 	g.log.Printf("Creating partition processor for partition %d", partition)
 	if _, has := g.partitions[partition]; has {
 		return fmt.Errorf("processor [%s]: partition %d already exists", g.graph.Group(), partition)

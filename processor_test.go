@@ -94,13 +94,14 @@ func TestProcessor_Run(t *testing.T) {
 		done    = make(chan struct{})
 	)
 
-	tm.SetOffset("test-table", sarama.OffsetOldest, 0)
-	cons.ExpectConsumePartition("test-table", 0, sarama.OffsetOldest)
+	tm.SetOffset("test-table", 0, 0)
+	cons.ExpectConsumePartition("test-table", 0, 0)
 
 	go func() {
 		defer close(done)
 		procErr = newProc.Run(ctx)
 	}()
+
 	newProc.WaitForReady()
 
 	// if there was an error during startup, no point in sending messages

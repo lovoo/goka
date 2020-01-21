@@ -3,7 +3,6 @@ package goka
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -73,8 +72,10 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor, 
 		callbacks[t] = graph.callback(t)
 	}
 
+	log := proc.log.Prefix(fmt.Sprintf("PartitionProcessor (%d)", partition))
+
 	partProc := &PartitionProcessor{
-		log:           proc.log.Prefix(fmt.Sprintf("PartitionProcessor (%d)", partition)),
+		log:           log,
 		opts:          proc.opts,
 		partition:     partition,
 		state:         NewSignal(PPStateIdle, PPStateRecovering, PPStateRunning, PPStateStopping).SetState(PPStateIdle),
@@ -100,7 +101,8 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor, 
 			proc.tmgr,
 			proc.opts.updateCallback,
 			proc.opts.builders.storage,
-			proc.opts.log)
+			log.Prefix("PartTable"),
+		)
 	}
 	return partProc
 }
@@ -121,8 +123,8 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 
 	if pp.table != nil {
 		setupErrg.Go(func() error {
-			log.Printf("catching up table")
-			defer log.Printf("catching up table dnoe")
+			pp.log.Printf("catching up table")
+			defer pp.log.Printf("catching up table done")
 			return pp.table.SetupAndCatchup(setupCtx)
 		})
 	}
@@ -175,12 +177,23 @@ func (pp *PartitionProcessor) startJoinTable(ctx context.Context, table *Partiti
 }
 
 func (pp *PartitionProcessor) Stop() error {
-	pp.log.Printf("stop called")
+	pp.log.Printf("Stopping")
+	defer pp.log.Printf("... Stopping done")
 	pp.state.SetState(PPStateStopping)
 	defer pp.state.SetState(PPStateIdle)
+	errs := new(multierr.Errors)
 
-	pp.cancelRunnerGroup()
-	return pp.runnerGroup.Wait().NilOrError()
+	if pp.cancelRunnerGroup != nil {
+		pp.cancelRunnerGroup()
+	}
+	if pp.runnerGroup != nil {
+		errs.Collect(pp.runnerGroup.Wait().NilOrError())
+	}
+	if pp.table != nil {
+		errs.Collect(pp.table.Close())
+	}
+
+	return errs.NilOrError()
 }
 
 func (pp *PartitionProcessor) run(ctx context.Context) error {
