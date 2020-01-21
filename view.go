@@ -147,6 +147,7 @@ func (v *View) Run(ctx context.Context) error {
 	}()
 
 	for _, partition := range v.partitions {
+		partition := partition
 		errg.Go(func() error {
 			catchupChan, errChan, err := partition.SetupAndCatchupForever(ctx, v.opts.restartable)
 			if err != nil {
