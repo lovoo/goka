@@ -2,7 +2,10 @@ package goka
 
 import (
 	"context"
+	"fmt"
 	"hash"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/Shopify/sarama"
@@ -56,20 +59,20 @@ func createMockProducer(t *testing.T) (kafka.ProducerBuilder, *mock.Producer) {
 	}, pb
 }
 
+// accumulate is a callback that increments the
+// table value by the incoming message.
+// Persist and incoming codecs must be codec.Int64
+func accumulate(ctx Context, msg interface{}) {
+	inc := msg.(int64)
+	val := ctx.Value()
+	if val == nil {
+		ctx.SetValue(inc)
+	} else {
+		ctx.SetValue(val.(int64) + inc)
+	}
+}
+
 func TestProcessor_Run(t *testing.T) {
-	var consumedMessage string
-	graph := DefineGroup("test",
-		Input("input", new(codec.String), func(ctx Context, msg interface{}) {
-			consumedMessage = msg.(string)
-			val := ctx.Value()
-			if val == nil {
-				ctx.SetValue(int64(1))
-			} else {
-				ctx.SetValue(val.(int64) + 1)
-			}
-		}),
-		Persist(new(codec.Int64)),
-	)
 
 	groupBuilder, cg := createTestConsumerGroupBuilder(t)
 	consBuilder, cons := createTestConsumerBuilder(t)
@@ -79,51 +82,194 @@ func TestProcessor_Run(t *testing.T) {
 	_ = cons
 	_ = tm
 	_ = prod
-	ctx, cancel := context.WithCancel(context.Background())
 
-	newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
-		WithConsumerGroupBuilder(groupBuilder),
-		WithConsumerSaramaBuilder(consBuilder),
-		WithProducerBuilder(prodBuilder),
-		WithStorageBuilder(storage.MemoryBuilder()),
-		WithTopicManagerBuilder(tmBuilder),
-	)
-	ensure.Nil(t, err)
-	var (
-		procErr error
-		done    = make(chan struct{})
-	)
+	t.Run("input-persist", func(t *testing.T) {
 
-	tm.SetOffset("test-table", 0, 0)
-	cons.ExpectConsumePartition("test-table", 0, 0)
+		graph := DefineGroup("test",
+			Input("input", new(codec.Int64), accumulate),
+			Persist(new(codec.Int64)),
+		)
 
-	go func() {
-		defer close(done)
-		procErr = newProc.Run(ctx)
-	}()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	newProc.WaitForReady()
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			WithConsumerGroupBuilder(groupBuilder),
+			WithConsumerSaramaBuilder(consBuilder),
+			WithProducerBuilder(prodBuilder),
+			WithStorageBuilder(storage.MemoryBuilder()),
+			WithTopicManagerBuilder(tmBuilder),
+		)
+		ensure.Nil(t, err)
+		var (
+			procErr error
+			done    = make(chan struct{})
+		)
 
-	// if there was an error during startup, no point in sending messages
-	// and waiting for them to be delivered
-	ensure.Nil(t, procErr)
+		cons.ExpectConsumePartition("test-table", 0, 0)
 
-	cg.SendMessageWait(&sarama.ConsumerMessage{Topic: "input",
-		Value: []byte("testmessage"),
-		Key:   []byte("testkey"),
+		go func() {
+			defer close(done)
+			procErr = newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+
+		// if there was an error during startup, no point in sending messages
+		// and waiting for them to be delivered
+		ensure.Nil(t, procErr)
+
+		cg.SendMessageWait(&sarama.ConsumerMessage{Topic: "input",
+			Value: []byte(strconv.FormatInt(3, 10)),
+			Key:   []byte("testkey"),
+		})
+
+		val, err := newProc.Get("testkey")
+		ensure.Nil(t, err)
+		ensure.DeepEqual(t, val.(int64), int64(3))
+
+		// shutdown
+		newProc.Stop()
+		<-done
+		ensure.Nil(t, procErr)
 	})
 
-	if consumedMessage != "testmessage" {
-		t.Errorf("did not receive message")
-	}
+	t.Run("loopback", func(t *testing.T) {
+		prod.Clear()
 
-	val, err := newProc.Get("testkey")
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, val.(int64), int64(1))
+		graph := DefineGroup("test",
+			// input passes to loopback
+			Input("input", new(codec.Int64), func(ctx Context, msg interface{}) {
+				ctx.Loopback(ctx.Key(), msg)
+			}),
+			// this will not be called in the test but we define it, otherwise the context will raise an error
+			Loop(new(codec.Int64), accumulate),
+			Persist(new(codec.Int64)),
+		)
 
-	// shutdown
-	cancel()
-	<-done
-	ensure.Nil(t, procErr)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			WithConsumerGroupBuilder(groupBuilder),
+			WithConsumerSaramaBuilder(consBuilder),
+			WithProducerBuilder(prodBuilder),
+			WithStorageBuilder(storage.MemoryBuilder()),
+			WithTopicManagerBuilder(tmBuilder),
+		)
+		ensure.Nil(t, err)
+		var (
+			procErr error
+			done    = make(chan struct{})
+		)
+
+		cons.ExpectConsumePartition("test-table", 0, 0)
+
+		go func() {
+			defer close(done)
+			procErr = newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+
+		// if there was an error during startup, no point in sending messages
+		// and waiting for them to be delivered
+		ensure.Nil(t, procErr)
+		cg.SendMessageWait(&sarama.ConsumerMessage{Topic: "input",
+			Key:   []byte("testkey"),
+			Value: []byte(strconv.FormatInt(23, 10)),
+		})
+
+		msgs := prod.MessagesForTopic("test-loop")
+		ensure.DeepEqual(t, len(msgs), 1)
+		parsedValue, err := strconv.ParseInt(string(msgs[0].Value), 10, 64)
+		ensure.Nil(t, err)
+		ensure.DeepEqual(t, parsedValue, int64(23))
+
+		// shutdown
+		newProc.Stop()
+		<-done
+		ensure.Nil(t, procErr)
+	})
+	t.Run("consume-error", func(t *testing.T) {
+		prod.Clear()
+
+		graph := DefineGroup("test",
+			// not really used, we're failing anyway
+			Input("input", new(codec.Int64), accumulate),
+		)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			WithConsumerGroupBuilder(groupBuilder),
+			WithConsumerSaramaBuilder(consBuilder),
+			WithProducerBuilder(prodBuilder),
+			WithStorageBuilder(storage.MemoryBuilder()),
+			WithTopicManagerBuilder(tmBuilder),
+		)
+		ensure.Nil(t, err)
+		var (
+			procErr error
+			done    = make(chan struct{})
+		)
+
+		go func() {
+			defer close(done)
+			procErr = newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+
+		// if there was an error during startup, no point in sending messages
+		// and waiting for them to be delivered
+		ensure.Nil(t, procErr)
+		cg.SendError(fmt.Errorf("test-error"))
+		cancel()
+		<-done
+		// the errors sent back by the consumergroup do not lead to a failure of the processor
+		ensure.Nil(t, procErr)
+
+	})
+
+	t.Run("consgroup-error", func(t *testing.T) {
+		prod.Clear()
+
+		graph := DefineGroup("test",
+			// not really used, we're failing anyway
+			Input("input", new(codec.Int64), accumulate),
+		)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			WithConsumerGroupBuilder(groupBuilder),
+			WithConsumerSaramaBuilder(consBuilder),
+			WithProducerBuilder(prodBuilder),
+			WithStorageBuilder(storage.MemoryBuilder()),
+			WithTopicManagerBuilder(tmBuilder),
+		)
+		ensure.Nil(t, err)
+		var (
+			procErr error
+			done    = make(chan struct{})
+		)
+
+		cg.FailOnConsume(fmt.Errorf("consume-error"))
+
+		go func() {
+			defer close(done)
+			procErr = newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+
+		// if there was an error during startup, no point in sending messages
+		// and waiting for them to be delivered
+		<-done
+		// the errors sent back by the consumergroup do not lead to a failure of the processor
+		ensure.True(t, strings.Contains(procErr.Error(), "consume-error"))
+	})
 }

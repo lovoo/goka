@@ -293,6 +293,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 				}
 			})
 		},
+		table: pp.table,
 	}
 	msgContext.commit = func() {
 		// write group table offset to local storage
@@ -307,8 +308,6 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 		// mark upstream offset
 		pp.session.MarkMessage(msg, "")
 	}
-
-	msgContext.table = pp.table
 
 	var (
 		m   interface{}

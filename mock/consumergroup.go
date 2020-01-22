@@ -132,6 +132,9 @@ func (cgs *ConsumerGroupSession) Context() context.Context {
 type ConsumerGroup struct {
 	errs chan error
 
+	// setting this makes the consume call fail with this error for testing
+	failOnConsume error
+
 	// use the same offset counter for all topics
 	offset            int64
 	currentGeneration int32
@@ -151,6 +154,10 @@ func NewConsumerGroup(t *testing.T) *ConsumerGroup {
 		sessions: make(map[string]*ConsumerGroupSession),
 		messages: make(map[int64]int64),
 	}
+}
+
+func (cg *ConsumerGroup) FailOnConsume(err error) {
+	cg.failOnConsume = err
 }
 
 func (cg *ConsumerGroup) nextOffset() int64 {
@@ -178,6 +185,9 @@ func (cg *ConsumerGroup) markMessage(msg *sarama.ConsumerMessage) {
 
 // Consume starts consuming from the consumergroup
 func (cg *ConsumerGroup) Consume(ctx context.Context, topics []string, handler sarama.ConsumerGroupHandler) error {
+	if cg.failOnConsume != nil {
+		return cg.failOnConsume
+	}
 
 	key := cg.topicKey(topics)
 	for {
@@ -276,5 +286,15 @@ func (cg *ConsumerGroup) Errors() <-chan error {
 
 // Close closes the consumergroup
 func (cg *ConsumerGroup) Close() error {
+	cg.messages = make(map[int64]int64)
+
+	// close old errs chan and create new one
+	close(cg.errs)
+	cg.errs = make(chan error)
+
+	cg.offset = 0
+	cg.currentGeneration = 0
+	cg.sessions = make(map[string]*ConsumerGroupSession)
+	cg.failOnConsume = nil
 	return nil
 }
