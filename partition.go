@@ -57,6 +57,8 @@ type partition struct {
 	lastStats     *PartitionStats
 	requestStats  chan bool
 	responseStats chan *PartitionStats
+
+	droppedEvents []kafka.Event
 }
 
 type kafkaProxy interface {
@@ -96,6 +98,9 @@ func (p *partition) reinit(proxy kafkaProxy) {
 func (p *partition) start(ctx context.Context) error {
 	defer p.proxy.Stop()
 	p.stats.Table.StartTime = time.Now()
+
+	// init events
+	p.droppedEvents = make([]kafka.Event, 0)
 
 	if p.st.Stateless() {
 		if err := p.markRecovered(false); err != nil {
@@ -155,6 +160,15 @@ func (p *partition) run(ctx context.Context) error {
 			log.Printf("partition shutdown timed out. Will stop waiting.")
 		}
 	}()
+
+	// recover the dropped events
+	for _, ev := range p.droppedEvents {
+		select {
+		case p.ch <- ev:
+		case <-ctx.Done():
+			return nil
+		}
+	}
 
 	for {
 		select {
@@ -289,6 +303,8 @@ func (p *partition) load(ctx context.Context, catchup bool) (rerr error) {
 				lastMessage = time.Now()
 				if ev.Topic != p.topic {
 					p.log.Printf("dropping message from topic = %s while loading", ev.Topic)
+					// saving the dropped messages from input stream
+					p.droppedEvents = append(p.droppedEvents, ev)
 					continue
 				}
 				if err := p.storeEvent(ev); err != nil {
