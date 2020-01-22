@@ -6,7 +6,6 @@ import (
 	"hash/fnv"
 	"path/filepath"
 
-	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 )
@@ -16,7 +15,7 @@ import (
 type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte) error
 
 // RebalanceCallback is invoked when the processor receives a new partition assignment.
-type RebalanceCallback func(a kafka.Assignment)
+type RebalanceCallback func(a Assignment)
 
 ///////////////////////////////////////////////////////////////////////////////
 // default values
@@ -53,7 +52,7 @@ func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte)
 
 // DefaultRebalance is the default callback when a new partition assignment is received.
 // DefaultRebalance can be used in the function passed to WithRebalanceCallback.
-func DefaultRebalance(a kafka.Assignment) {}
+func DefaultRebalance(a Assignment) {}
 
 // DefaultHasher returns an FNV hasher builder to assign keys to partitions.
 func DefaultHasher() func() hash.Hash32 {
@@ -83,10 +82,10 @@ type poptions struct {
 
 	builders struct {
 		storage        storage.Builder
-		consumerSarama kafka.SaramaConsumerBuilder
-		consumerGroup  kafka.ConsumerGroupBuilder
-		producer       kafka.ProducerBuilder
-		topicmgr       kafka.TopicManagerBuilder
+		consumerSarama SaramaConsumerBuilder
+		consumerGroup  ConsumerGroupBuilder
+		producer       ProducerBuilder
+		topicmgr       TopicManagerBuilder
 	}
 }
 
@@ -113,28 +112,28 @@ func WithStorageBuilder(sb storage.Builder) ProcessorOption {
 }
 
 // WithTopicManagerBuilder replaces the default topic manager builder.
-func WithTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ProcessorOption {
+func WithTopicManagerBuilder(tmb TopicManagerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.topicmgr = tmb
 	}
 }
 
 // WithConsumerGroupBuilder replaces the default consumer group builder
-func WithConsumerGroupBuilder(cgb kafka.ConsumerGroupBuilder) ProcessorOption {
+func WithConsumerGroupBuilder(cgb ConsumerGroupBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.consumerGroup = cgb
 	}
 }
 
 // WithConsumerSaramaBuilder replaces the default consumer group builder
-func WithConsumerSaramaBuilder(cgb kafka.SaramaConsumerBuilder) ProcessorOption {
+func WithConsumerSaramaBuilder(cgb SaramaConsumerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.consumerSarama = cgb
 	}
 }
 
 // WithProducerBuilder replaces the default producer builder.
-func WithProducerBuilder(pb kafka.ProducerBuilder) ProcessorOption {
+func WithProducerBuilder(pb ProducerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.producer = pb
 	}
@@ -195,9 +194,9 @@ func WithNilHandling(nh NilHandling) ProcessorOption {
 // the tester.
 type Tester interface {
 	StorageBuilder() storage.Builder
-	ProducerBuilder() kafka.ProducerBuilder
-	EmitterProducerBuilder() kafka.ProducerBuilder
-	TopicManagerBuilder() kafka.TopicManagerBuilder
+	ProducerBuilder() ProducerBuilder
+	EmitterProducerBuilder() ProducerBuilder
+	TopicManagerBuilder() TopicManagerBuilder
 	RegisterGroupGraph(*GroupGraph) string
 	RegisterEmitter(Stream, Codec)
 	RegisterView(Table, Codec)
@@ -229,16 +228,16 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 		return fmt.Errorf("StorageBuilder not set")
 	}
 	if opt.builders.producer == nil {
-		opt.builders.producer = kafka.DefaultProducerBuilder
+		opt.builders.producer = DefaultProducerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
+		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
 	if opt.builders.consumerGroup == nil {
-		opt.builders.consumerGroup = kafka.DefaultConsumerGroupBuilder
+		opt.builders.consumerGroup = DefaultConsumerGroupBuilder
 	}
 	if opt.builders.consumerSarama == nil {
-		opt.builders.consumerSarama = kafka.DefaultSaramaConsumerBuilder
+		opt.builders.consumerSarama = DefaultSaramaConsumerBuilder
 	}
 	return nil
 }
@@ -269,8 +268,8 @@ type voptions struct {
 
 	builders struct {
 		storage        storage.Builder
-		consumerSarama kafka.SaramaConsumerBuilder
-		topicmgr       kafka.TopicManagerBuilder
+		consumerSarama SaramaConsumerBuilder
+		topicmgr       TopicManagerBuilder
 	}
 }
 
@@ -298,14 +297,14 @@ func WithViewStorageBuilder(sb storage.Builder) ViewOption {
 }
 
 // WithViewConsumerSaramaBuilder replaces the default sarama consumer builder
-func WithViewConsumerSaramaBuilder(cgb kafka.SaramaConsumerBuilder) ViewOption {
+func WithViewConsumerSaramaBuilder(cgb SaramaConsumerBuilder) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
 		o.builders.consumerSarama = cgb
 	}
 }
 
 // WithViewTopicManagerBuilder replaces the default topic manager.
-func WithViewTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ViewOption {
+func WithViewTopicManagerBuilder(tmb TopicManagerBuilder) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
 		o.builders.topicmgr = tmb
 	}
@@ -369,11 +368,11 @@ func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) 
 	}
 
 	if opt.builders.consumerSarama == nil {
-		opt.builders.consumerSarama = kafka.DefaultSaramaConsumerBuilder
+		opt.builders.consumerSarama = DefaultSaramaConsumerBuilder
 	}
 
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
+		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
 
 	return nil
@@ -395,8 +394,8 @@ type eoptions struct {
 	hasher func() hash.Hash32
 
 	builders struct {
-		topicmgr kafka.TopicManagerBuilder
-		producer kafka.ProducerBuilder
+		topicmgr TopicManagerBuilder
+		producer ProducerBuilder
 	}
 }
 
@@ -416,14 +415,14 @@ func WithEmitterClientID(clientID string) EmitterOption {
 }
 
 // WithEmitterTopicManagerBuilder replaces the default topic manager builder.
-func WithEmitterTopicManagerBuilder(tmb kafka.TopicManagerBuilder) EmitterOption {
+func WithEmitterTopicManagerBuilder(tmb TopicManagerBuilder) EmitterOption {
 	return func(o *eoptions, topic Stream, codec Codec) {
 		o.builders.topicmgr = tmb
 	}
 }
 
 // WithEmitterProducerBuilder replaces the default producer builder.
-func WithEmitterProducerBuilder(pb kafka.ProducerBuilder) EmitterOption {
+func WithEmitterProducerBuilder(pb ProducerBuilder) EmitterOption {
 	return func(o *eoptions, topic Stream, codec Codec) {
 		o.builders.producer = pb
 	}
@@ -454,10 +453,10 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 
 	// config not set, use default one
 	if opt.builders.producer == nil {
-		opt.builders.producer = kafka.DefaultProducerBuilder
+		opt.builders.producer = DefaultProducerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
+		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
 
 	return nil

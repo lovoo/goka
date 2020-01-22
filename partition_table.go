@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
@@ -28,7 +27,7 @@ type PartitionTable struct {
 	builder        storage.Builder
 	st             *storageProxy
 	consumer       sarama.Consumer
-	tmgr           kafka.TopicManager
+	tmgr           TopicManager
 	updateCallback UpdateCallback
 
 	offsetM sync.Mutex
@@ -40,7 +39,7 @@ type PartitionTable struct {
 func newPartitionTable(topic string,
 	partition int32,
 	consumer sarama.Consumer,
-	tmgr kafka.TopicManager,
+	tmgr TopicManager,
 	updateCallback UpdateCallback,
 	builder storage.Builder,
 	log logger.Logger) *PartitionTable {

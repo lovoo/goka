@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
@@ -45,8 +44,8 @@ type Processor struct {
 	graph *GroupGraph
 
 	saramaConsumer sarama.Consumer
-	producer       kafka.Producer
-	tmgr           kafka.TopicManager
+	producer       Producer
+	tmgr           TopicManager
 
 	state *Signal
 
@@ -467,7 +466,7 @@ func (g *Processor) createPartitionProcessor(ctx context.Context, partition int3
 		return fmt.Errorf("processor [%s]: partition %d already exists", g.graph.Group(), partition)
 	}
 
-	pproc := newPartitionProcessor(partition, g.graph, g, session)
+	pproc := newPartitionProcessor(partition, g.graph, session, g.log, g.opts, g.lookupTables, g.saramaConsumer, g.producer, g.tmgr)
 
 	g.partitions[partition] = pproc
 	return nil
@@ -517,7 +516,7 @@ func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, 
 
 // returns the number of partitions the topics have, and an error if topics are
 // not copartitionea.
-func ensureCopartitioned(tm kafka.TopicManager, topics []string) (int, error) {
+func ensureCopartitioned(tm TopicManager, topics []string) (int, error) {
 	var npar int
 	for _, topic := range topics {
 		partitions, err := tm.Partitions(topic)

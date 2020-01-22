@@ -10,7 +10,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/kafka"
 )
 
 var (
@@ -88,13 +87,13 @@ func runProcessor() {
 		goka.Input(topic, new(codec.String), process),
 		goka.Persist(new(userCodec)),
 	)
-	tmc := kafka.NewTopicManagerConfig()
+	tmc := goka.NewTopicManagerConfig()
 	tmc.Table.Replication = 1
 	tmc.Stream.Replication = 1
 	p, err := goka.NewProcessor(brokers,
 		g,
-		goka.WithTopicManagerBuilder(kafka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
-		goka.WithConsumerGroupBuilder(kafka.DefaultConsumerGroupBuilder),
+		goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
+		goka.WithConsumerGroupBuilder(goka.DefaultConsumerGroupBuilder),
 	)
 	if err != nil {
 		panic(err)

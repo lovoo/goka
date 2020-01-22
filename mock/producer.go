@@ -3,7 +3,7 @@ package mock
 import (
 	"testing"
 
-	kafka "github.com/lovoo/goka/kafka"
+	"github.com/lovoo/goka"
 )
 
 type Message struct {
@@ -16,12 +16,12 @@ type Producer struct {
 	messages map[string][]*Message
 }
 
-func (p *Producer) Emit(topic string, key string, value []byte) *kafka.Promise {
+func (p *Producer) Emit(topic string, key string, value []byte) *goka.Promise {
 	p.messages[topic] = append(p.messages[topic], &Message{
 		Key:   key,
 		Value: value,
 	})
-	return kafka.NewPromise().Finish(nil)
+	return goka.NewPromise().Finish(nil)
 }
 
 func (p *Producer) Clear() {

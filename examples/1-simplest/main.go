@@ -10,7 +10,6 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/kafka"
 )
 
 var (
@@ -18,13 +17,13 @@ var (
 	topic   goka.Stream = "example-stream"
 	group   goka.Group  = "example-group"
 
-	tmc *kafka.TopicManagerConfig
+	tmc *goka.TopicManagerConfig
 )
 
 func init() {
 	// This sets the default replication to 1. If you have more then one broker
 	// the default configuration can be used.
-	tmc = kafka.NewTopicManagerConfig()
+	tmc = goka.NewTopicManagerConfig()
 	tmc.Table.Replication = 1
 	tmc.Stream.Replication = 1
 }
@@ -70,8 +69,8 @@ func runProcessor() {
 
 	p, err := goka.NewProcessor(brokers,
 		g,
-		goka.WithTopicManagerBuilder(kafka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
-		goka.WithConsumerGroupBuilder(kafka.DefaultConsumerGroupBuilder),
+		goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
+		goka.WithConsumerGroupBuilder(goka.DefaultConsumerGroupBuilder),
 	)
 	if err != nil {
 		log.Fatalf("error creating processor: %v", err)
@@ -99,11 +98,11 @@ func runProcessor() {
 }
 
 func main() {
-	config := kafka.DefaultConfig()
+	config := goka.DefaultConfig()
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
-	kafka.ReplaceGlobalConfig(config)
+	goka.ReplaceGlobalConfig(config)
 
-	tm, err := kafka.NewSaramaTopicManager(brokers, kafka.DefaultConfig(), tmc)
+	tm, err := goka.NewSaramaTopicManager(brokers, goka.DefaultConfig(), tmc)
 	if err != nil {
 		log.Fatalf("Error creating topic manager: %v", err)
 	}

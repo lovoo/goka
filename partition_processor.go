@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 )
@@ -40,19 +39,27 @@ type PartitionProcessor struct {
 	cancelRunnerGroup func()
 
 	consumer sarama.Consumer
-	tmgr     kafka.TopicManager
+	tmgr     TopicManager
 	stats    *PartitionProcStats
 
 	requestStats  chan bool
 	responseStats chan *PartitionProcStats
 
 	session  sarama.ConsumerGroupSession
-	producer kafka.Producer
+	producer Producer
 
 	opts *poptions
 }
 
-func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor, session sarama.ConsumerGroupSession) *PartitionProcessor {
+func newPartitionProcessor(partition int32,
+	graph *GroupGraph,
+	session sarama.ConsumerGroupSession,
+	logger logger.Logger,
+	opts *poptions,
+	lookupTables map[string]*View,
+	consumer sarama.Consumer,
+	producer Producer,
+	tmgr TopicManager) *PartitionProcessor {
 
 	// collect all topics I am responsible for
 	topicMap := make(map[string]bool)
@@ -72,20 +79,20 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor, 
 		callbacks[t] = graph.callback(t)
 	}
 
-	log := proc.log.Prefix(fmt.Sprintf("PartitionProcessor (%d)", partition))
+	log := logger.Prefix(fmt.Sprintf("PartitionProcessor (%d)", partition))
 
 	partProc := &PartitionProcessor{
 		log:           log,
-		opts:          proc.opts,
+		opts:          opts,
 		partition:     partition,
 		state:         NewSignal(PPStateIdle, PPStateRecovering, PPStateRunning, PPStateStopping).SetState(PPStateIdle),
 		callbacks:     callbacks,
-		lookups:       proc.lookupTables,
-		consumer:      proc.saramaConsumer,
-		producer:      proc.producer,
-		tmgr:          proc.tmgr,
+		lookups:       lookupTables,
+		consumer:      consumer,
+		producer:      producer,
+		tmgr:          tmgr,
 		joins:         make(map[string]*PartitionTable),
-		input:         make(chan *sarama.ConsumerMessage, proc.opts.partitionChannelSize),
+		input:         make(chan *sarama.ConsumerMessage, opts.partitionChannelSize),
 		inputTopics:   topicList,
 		graph:         graph,
 		stats:         newPartitionProcStats(),
@@ -97,10 +104,10 @@ func newPartitionProcessor(partition int32, graph *GroupGraph, proc *Processor, 
 	if graph.GroupTable() != nil {
 		partProc.table = newPartitionTable(graph.GroupTable().Topic(),
 			partition,
-			proc.saramaConsumer,
-			proc.tmgr,
-			proc.opts.updateCallback,
-			proc.opts.builders.storage,
+			consumer,
+			tmgr,
+			opts.updateCallback,
+			opts.builders.storage,
 			log.Prefix("PartTable"),
 		)
 	}
@@ -286,7 +293,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 		wg:            wg,
 		msg:           msg,
 		failer:        syncFailer,
-		emitter: func(topic string, key string, value []byte) *kafka.Promise {
+		emitter: func(topic string, key string, value []byte) *Promise {
 			return pp.producer.Emit(topic, key, value).Then(func(err error) {
 				if err != nil {
 					asyncFailer(fmt.Errorf("error emitting message to %s (key=%s): %v", topic, key, err))
