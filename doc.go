@@ -1,7 +1,6 @@
 //go:generate go-bindata -pkg templates -o web/templates/bindata.go web/templates/common/ web/templates/monitor/ web/templates/query/ web/templates/index
 //go:generate mockgen -package mock -destination mock/storage.go github.com/lovoo/goka/storage Storage
 //go:generate mockgen -package mock -destination mock/proxy.go -aux_files storage=storage/storage.go -source partition.go kafkaProxy
-//go:generate mockgen -package mock -destination mock/kafka.go github.com/lovoo/goka/kafka Consumer,TopicManager,Producer
 
 /*
 Package goka is a stateful stream processing library for Apache Kafka (version 0.9+) that eases

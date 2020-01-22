@@ -3,14 +3,12 @@ package goka
 import (
 	"fmt"
 	"sync"
-
-	"github.com/lovoo/goka/kafka"
 )
 
 // Emitter emits messages into a specific Kafka topic, first encoding the message with the given codec.
 type Emitter struct {
 	codec    Codec
-	producer kafka.Producer
+	producer Producer
 
 	topic string
 
@@ -47,7 +45,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 }
 
 // Emit sends a message for passed key using the emitter's codec.
-func (e *Emitter) Emit(key string, msg interface{}) (*kafka.Promise, error) {
+func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
 	var (
 		err  error
 		data []byte
@@ -69,7 +67,7 @@ func (e *Emitter) Emit(key string, msg interface{}) (*kafka.Promise, error) {
 func (e *Emitter) EmitSync(key string, msg interface{}) error {
 	var (
 		err     error
-		promise *kafka.Promise
+		promise *Promise
 	)
 	promise, err = e.Emit(key, msg)
 

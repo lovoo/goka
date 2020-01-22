@@ -1,4 +1,4 @@
-package kafka
+package goka
 
 import (
 	"errors"

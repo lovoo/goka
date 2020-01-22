@@ -1,6 +1,6 @@
-// +build kafka
+// +build goka
 
-package kafka
+package goka
 
 import (
 	"log"
@@ -15,8 +15,8 @@ import (
 // examples-directory and do `make restart`), then run the tests with
 // `go test -v github.com/lovoo/goka/kafka/ -tags=kafka`
 func TestProducerError(t *testing.T) {
-	cfg := NewConfig().Config
-	p, err := NewProducer([]string{"localhost:9092"}, &cfg)
+	cfg := DefaultConfig()
+	p, err := NewProducer([]string{"localhost:9092"}, cfg)
 
 	if err != nil {
 		t.Fatalf("error creating producer: %v", err)

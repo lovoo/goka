@@ -8,11 +8,10 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/multierr"
 )
 
-type emitter func(topic string, key string, value []byte) *kafka.Promise
+type emitter func(topic string, key string, value []byte) *Promise
 
 // Context provides access to the processor's table and emit capabilities to
 // arbitrary topics in kafka.

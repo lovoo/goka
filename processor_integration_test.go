@@ -1,6 +1,22 @@
 package goka_test
 
 /*
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/facebookgo/ensure"
+	"github.com/lovoo/goka"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/mock"
+	"github.com/lovoo/goka/storage"
+	"github.com/lovoo/goka/tester"
+)
 
 func doTimed(t *testing.T, do func()) error {
 	ch := make(chan bool)
@@ -59,8 +75,8 @@ func TestProcessor_ProducerError(t *testing.T) {
 
 	t.Run("SetValue", func(t *testing.T) {
 		tester := tester.New(t)
-		tester.ReplaceEmitHandler(func(topic, key string, value []byte) *kafka.Promise {
-			return kafka.NewPromise().Finish(errors.New("producer error"))
+		tester.ReplaceEmitHandler(func(topic, key string, value []byte) *goka.Promise {
+			return goka.NewPromise().Finish(errors.New("producer error"))
 		})
 
 		consume := func(ctx goka.Context, msg interface{}) {
@@ -94,8 +110,8 @@ func TestProcessor_ProducerError(t *testing.T) {
 
 	t.Run("Emit", func(t *testing.T) {
 		tester := tester.New(t)
-		tester.ReplaceEmitHandler(func(topic, key string, value []byte) *kafka.Promise {
-			return kafka.NewPromise().Finish(errors.New("producer error"))
+		tester.ReplaceEmitHandler(func(topic, key string, value []byte) *goka.Promise {
+			return goka.NewPromise().Finish(errors.New("producer error"))
 		})
 
 		consume := func(ctx goka.Context, msg interface{}) {
@@ -130,8 +146,8 @@ func TestProcessor_ProducerError(t *testing.T) {
 
 	t.Run("Value-stateless", func(t *testing.T) {
 		tester := tester.New(t)
-		tester.ReplaceEmitHandler(func(topic, key string, value []byte) *kafka.Promise {
-			return kafka.NewPromise().Finish(errors.New("producer error"))
+		tester.ReplaceEmitHandler(func(topic, key string, value []byte) *goka.Promise {
+			return goka.NewPromise().Finish(errors.New("producer error"))
 		})
 
 		consume := func(ctx goka.Context, msg interface{}) {

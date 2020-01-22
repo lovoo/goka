@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
@@ -32,7 +31,7 @@ type View struct {
 	opts       *voptions
 	partitions []*PartitionTable
 	consumer   sarama.Consumer
-	tmgr       kafka.TopicManager
+	tmgr       TopicManager
 	terminated bool
 	state      *Signal
 }
