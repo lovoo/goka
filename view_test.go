@@ -83,12 +83,12 @@ package goka
 // 	ctrl := gomock.NewController(t)
 // 	defer ctrl.Finish()
 // 	var (
-// 		consumer = mock.NewMockConsumer(ctrl)
-// 		st       = mock.NewMockStorage(ctrl)
+// 		consumer = NewMockConsumer(ctrl)
+// 		st       = NewMockStorage(ctrl)
 // 		sb       = func(topic string, partition int32) (storage.Storage, error) {
 // 			return st, nil
 // 		}
-// 		tm = mock.NewMockTopicManager(ctrl)
+// 		tm = NewMockTopicManager(ctrl)
 // 	)
 
 // 	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1}, nil)
@@ -126,12 +126,12 @@ package goka
 // 	defer ctrl.Finish()
 
 // 	var (
-// 		st = mock.NewMockStorage(ctrl)
+// 		st = NewMockStorage(ctrl)
 // 		sb = func(topic string, partition int32) (storage.Storage, error) {
 // 			return st, nil
 // 		}
-// 		consumer = mock.NewMockConsumer(ctrl)
-// 		tm       = mock.NewMockTopicManager(ctrl)
+// 		consumer = NewMockConsumer(ctrl)
+// 		tm       = NewMockTopicManager(ctrl)
 // 		v        = createTestView(t, consumer, sb, tm)
 // 	)
 
@@ -159,12 +159,12 @@ package goka
 // 	defer ctrl.Finish()
 
 // 	var (
-// 		st = mock.NewMockStorage(ctrl)
+// 		st = NewMockStorage(ctrl)
 // 		sb = func(topic string, partition int32) (storage.Storage, error) {
 // 			return st, nil
 // 		}
-// 		consumer     = mock.NewMockConsumer(ctrl)
-// 		tm           = mock.NewMockTopicManager(ctrl)
+// 		consumer     = NewMockConsumer(ctrl)
+// 		tm           = NewMockTopicManager(ctrl)
 // 		v            = createTestView(t, consumer, sb, tm)
 // 		initial      = make(chan bool)
 // 		final        = make(chan bool)
@@ -215,12 +215,12 @@ package goka
 // 	defer ctrl.Finish()
 
 // 	var (
-// 		st = mock.NewMockStorage(ctrl)
+// 		st = NewMockStorage(ctrl)
 // 		sb = func(topic string, partition int32) (storage.Storage, error) {
 // 			return st, nil
 // 		}
-// 		consumer = mock.NewMockConsumer(ctrl)
-// 		tm       = mock.NewMockTopicManager(ctrl)
+// 		consumer = NewMockConsumer(ctrl)
+// 		tm       = NewMockTopicManager(ctrl)
 // 		v        = createTestView(t, consumer, sb, tm)
 // 		final    = make(chan bool)
 // 		ch       = make(chan kafka.Event)
@@ -255,12 +255,12 @@ package goka
 // 	defer ctrl.Finish()
 
 // 	var (
-// 		st = mock.NewMockStorage(ctrl)
+// 		st = NewMockStorage(ctrl)
 // 		sb = func(topic string, partition int32) (storage.Storage, error) {
 // 			return st, nil
 // 		}
-// 		consumer     = mock.NewMockConsumer(ctrl)
-// 		tm           = mock.NewMockTopicManager(ctrl)
+// 		consumer     = NewMockConsumer(ctrl)
+// 		tm           = NewMockTopicManager(ctrl)
 // 		v            = createTestView(t, consumer, sb, tm)
 // 		initial      = make(chan bool)
 // 		final        = make(chan bool)
@@ -330,12 +330,12 @@ package goka
 // 	defer ctrl.Finish()
 
 // 	var (
-// 		st = mock.NewMockStorage(ctrl)
+// 		st = NewMockStorage(ctrl)
 // 		sb = func(topic string, partition int32) (storage.Storage, error) {
 // 			return st, nil
 // 		}
-// 		consumer     = mock.NewMockConsumer(ctrl)
-// 		tm           = mock.NewMockTopicManager(ctrl)
+// 		consumer     = NewMockConsumer(ctrl)
+// 		tm           = NewMockTopicManager(ctrl)
 // 		v            = createTestView(t, consumer, sb, tm)
 // 		initial      = make(chan bool)
 // 		final        = make(chan bool)
@@ -426,12 +426,12 @@ package goka
 // 	defer ctrl.Finish()
 
 // 	var (
-// 		st = mock.NewMockStorage(ctrl)
+// 		st = NewMockStorage(ctrl)
 // 		sb = func(topic string, partition int32) (storage.Storage, error) {
 // 			return st, nil
 // 		}
-// 		consumer = mock.NewMockConsumer(ctrl)
-// 		tm       = mock.NewMockTopicManager(ctrl)
+// 		consumer = NewMockConsumer(ctrl)
+// 		tm       = NewMockTopicManager(ctrl)
 // 	)
 
 // 	v = createTestView(t, consumer, sb, tm)
@@ -451,8 +451,8 @@ package goka
 // 	defer ctrl.Finish()
 
 // 	var (
-// 		consumer = mock.NewMockConsumer(ctrl)
-// 		tm       = mock.NewMockTopicManager(ctrl)
+// 		consumer = NewMockConsumer(ctrl)
+// 		tm       = NewMockTopicManager(ctrl)
 // 	)
 // 	_, err := NewView(nil, GroupTable(group), new(codec.Bytes), WithViewConsumerBuilder(createConsumerBuilder(nil)))
 // 	ensure.NotNil(t, err)

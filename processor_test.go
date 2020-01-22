@@ -9,10 +9,9 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
-	smock "github.com/Shopify/sarama/mocks"
+	"github.com/Shopify/sarama/mocks"
 	"github.com/facebookgo/ensure"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/mock"
 	"github.com/lovoo/goka/storage"
 )
 
@@ -27,31 +26,31 @@ func PanicStringContains(t *testing.T, s string) {
 	}
 }
 
-func createTestConsumerGroupBuilder(t *testing.T) (ConsumerGroupBuilder, *mock.ConsumerGroup) {
-	mock := mock.NewConsumerGroup(t)
+func createTestConsumerGroupBuilder(t *testing.T) (ConsumerGroupBuilder, *MockConsumerGroup) {
+	mock := NewMockConsumerGroup(t)
 	return func(brokers []string, group, clientID string) (sarama.ConsumerGroup, error) {
 		return mock, nil
 	}, mock
 }
 
-func createTestConsumerBuilder(t *testing.T) (SaramaConsumerBuilder, *smock.Consumer) {
-	cons := smock.NewConsumer(t, nil)
+func createTestConsumerBuilder(t *testing.T) (SaramaConsumerBuilder, *mocks.Consumer) {
+	cons := mocks.NewConsumer(t, nil)
 
 	return func(brokers []string, clientID string) (sarama.Consumer, error) {
 		return cons, nil
 	}, cons
 }
 
-func createMockTopicManagerBuilder(t *testing.T) (TopicManagerBuilder, *mock.TopicManager) {
-	tm := mock.NewTopicManager(1, 1)
+func createMockTopicManagerBuilder(t *testing.T) (TopicManagerBuilder, *MockTopicManager) {
+	tm := NewMockTopicManager(1, 1)
 
 	return func(broker []string) (TopicManager, error) {
 		return tm, nil
 	}, tm
 }
 
-func createMockProducer(t *testing.T) (ProducerBuilder, *mock.Producer) {
-	pb := mock.NewProducer(t)
+func createMockProducer(t *testing.T) (ProducerBuilder, *MockProducer) {
+	pb := NewMockProducer(t)
 
 	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
 		return pb, nil
