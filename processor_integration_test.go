@@ -1,22 +1,6 @@
 package goka_test
 
-import (
-	"context"
-	"errors"
-	"fmt"
-	"log"
-	"strings"
-	"testing"
-	"time"
-
-	"github.com/facebookgo/ensure"
-	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/kafka"
-	"github.com/lovoo/goka/mock"
-	"github.com/lovoo/goka/storage"
-	"github.com/lovoo/goka/tester"
-)
+/*
 
 func doTimed(t *testing.T, do func()) error {
 	ch := make(chan bool)
@@ -386,3 +370,4 @@ func TestProcessor_failOnRecover(t *testing.T) {
 	// we can't test that anymore since there is no recovery-functionality in the tester implemented
 	//ensure.True(t, recovered > 0 && recovered < msgToRecover)
 }
+*/

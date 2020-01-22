@@ -50,8 +50,8 @@ type Processor struct {
 
 	state *Signal
 
-	cancel func()
 	ctx    context.Context
+	cancel func()
 }
 
 // NewProcessor creates a processor instance in a group given the address of
@@ -234,9 +234,6 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	go func() {
 		for err := range consumerGroup.Errors() {
 			g.log.Printf("Error executing group consumer: %v", err)
-			errors.Collect(err)
-			// TODO decide here whether we need to stop the processor or if the dispatcher takes care of
-			// recreating/rebalancing.
 		}
 	}()
 
@@ -305,7 +302,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 				if err != nil {
 					return fmt.Errorf("error running consumergroup: %v", err)
 				}
-				break
+				return nil
 			case <-ctx.Done():
 				g.log.Printf("context closed, waiting for processor to finish up")
 				<-done
@@ -314,9 +311,6 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 					return fmt.Errorf("error running consumergroup: %v", err)
 				}
 				return nil
-			}
-			if err != nil {
-				return fmt.Errorf("error running consumergroup: %v", err)
 			}
 		}
 	})
@@ -427,6 +421,8 @@ func (g *Processor) Cleanup(session sarama.ConsumerGroupSession) error {
 	return err
 }
 
+// WaitForReady waits until the processor is ready to consume messages (or is actually consuming messages)
+// i.e., it is done catching up all partition tables, joins and lookup tables
 func (g *Processor) WaitForReady() {
 	// wait for the processor to be started
 	<-g.state.WaitForStateMin(ProcStateStarting)
