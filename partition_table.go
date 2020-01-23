@@ -18,6 +18,9 @@ const (
 	stalledTimeout              = 2 * time.Minute
 )
 
+// PartitionTable manages the usage of a table for one partition.
+// It allows to setup and recover/catchup the table contents from kafka,
+// allow updates via Get/Set/Delete accessors
 type PartitionTable struct {
 	log            logger.Logger
 	topic          string
@@ -205,6 +208,8 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		err          error
 		errs         = new(multierr.Errors)
 	)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	// deferred error handling
 	defer func() {
@@ -252,10 +257,7 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	defer p.stats.reset()
 
 	// consume errors asynchronously
-	go func() {
-		err := p.collectConsumerErrors(ctx, partConsumer)
-		errs.Collect(err)
-	}()
+	go p.handleConsumerErrors(ctx, partConsumer)
 
 	// load messages and stop when you're at HWM
 	loadErr := p.loadMessages(ctx, partConsumer, partitionHwm, stopAfterCatchup)
@@ -306,24 +308,18 @@ func (p *PartitionTable) markRecovered(ctx context.Context) error {
 	}
 }
 
-func (p *PartitionTable) collectConsumerErrors(ctx context.Context, cons sarama.PartitionConsumer) error {
-	// internally collect all errors
-	var errs = new(multierr.Errors)
-
-ErrLoop:
+func (p *PartitionTable) handleConsumerErrors(ctx context.Context, cons sarama.PartitionConsumer) {
 	for {
 		select {
 		case consError, ok := <-cons.Errors():
 			if !ok {
-				break
+				return
 			}
 			p.log.Printf("Consumer error for table/partition %s/%d: %v", p.topic, p.partition, consError)
-			errs.Collect(consError)
 		case <-ctx.Done():
-			break ErrLoop
+			return
 		}
 	}
-	return errs.NilOrError()
 }
 
 func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.PartitionConsumer, partitionHwm int64, stopAfterCatchup bool) (rerr error) {
