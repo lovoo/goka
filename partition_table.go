@@ -64,34 +64,47 @@ func (p *PartitionTable) SetupAndCatchup(ctx context.Context) error {
 	return p.catchupToHwm(ctx)
 }
 
-func (p *PartitionTable) SetupAndCatchupForever(ctx context.Context, restartOnError bool) (chan struct{}, chan error, error) {
+func (p *PartitionTable) SetupAndCatchupForever(ctx context.Context, restartOnError bool) (chan struct{}, chan error) {
+	errChan := make(chan error)
 	err := p.setup(ctx)
 	if err != nil {
-		return nil, nil, err
+		go func() {
+			defer close(errChan)
+			errChan <- err
+		}()
+		return p.WaitRecovered(), errChan
 	}
-
-	errChan := make(chan error)
 
 	if restartOnError {
 		go func() {
+			errChanIn := make(chan error)
+			defer close(errChan)
+			defer close(errChanIn)
 			for {
+				cCtx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				go func(ctx context.Context) {
+					errChanIn <- p.catchupForever(ctx)
+				}(cCtx)
 				select {
 				case <-ctx.Done():
 					return
-				case err, ok := <-errChan:
+				case err, ok := <-errChanIn:
 					if ok {
 						p.log.Printf("Error while catching up, but we'll try to keep it running: %v", err)
 					}
+					cancel()
 				}
 			}
 		}()
 	} else {
 		go func() {
+			defer close(errChan)
 			errChan <- p.catchupForever(ctx)
 		}()
 	}
 
-	return p.WaitRecovered(), errChan, nil
+	return p.WaitRecovered(), errChan
 }
 
 // Setup creates the storage for the partition table

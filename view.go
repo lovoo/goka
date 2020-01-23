@@ -148,10 +148,7 @@ func (v *View) Run(ctx context.Context) error {
 	for _, partition := range v.partitions {
 		partition := partition
 		errg.Go(func() error {
-			catchupChan, errChan, err := partition.SetupAndCatchupForever(ctx, v.opts.restartable)
-			if err != nil {
-				return fmt.Errorf("Error starting partition: %v", err)
-			}
+			catchupChan, errChan := partition.SetupAndCatchupForever(ctx, v.opts.restartable)
 
 			multiWait.Add(catchupChan)
 
@@ -160,7 +157,7 @@ func (v *View) Run(ctx context.Context) error {
 				return nil
 			case err, ok := <-errChan:
 				if ok && err != nil {
-					return fmt.Errorf("Error while catching up/recovering")
+					return fmt.Errorf("Error while setup/catching up/recovering: %v", err)
 				}
 			}
 			return nil

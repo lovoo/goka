@@ -161,16 +161,13 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 
 func (pp *PartitionProcessor) startJoinTable(ctx context.Context, table *PartitionTable) error {
 
-	recoveredChan, errorChan, err := table.SetupAndCatchupForever(ctx, false)
-	if err != nil {
-		return fmt.Errorf("Error setting up joined table for topc/partition %s/%d: %v", table.topic, pp.partition, err)
-	}
+	recoveredChan, errorChan := table.SetupAndCatchupForever(ctx, false)
 
 	// the join tables keep updating while we're running, so run them in the runner-group to check for errors
 	pp.runnerGroup.Go(func() error {
 		err, ok := <-errorChan
 		if ok && err != nil {
-			return fmt.Errorf("Error while catchingup/updating topic/partition %s/%d: %v", table.topic, pp.partition, err)
+			return fmt.Errorf("Error while setup/catchingup/updating topic/partition %s/%d: %v", table.topic, pp.partition, err)
 		}
 		return nil
 	})
