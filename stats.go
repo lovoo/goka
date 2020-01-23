@@ -21,9 +21,11 @@ type OutputStats struct {
 type PartitionStatus int
 
 const (
+	// PartitionStopped indicates the partition stopped and should not be used anymore.
+	PartitionStopped PartitionStatus = iota
 	// PartitionRecovering indicates the partition is recovering and the storage
 	// is writing updates in bulk-mode (if the storage implementation supports it).
-	PartitionRecovering PartitionStatus = iota
+	PartitionRecovering
 	// PartitionPreparing indicates the end of the bulk-mode. Depending on the storage
 	// implementation, the Preparing phase may take long because the storage compacts its logs.
 	PartitionPreparing
