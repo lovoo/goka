@@ -10,8 +10,9 @@ require (
 	github.com/facebookgo/stack v0.0.0-20160209184415-751773369052 // indirect
 	github.com/facebookgo/subset v0.0.0-20150612182917-8dac2c3c4870 // indirect
 	github.com/frankban/quicktest v1.7.2 // indirect
-	github.com/golang/mock v1.3.1
+	github.com/golang/mock v1.4.0
 	github.com/gorilla/mux v1.7.3
+	github.com/jteeuwen/go-bindata v3.0.7+incompatible // indirect
 	github.com/pierrec/lz4 v2.4.0+incompatible // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20190826022208-cac0b30c2563 // indirect
 	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect

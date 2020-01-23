@@ -1,4 +1,4 @@
-package mock
+package goka
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 )
 
 // Topic holds all infos about a topic
-type Topic struct {
+type MockTopic struct {
 	Topic             string
 	NumPartitions     int
 	ReplicationFactor int
@@ -17,25 +17,25 @@ type Topic struct {
 	Hwm               int64
 }
 
-// TopicManager mimicks the behavior of the real topic manager
-type TopicManager struct {
+// MockTopicManager mimicks the behavior of the real topic manager
+type MockTopicManager struct {
 	DefaultNumPartitions     int
 	DefaultReplicationFactor int
-	Topics                   map[string]*Topic
+	Topics                   map[string]*MockTopic
 }
 
-// NewTopicManagerMock creates a new topic manager mock
-func NewTopicManager(defaultNumPartitions int, defaultReplFactor int) *TopicManager {
-	return &TopicManager{
+// NewMockTopicManagerMock creates a new topic manager mock
+func NewMockTopicManager(defaultNumPartitions int, defaultReplFactor int) *MockTopicManager {
+	return &MockTopicManager{
 		DefaultNumPartitions:     defaultNumPartitions,
 		DefaultReplicationFactor: defaultReplFactor,
-		Topics:                   make(map[string]*Topic),
+		Topics:                   make(map[string]*MockTopic),
 	}
 }
 
 // EnsureTableExists ensures a table exists
-func (tm *TopicManager) EnsureTableExists(topic string, npar int) error {
-	tm.Topics[topic] = &Topic{
+func (tm *MockTopicManager) EnsureTableExists(topic string, npar int) error {
+	tm.Topics[topic] = &MockTopic{
 		Topic:             topic,
 		NumPartitions:     npar,
 		ReplicationFactor: tm.DefaultReplicationFactor,
@@ -45,8 +45,8 @@ func (tm *TopicManager) EnsureTableExists(topic string, npar int) error {
 }
 
 // EnsureStreamExists ensures a stream exists
-func (tm *TopicManager) EnsureStreamExists(topic string, npar int) error {
-	tm.Topics[topic] = &Topic{
+func (tm *MockTopicManager) EnsureStreamExists(topic string, npar int) error {
+	tm.Topics[topic] = &MockTopic{
 		Topic:             topic,
 		NumPartitions:     npar,
 		ReplicationFactor: tm.DefaultReplicationFactor,
@@ -54,9 +54,9 @@ func (tm *TopicManager) EnsureStreamExists(topic string, npar int) error {
 	return nil
 }
 
-// EnsureTopicExists ensures a topic exists
-func (tm *TopicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
-	tm.Topics[topic] = &Topic{
+// EnsureMockTopicExists ensures a topic exists
+func (tm *MockTopicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
+	tm.Topics[topic] = &MockTopic{
 		Topic:             topic,
 		NumPartitions:     npar,
 		ReplicationFactor: rfactor,
@@ -66,7 +66,7 @@ func (tm *TopicManager) EnsureTopicExists(topic string, npar, rfactor int, confi
 }
 
 // Partitions returns all partitions for a topic
-func (tm *TopicManager) Partitions(topic string) ([]int32, error) {
+func (tm *MockTopicManager) Partitions(topic string) ([]int32, error) {
 	numParts := tm.DefaultNumPartitions
 	if t, exists := tm.Topics[topic]; exists {
 		numParts = t.NumPartitions
@@ -79,10 +79,10 @@ func (tm *TopicManager) Partitions(topic string) ([]int32, error) {
 	return parts, nil
 }
 
-func (tm *TopicManager) SetOffset(topicName string, oldest, hwm int64) {
+func (tm *MockTopicManager) SetOffset(topicName string, oldest, hwm int64) {
 	topic, ok := tm.Topics[topicName]
 	if !ok {
-		topic = &Topic{
+		topic = &MockTopic{
 			Topic:             topicName,
 			NumPartitions:     tm.DefaultNumPartitions,
 			ReplicationFactor: tm.DefaultReplicationFactor,
@@ -95,7 +95,7 @@ func (tm *TopicManager) SetOffset(topicName string, oldest, hwm int64) {
 }
 
 // GetOffset returns the offset closest to the passed time (or exactly time, if the offsets are empty)
-func (tm *TopicManager) GetOffset(topicName string, partitionID int32, time int64) (int64, error) {
+func (tm *MockTopicManager) GetOffset(topicName string, partitionID int32, time int64) (int64, error) {
 	topic, ok := tm.Topics[topicName]
 	if !ok {
 		return time, nil
@@ -112,6 +112,6 @@ func (tm *TopicManager) GetOffset(topicName string, partitionID int32, time int6
 }
 
 // Close has no action on the mock
-func (tm *TopicManager) Close() error {
+func (tm *MockTopicManager) Close() error {
 	return nil
 }

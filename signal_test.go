@@ -1,7 +1,6 @@
 package goka
 
 import (
-	"log"
 	"testing"
 )
 
@@ -66,6 +65,5 @@ func TestSignalWaitMin(t *testing.T) {
 	sig.SetState(2)
 	// wait for the goroutine to catchup with the state
 	<-done
-	log.Printf("hasdf")
 	assertTrue(t, hasState)
 }

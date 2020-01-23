@@ -36,7 +36,7 @@ func doTimed(t *testing.T, do func()) error {
 }
 
 func TestProcessor_StatelessContext(t *testing.T) {
-	ctrl := mock.NewMockController(t)
+	ctrl := NewMockController(t)
 	defer ctrl.Finish()
 	var (
 		tester = tester.New(t)
