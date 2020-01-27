@@ -257,7 +257,7 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		return
 	}
 
-	if localOffset > hwm {
+	if localOffset >= hwm {
 		errs.Collect(fmt.Errorf("local offset is higher than partition offset. topic %s, partition %d, hwm %d, local offset %d", p.topic, p.partition, hwm, localOffset))
 		return
 	}
@@ -265,7 +265,7 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	// we are exactly where we're supposed to be
 	// AND we're here for catchup, so let's stop here
 	// and do not attempt to load anything
-	if stopAfterCatchup && loadOffset == hwm {
+	if stopAfterCatchup && loadOffset >= hwm-1 {
 		errs.Collect(p.markRecovered(ctx))
 		return nil
 	}
@@ -387,7 +387,6 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 			}
 			p.offset = msg.Offset
 
-			// TODO(jb): why -1
 			if stopAfterCatchup && msg.Offset >= partitionHwm-1 {
 				return
 			}

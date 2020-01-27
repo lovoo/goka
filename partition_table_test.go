@@ -308,7 +308,7 @@ func TestPT_load(t *testing.T) {
 		var (
 			oldest           int64 = 161
 			newest           int64 = 1312
-			local            int64 = 1312
+			local            int64 = 1311
 			stopAfterCatchup bool  = true
 		)
 		pt, bm := defaultPT(
@@ -380,14 +380,13 @@ func TestPT_load(t *testing.T) {
 		)
 		pt.consumer = consumer
 		bm.st.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
-		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, oldest).Return(oldest, nil)
-		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, newest).Return(newest, nil)
-		partConsumer := consumer.ExpectConsumePartition(topic, partition, local)
+		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
+		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
+		partConsumer := consumer.ExpectConsumePartition(topic, partition, oldest)
 		partConsumer.ExpectMessagesDrainedOnClose()
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 			bm.st.EXPECT().SetOffset(gomock.Any()).Return(nil)
-			bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, gomock.Any()).Return(sarama.OffsetOldest, nil)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
