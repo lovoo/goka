@@ -6,11 +6,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/storage"
 )
 
 func PanicStringContains(t *testing.T, s string) {
@@ -24,10 +26,11 @@ func PanicStringContains(t *testing.T, s string) {
 	}
 }
 
-func createMockBuilder(t *testing.T) *builderMock {
+func createMockBuilder(t *testing.T) (*gomock.Controller, *builderMock) {
 	ctrl := NewMockController(t)
 	bm := newBuilderMock(ctrl)
-	return bm
+	bm.st = storage.NewMemory()
+	return ctrl, bm
 }
 
 func createTestConsumerGroupBuilder(t *testing.T) (ConsumerGroupBuilder, *MockConsumerGroup) {
@@ -45,17 +48,44 @@ func createTestConsumerBuilder(t *testing.T) (SaramaConsumerBuilder, *MockConsum
 	}, cons
 }
 
-func setupMockBuilder(bm *builderMock) {
-	bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil)
-	bm.tmgr.EXPECT().EnsureTableExists("test-table", gomock.Any()).Return(nil)
-	bm.tmgr.EXPECT().Close().Return(nil)
-	bm.st.EXPECT().Close().Return(nil)
-	bm.producer.EXPECT().Close().Return(nil)
-	bm.st.EXPECT().GetOffset(gomock.Any()).Return(int64(161), nil)
-	bm.tmgr.EXPECT().GetOffset("test-table", gomock.Any(), sarama.OffsetNewest).Return(int64(161), nil)
-	bm.tmgr.EXPECT().GetOffset("test-table", gomock.Any(), sarama.OffsetOldest).Return(int64(161), nil)
-	bm.st.EXPECT().MarkRecovered().Return(nil)
-	bm.st.EXPECT().Get("testkey").Return([]byte(strconv.FormatInt(3, 10)), nil)
+func expectCGEmit(bm *builderMock, table string, msgs []*sarama.ConsumerMessage) {
+	for _, msg := range msgs {
+		bm.producer.EXPECT().Emit(table, string(msg.Key), msg.Value).Return(NewPromise().Finish(nil))
+	}
+}
+
+func expectCGLoop(bm *builderMock, loop string, msgs []*sarama.ConsumerMessage) {
+	bm.tmgr.EXPECT().EnsureStreamExists(loop, 1).AnyTimes()
+	for _, msg := range msgs {
+		bm.producer.EXPECT().Emit(loop, string(msg.Key), gomock.Any()).Return(NewPromise().Finish(nil))
+	}
+}
+
+func expectCGConsume(bm *builderMock, table string, msgs []*sarama.ConsumerMessage) {
+	var (
+		current int = 0
+
+		oldest int64 = sarama.OffsetOldest
+		newest int64 = sarama.OffsetNewest
+	)
+
+	bm.producer.EXPECT().Close().Return(nil).AnyTimes()
+
+	bm.tmgr.EXPECT().Close().Return(nil).AnyTimes()
+	bm.tmgr.EXPECT().EnsureTableExists(table, gomock.Any()).Return(nil)
+	bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).AnyTimes()
+	bm.tmgr.EXPECT().GetOffset(table, gomock.Any(), sarama.OffsetNewest).Return(func() int64 {
+		help := newest + int64(current)
+		current++
+		return help
+	}(), nil)
+	bm.tmgr.EXPECT().GetOffset(table, gomock.Any(), sarama.OffsetOldest).Return(func() int64 {
+		help := oldest
+		if oldest == sarama.OffsetOldest {
+			oldest = 0
+		}
+		return help
+	}(), nil)
 }
 
 // accumulate is a callback that increments the
@@ -73,8 +103,25 @@ func accumulate(ctx Context, msg interface{}) {
 
 func TestProcessor_Run(t *testing.T) {
 	t.Run("input-persist", func(t *testing.T) {
-		bm := createMockBuilder(t)
-		setupMockBuilder(bm)
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
+
+		var (
+			topic  string                    = "test-table"
+			toEmit []*sarama.ConsumerMessage = []*sarama.ConsumerMessage{
+				&sarama.ConsumerMessage{Topic: "input",
+					Value: []byte(strconv.FormatInt(3, 10)),
+					Key:   []byte("test-key-1"),
+				},
+				&sarama.ConsumerMessage{Topic: "input",
+					Value: []byte(strconv.FormatInt(3, 10)),
+					Key:   []byte("test-key-2"),
+				},
+			}
+		)
+
+		expectCGConsume(bm, topic, toEmit)
+		expectCGEmit(bm, topic, toEmit)
 
 		groupBuilder, cg := createTestConsumerGroupBuilder(t)
 		consBuilder, cons := createTestConsumerBuilder(t)
@@ -86,7 +133,7 @@ func TestProcessor_Run(t *testing.T) {
 			Persist(new(codec.Int64)),
 		)
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
 
 		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
@@ -98,7 +145,7 @@ func TestProcessor_Run(t *testing.T) {
 			done    = make(chan struct{})
 		)
 
-		cons.ExpectConsumePartition("test-table", 0, 0)
+		cons.ExpectConsumePartition(topic, 0, 0)
 
 		go func() {
 			defer close(done)
@@ -111,12 +158,15 @@ func TestProcessor_Run(t *testing.T) {
 		// and waiting for them to be delivered
 		ensure.Nil(t, procErr)
 
-		cg.SendMessageWait(&sarama.ConsumerMessage{Topic: "input",
-			Value: []byte(strconv.FormatInt(3, 10)),
-			Key:   []byte("testkey"),
-		})
+		for _, msg := range toEmit {
+			cg.SendMessageWait(msg)
+		}
 
-		val, err := newProc.Get("testkey")
+		val, err := newProc.Get("test-key-1")
+		ensure.Nil(t, err)
+		ensure.DeepEqual(t, val.(int64), int64(3))
+
+		val, err = newProc.Get("test-key-2")
 		ensure.Nil(t, err)
 		ensure.DeepEqual(t, val.(int64), int64(3))
 
@@ -125,9 +175,23 @@ func TestProcessor_Run(t *testing.T) {
 		<-done
 		ensure.Nil(t, procErr)
 	})
-
 	t.Run("loopback", func(t *testing.T) {
-		bm := createMockBuilder(t)
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
+
+		var (
+			topic  string                    = "test-table"
+			loop   string                    = "test-loop"
+			toEmit []*sarama.ConsumerMessage = []*sarama.ConsumerMessage{
+				&sarama.ConsumerMessage{Topic: "input",
+					Value: []byte(strconv.FormatInt(23, 10)),
+					Key:   []byte("test-key"),
+				},
+			}
+		)
+
+		expectCGConsume(bm, topic, toEmit)
+		expectCGLoop(bm, loop, toEmit)
 
 		groupBuilder, cg := createTestConsumerGroupBuilder(t)
 		consBuilder, cons := createTestConsumerBuilder(t)
@@ -144,7 +208,7 @@ func TestProcessor_Run(t *testing.T) {
 			Persist(new(codec.Int64)),
 		)
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
 		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
@@ -156,7 +220,7 @@ func TestProcessor_Run(t *testing.T) {
 			done    = make(chan struct{})
 		)
 
-		cons.ExpectConsumePartition("test-table", 0, 0)
+		cons.ExpectConsumePartition(topic, 0, 0)
 
 		go func() {
 			defer close(done)
@@ -168,16 +232,10 @@ func TestProcessor_Run(t *testing.T) {
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
 		ensure.Nil(t, procErr)
-		cg.SendMessageWait(&sarama.ConsumerMessage{Topic: "input",
-			Key:   []byte("testkey"),
-			Value: []byte(strconv.FormatInt(23, 10)),
-		})
 
-		// msgs := prod.MessagesForTopic("test-loop")
-		// ensure.DeepEqual(t, len(msgs), 1)
-		// parsedValue, err := strconv.ParseInt(string(msgs[0].Value), 10, 64)
-		// ensure.Nil(t, err)
-		// ensure.DeepEqual(t, parsedValue, int64(23))
+		for _, msg := range toEmit {
+			cg.SendMessageWait(msg)
+		}
 
 		// shutdown
 		newProc.Stop()
@@ -185,7 +243,12 @@ func TestProcessor_Run(t *testing.T) {
 		ensure.Nil(t, procErr)
 	})
 	t.Run("consume-error", func(t *testing.T) {
-		bm := createMockBuilder(t)
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
+
+		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
+		bm.producer.EXPECT().Close().Times(1)
 
 		groupBuilder, cg := createTestConsumerGroupBuilder(t)
 		consBuilder, cons := createTestConsumerBuilder(t)
@@ -226,9 +289,13 @@ func TestProcessor_Run(t *testing.T) {
 		ensure.Nil(t, procErr)
 
 	})
-
 	t.Run("consgroup-error", func(t *testing.T) {
-		bm := createMockBuilder(t)
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
+
+		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
+		bm.producer.EXPECT().Close().Times(1)
 
 		groupBuilder, cg := createTestConsumerGroupBuilder(t)
 		consBuilder, cons := createTestConsumerBuilder(t)

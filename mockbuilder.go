@@ -28,7 +28,8 @@ import (
 
 type builderMock struct {
 	ctrl          *gomock.Controller
-	st            *MockStorage
+	st            storage.Storage
+	mst           *MockStorage
 	tmgr          *MockTopicManager
 	consumerGroup *MockConsumerGroup
 	producer      *MockProducer
@@ -37,7 +38,7 @@ type builderMock struct {
 func newBuilderMock(ctrl *gomock.Controller) *builderMock {
 	return &builderMock{
 		ctrl:     ctrl,
-		st:       NewMockStorage(ctrl),
+		mst:      NewMockStorage(ctrl),
 		tmgr:     NewMockTopicManager(ctrl),
 		producer: NewMockProducer(ctrl),
 	}
@@ -55,7 +56,10 @@ func (bm *builderMock) createProcessorOptions(consBuilder SaramaConsumerBuilder,
 
 func (bm *builderMock) getStorageBuilder() storage.Builder {
 	return func(topic string, partition int32) (storage.Storage, error) {
-		return bm.st, nil
+		if bm.st != nil {
+			return bm.st, nil
+		}
+		return bm.mst, nil
 	}
 }
 
@@ -70,14 +74,6 @@ func (bm *builderMock) getProducerBuilder() ProducerBuilder {
 		return bm.producer, nil
 	}
 }
-
-// func (bm *builderMock) BuildStorage(topic string, partition int32) (storage.Storage, error) {
-//  return bm.st, nil
-// }
-// func (bm *builderMock) InitTopics(topics []string){
-//  for ..
-//  bm.tpmgr.EXPECT().
-// }
 
 func errStorageBuilder() storage.Builder {
 	return func(topic string, partition int32) (storage.Storage, error) {

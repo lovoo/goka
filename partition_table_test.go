@@ -3,7 +3,6 @@ package goka
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"testing"
 	"time"
@@ -52,7 +51,7 @@ func TestPT_createStorage(t *testing.T) {
 		)
 
 		equalSP := &storageProxy{
-			Storage:   bm.st,
+			Storage:   bm.mst,
 			partition: partition,
 			update:    callback,
 		}
@@ -140,7 +139,7 @@ func TestPT_close(t *testing.T) {
 			nil,
 			nil,
 		)
-		bm.st.EXPECT().Close().AnyTimes()
+		bm.mst.EXPECT().Close().AnyTimes()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -318,10 +317,10 @@ func TestPT_load(t *testing.T) {
 			nil,
 			nil,
 		)
-		bm.st.EXPECT().GetOffset(sarama.OffsetOldest).Return(local, nil)
+		bm.mst.EXPECT().GetOffset(sarama.OffsetOldest).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
-		bm.st.EXPECT().MarkRecovered().Return(nil)
+		bm.mst.EXPECT().MarkRecovered().Return(nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -345,7 +344,7 @@ func TestPT_load(t *testing.T) {
 			nil,
 			nil,
 		)
-		bm.st.EXPECT().GetOffset(sarama.OffsetOldest).Return(local, nil)
+		bm.mst.EXPECT().GetOffset(sarama.OffsetOldest).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
@@ -379,14 +378,14 @@ func TestPT_load(t *testing.T) {
 			updateCB,
 		)
 		pt.consumer = consumer
-		bm.st.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
+		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, oldest)
 		partConsumer.ExpectMessagesDrainedOnClose()
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
-			bm.st.EXPECT().SetOffset(gomock.Any()).Return(nil)
+			bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -448,7 +447,7 @@ func TestPT_loadMessages(t *testing.T) {
 			Offset:    partitionHwm,
 		})
 		partConsumer.ExpectMessagesDrainedOnClose()
-		bm.st.EXPECT().SetOffset(partitionHwm).Return(nil)
+		bm.mst.EXPECT().SetOffset(partitionHwm).Return(nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -490,8 +489,8 @@ func TestPT_loadMessages(t *testing.T) {
 			Offset:    1,
 		})
 		partConsumer.ExpectMessagesDrainedOnClose()
-		bm.st.EXPECT().SetOffset(int64(1)).Return(nil)
-		bm.st.EXPECT().SetOffset(int64(1)).Return(nil)
+		bm.mst.EXPECT().SetOffset(int64(1)).Return(nil)
+		bm.mst.EXPECT().SetOffset(int64(1)).Return(nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -528,7 +527,7 @@ func TestPT_loadMessages(t *testing.T) {
 		assertNil(t, err)
 		go func(ctx context.Context) {
 			for i := 0; i < 100; i++ {
-				bm.st.EXPECT().SetOffset(gomock.Any()).Return(nil)
+				bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
 				partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 			}
 			for {
@@ -592,7 +591,7 @@ func TestPT_loadMessages(t *testing.T) {
 				}
 				lock.Lock()
 				if open {
-					bm.st.EXPECT().SetOffset(gomock.Any()).Return(nil)
+					bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
 					partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 				}
 				lock.Unlock()
@@ -637,7 +636,6 @@ func TestPT_loadMessages(t *testing.T) {
 			}
 		}()
 		err = pt.loadMessages(ctx, partConsumer, partitionHwm, stopAfterCatchup)
-		log.Println("stalled", pt.stats.Stalled)
 		assertNil(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
@@ -667,7 +665,7 @@ func TestPT_loadMessages(t *testing.T) {
 			Offset:    1,
 		})
 		partConsumer.ExpectMessagesDrainedOnClose()
-		bm.st.EXPECT().SetOffset(int64(1)).Return(nil)
+		bm.mst.EXPECT().SetOffset(int64(1)).Return(nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -701,7 +699,7 @@ func TestPT_storeEvent(t *testing.T) {
 			nil,
 			updateCB,
 		)
-		bm.st.EXPECT().SetOffset(localOffset).Return(nil)
+		bm.mst.EXPECT().SetOffset(localOffset).Return(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
@@ -730,7 +728,7 @@ func TestPT_storeEvent(t *testing.T) {
 			nil,
 			updateCB,
 		)
-		bm.st.EXPECT().SetOffset(localOffset).Return(retErr)
+		bm.mst.EXPECT().SetOffset(localOffset).Return(retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
@@ -753,7 +751,7 @@ func TestPT_Close(t *testing.T) {
 			nil,
 			nil,
 		)
-		bm.st.EXPECT().Close().Return(nil)
+		bm.mst.EXPECT().Close().Return(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
@@ -791,7 +789,7 @@ func TestPT_markRecovered(t *testing.T) {
 			nil,
 			nil,
 		)
-		bm.st.EXPECT().MarkRecovered().Return(nil)
+		bm.mst.EXPECT().MarkRecovered().Return(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
@@ -814,7 +812,7 @@ func TestPT_markRecovered(t *testing.T) {
 			nil,
 			nil,
 		)
-		bm.st.EXPECT().MarkRecovered().Return(retErr)
+		bm.mst.EXPECT().MarkRecovered().Return(retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
@@ -848,15 +846,15 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 			updateCB,
 		)
 		pt.consumer = consumer
-		bm.st.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
+		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
-		bm.st.EXPECT().MarkRecovered().Return(nil)
+		bm.mst.EXPECT().MarkRecovered().Return(nil)
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, oldest)
 		partConsumer.ExpectMessagesDrainedOnClose()
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
-			bm.st.EXPECT().SetOffset(gomock.Any()).Return(nil)
+			bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
 			bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, gomock.Any()).Return(sarama.OffsetOldest, nil)
 		}
 
@@ -895,7 +893,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 			nil,
 		)
 		pt.consumer = consumer
-		bm.st.EXPECT().GetOffset(gomock.Any()).Return(int64(0), retErr)
+		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(int64(0), retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
@@ -928,16 +926,16 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 			updateCB,
 		)
 		pt.consumer = consumer
-		bm.st.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
-		bm.st.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
+		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
+		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
-		bm.st.EXPECT().MarkRecovered().Return(nil)
+		bm.mst.EXPECT().MarkRecovered().Return(nil)
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, oldest)
 		partConsumer.ExpectMessagesDrainedOnClose()
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
-			bm.st.EXPECT().SetOffset(gomock.Any()).Return(nil)
+			bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
 			bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 			bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 		}
@@ -981,7 +979,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 			nil,
 		)
 		pt.consumer = consumer
-		bm.st.EXPECT().GetOffset(gomock.Any()).Return(int64(0), retErr)
+		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(int64(0), retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 

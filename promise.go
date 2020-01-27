@@ -1,6 +1,8 @@
 package goka
 
-import "sync"
+import (
+	"sync"
+)
 
 // Promise as in https://en.wikipedia.org/wiki/Futures_and_promises
 type Promise struct {
