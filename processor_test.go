@@ -25,7 +25,7 @@ func PanicStringContains(t *testing.T, s string) {
 }
 
 func createMockBuilder(t *testing.T) *builderMock {
-	ctrl := gomock.NewController(t)
+	ctrl := NewMockController(t)
 	bm := newBuilderMock(ctrl)
 	return bm
 }
