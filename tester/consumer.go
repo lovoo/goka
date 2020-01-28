@@ -1,101 +1,147 @@
 package tester
 
-/*
-type SaramaConsumer struct {
-	// tt                *Tester2
-	expectedConsumers map[string]*PartitionConsumer
+import (
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/Shopify/sarama"
+)
+
+type consumerMock struct {
+	sync.RWMutex
+	tester         *Tester
+	requiredTopics map[string]bool
+	partConsumers  map[string]*partConsumerMock
 }
 
-func NewSaramaConsumer(tt *Tester2) *SaramaConsumer {
-	return &SaramaConsumer{
-		tt:                tt,
-		expectedConsumers: make(map[string]*PartitionConsumer),
+func newConsumerMock(tt *Tester) *consumerMock {
+	return &consumerMock{
+		tester:         tt,
+		requiredTopics: make(map[string]bool),
+		partConsumers:  make(map[string]*partConsumerMock),
 	}
 }
 
-func (sc *SaramaConsumer) Topics() ([]string, error) {
-	return nil, fmt.Errorf("listing topics not supported by the mock")
+func (cm *consumerMock) catchup() int {
+	cm.RLock()
+	defer cm.RUnlock()
+	var catchup int
+	for _, pc := range cm.partConsumers {
+		catchup += pc.catchup()
+		return catchup
+	}
+	return catchup
 }
-func (sc *SaramaConsumer) Partitions(topic string) ([]int32, error) {
-	return nil, fmt.Errorf("listing partitions not supported by mock")
+
+func (cm *consumerMock) Topics() ([]string, error) {
+	return nil, fmt.Errorf("Not implemented")
 }
 
-func (sc *SaramaConsumer) ConsumePartition(topic string, partition int32, offset int64) (sarama.PartitionConsumer, error) {
-	if partition != 0 {
-		return nil, fmt.Errorf("Can only consume from partition 0")
-	}
+func (cm *consumerMock) Partitions(topic string) ([]int32, error) {
+	return nil, fmt.Errorf("not implemented")
+}
 
-	cons := sc.expectedConsumers[topic]
-	if cons == nil {
-		return nil, fmt.Errorf("Unexpected Partition Consumer requested for topic %s", topic)
+func (cm *consumerMock) ConsumePartition(topic string, partition int32, offset int64) (sarama.PartitionConsumer, error) {
+	cm.Lock()
+	defer cm.Unlock()
+	if _, exists := cm.partConsumers[topic]; exists {
+		return nil, fmt.Errorf("Got duplicate consume partition for topic %s", topic)
 	}
-
-	if cons.inUse {
-		return nil, fmt.Errorf("Received double consume-partition for topic %s")
+	cons := &partConsumerMock{
+		hwm:      offset,
+		queue:    cm.tester.getOrCreateQueue(topic),
+		messages: make(chan *sarama.ConsumerMessage),
+		errors:   make(chan *sarama.ConsumerError),
+		closer: func() error {
+			cm.Lock()
+			cm.Unlock()
+			if _, exists := cm.partConsumers[topic]; !exists {
+				return fmt.Errorf("partition consumer seems already closed")
+			}
+			delete(cm.partConsumers, topic)
+			return nil
+		},
 	}
-	cons.startFrom(offset)
 
 	return cons, nil
 }
+func (cm *consumerMock) HighWaterMarks() map[string]map[int32]int64 {
+	return nil
+}
+func (cm *consumerMock) Close() error {
+	return nil
+}
 
-func (sc *SaramaConsumer) ExpectConsume(topic string) error {
-	if sc.expectedConsumers[topic] != nil {
-		return fmt.Errorf("Already expecting consumer")
+func (cm *consumerMock) waitRequiredConsumersStartup() {
+	doCheck := func() bool {
+		cm.RLock()
+		defer cm.RUnlock()
+
+		for topic := range cm.requiredTopics {
+			_, ok := cm.partConsumers[topic]
+			if !ok {
+				return false
+			}
+		}
+		return true
 	}
-	sc.expectedConsumers[topic] = NewPartitionConsumer(sc.tt.topicQueues[topic])
-	return nil
+	for !doCheck() {
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
-func (sc *SaramaConsumer) HighWaterMarks() map[string]map[int32]int64 {
-	return nil
-}
-func (sc *SaramaConsumer) Close() error {
-	return nil
+func (cm *consumerMock) requirePartConsumer(topic string) {
+	cm.requiredTopics[topic] = true
 }
 
-type PartitionConsumer struct {
-	inUse bool
-	queue    *queue2
+type partConsumerMock struct {
+	hwm      int64
+	closer   func() error
 	messages chan *sarama.ConsumerMessage
 	errors   chan *sarama.ConsumerError
+	queue    *queue
 }
 
-func NewPartitionConsumer(queue *queue2) *PartitionConsumer {
-	return &PartitionConsumer{
-		queue: queue,
+func (pcm *partConsumerMock) catchup() int {
+	var numCatchup int
+	for _, msg := range pcm.queue.messagesFromOffset(pcm.hwm) {
+		pcm.messages <- &sarama.ConsumerMessage{
+			Key:       []byte(msg.key),
+			Value:     msg.value,
+			Topic:     pcm.queue.topic,
+			Partition: 0,
+			Offset:    msg.offset,
+		}
+
+		// we'll send a nil that is being ignored by the partition_table to make sure the other message
+		// really went through the channel
+		pcm.messages <- nil
+		numCatchup++
+		pcm.hwm = msg.offset + 1
 	}
+
+	return numCatchup
 }
 
-func (pc *PartitionConsumer) startFrom(offset int64) {
-
-	pc.messages = make(chan *sarama.ConsumerMessage)
-	pc.errors = make(chan *sarama.ConsumerError)
-	pc.inUse = true
-	// TODO: set the offset and start consuming from the queue
+func (pcm *partConsumerMock) Close() error {
+	close(pcm.messages)
+	close(pcm.errors)
+	return pcm.closer()
 }
 
-func (pc *PartitionConsumer) AsyncClose() {
+func (pcm *partConsumerMock) AsyncClose() {
+	go pcm.Close()
 }
 
-func (pc *PartitionConsumer) Close() error {
-	close(pc.messages)
-	close(pc.errors)
-
-	pc.inUse = false
-
-	return nil
+func (pcm *partConsumerMock) Messages() <-chan *sarama.ConsumerMessage {
+	return pcm.messages
 }
 
-func (pc *PartitionConsumer) Messages() <-chan *sarama.ConsumerMessage {
-	return pc.messages
+func (pcm *partConsumerMock) Errors() <-chan *sarama.ConsumerError {
+	return pcm.errors
 }
 
-func (pc *PartitionConsumer) Errors() <-chan *sarama.ConsumerError {
-	return pc.errors
+func (pcm *partConsumerMock) HighWaterMarkOffset() int64 {
+	return pcm.queue.Hwm()
 }
-
-func (pc *PartitionConsumer) HighWaterMarkOffset() int64 {
-	// TODO: getter for hwm to have a lock
-	return pc.queue.hwm
-}
-*/
