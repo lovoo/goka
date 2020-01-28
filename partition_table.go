@@ -251,8 +251,6 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		return
 	}
 
-	p.log.Printf("Offset stored locally: %d", localOffset)
-
 	loadOffset, hwm, err := p.findOffsetToLoad(localOffset)
 	if err != nil {
 		errs.Collect(err)
@@ -260,7 +258,7 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	}
 
 	if localOffset >= hwm {
-		errs.Collect(fmt.Errorf("local offset is higher than partition offset. topic %s, partition %d, hwm %d, local offset %d", p.topic, p.partition, hwm, localOffset))
+		errs.Collect(fmt.Errorf("local offset is higher than partition offset. topic %s, partition %d, hwm %d, local offset %d. probably the kafka topic was recreated but the processor still has it's old local cache", p.topic, p.partition, hwm, localOffset))
 		return
 	}
 
