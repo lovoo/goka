@@ -195,11 +195,13 @@ func WithNilHandling(nh NilHandling) ProcessorOption {
 type Tester interface {
 	StorageBuilder() storage.Builder
 	ProducerBuilder() ProducerBuilder
+	ConsumerGroupBuilder() ConsumerGroupBuilder
+	ConsumerBuilder() SaramaConsumerBuilder
 	EmitterProducerBuilder() ProducerBuilder
 	TopicManagerBuilder() TopicManagerBuilder
 	RegisterGroupGraph(*GroupGraph) string
 	RegisterEmitter(Stream, Codec)
-	RegisterView(Table, Codec)
+	RegisterView(Table, Codec) string
 }
 
 // WithTester configures all external connections of a processor, ie, storage,
@@ -209,6 +211,8 @@ func WithTester(t Tester) ProcessorOption {
 		o.builders.storage = t.StorageBuilder()
 		o.builders.producer = t.ProducerBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
+		o.builders.consumerGroup = t.ConsumerGroupBuilder()
+		o.builders.consumerSarama = t.ConsumerBuilder()
 		o.partitionChannelSize = 0
 		o.clientID = t.RegisterGroupGraph(gg)
 	}
@@ -349,7 +353,7 @@ func WithViewTester(t Tester) ViewOption {
 		o.builders.storage = t.StorageBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
 		o.partitionChannelSize = 0
-		t.RegisterView(table, codec)
+		o.clientID = t.RegisterView(table, codec)
 	}
 }
 
