@@ -246,12 +246,10 @@ func (pp *PartitionProcessor) run(ctx context.Context) error {
 			if !isOpen {
 				return nil
 			}
-
 			err := pp.processMessage(ctx, &wg, ev, syncFailer, asyncFailer)
 			if err != nil {
 				return fmt.Errorf("error processing message: %v", err)
 			}
-
 		case <-pp.requestStats:
 			lastStats := newPartitionProcStats().init(pp.stats)
 			select {
@@ -260,11 +258,9 @@ func (pp *PartitionProcessor) run(ctx context.Context) error {
 				pp.log.Printf("exiting, context is cancelled")
 				return nil
 			}
-
 		case <-ctx.Done():
 			pp.log.Printf("exiting, context is cancelled")
 			return nil
-
 		case err := <-asyncErrors:
 			// close it so the other messages that might write to the channel will panic
 			// TODO: is there a more elegant solution?
@@ -351,7 +347,6 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	// call finish with the panic or with nil depending on a pending panic
 	defer func() {
 		if r := recover(); r != nil {
-
 			// if handling the message panicked, we will still mark the
 			// context as done, so we don't wait in the waitgroup forever
 			msgContext.markDone()
