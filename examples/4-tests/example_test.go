@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"log"
 	"testing"
 
 	"github.com/facebookgo/ensure"
@@ -15,7 +16,7 @@ import (
 // One processor with only one input
 func Test_1Input(t *testing.T) {
 	var (
-		gkt             = tester.New(t)
+		tt              = tester.New(t)
 		receivedMessage string
 	)
 
@@ -25,17 +26,29 @@ func Test_1Input(t *testing.T) {
 			receivedMessage = msg.(string)
 		}),
 	),
-		goka.WithTester(gkt),
+		goka.WithTester(tt),
 	)
-
 	// start it
-	go proc.Run(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		err := proc.Run(context.Background())
+		if err != nil {
+			t.Fatalf("processor run failed with: %v", err)
+		} else {
+			log.Printf("processor ok")
+		}
+	}()
 
 	// consume a message
-	gkt.Consume("input", "key", "some message")
+	tt.Consume("input", "key", "some message")
 
 	// ensure the message was received
 	ensure.DeepEqual(t, receivedMessage, "some message")
+
+	// stop the processor and wait to finish
+	proc.Stop()
+	<-done
 }
 
 // Scenario (2)
@@ -138,7 +151,8 @@ func Test_Subtest(t *testing.T) {
 		ensure.DeepEqual(t, value, "forwarded: hello")
 
 		// we should be at the end
-		ensure.DeepEqual(t, mt.Hwm(), mt.NextOffset())
+		ensure.DeepEqual(t, mt.Hwm(), int64(1))
+		ensure.DeepEqual(t, mt.NextOffset(), int64(1))
 
 		// this is equivalent
 		_, _, ok = mt.Next()

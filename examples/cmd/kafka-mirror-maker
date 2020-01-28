@@ -1,0 +1,3 @@
+#!/bin/bash
+CMD="kafka-mirror-maker $@"
+docker run --net=host --rm -it --entrypoint /bin/bash confluentinc/cp-kafka:5.4.0 -c "$CMD"
