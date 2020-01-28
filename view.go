@@ -86,7 +86,6 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 
 // WaitRunning returns a channel that will be closed when the view enters the running state
 func (v *View) WaitRunning() <-chan struct{} {
-	// TODO: actually update the state
 	return v.state.WaitForState(ViewStateRunning)
 }
 
@@ -192,10 +191,7 @@ func (v *View) Terminate() error {
 	}
 	v.terminated = true
 
-	if v.opts.restartable {
-		return v.close().NilOrError()
-	}
-	return nil
+	return v.close().NilOrError()
 }
 
 func (v *View) hash(key string) (int32, error) {

@@ -373,15 +373,15 @@ func TestPT_load(t *testing.T) {
 	})
 	t.Run("consume", func(t *testing.T) {
 		var (
-			oldest           int64          = 161
-			newest           int64          = 1312
-			local            int64          = sarama.OffsetOldest
-			stopAfterCatchup bool           = false
-			consumer         *MockConsumer  = defaultSaramaConsumerMock(t)
-			topic            string         = "some-topic"
-			partition        int32          = 0
-			count            int32          = 0
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
+			oldest           int64             = 161
+			newest           int64             = 1312
+			local            int64             = sarama.OffsetOldest
+			stopAfterCatchup bool              = false
+			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			topic            string            = "some-topic"
+			partition        int32             = 0
+			count            int32             = 0
+			updateCB         UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
 			}
@@ -432,12 +432,12 @@ func TestPT_load(t *testing.T) {
 func TestPT_loadMessages(t *testing.T) {
 	t.Run("consume_till_hwm", func(t *testing.T) {
 		var (
-			localOffset      int64         = sarama.OffsetOldest
-			partitionHwm     int64         = 1
-			stopAfterCatchup bool          = true
-			topic            string        = "some-topic"
-			partition        int32         = 0
-			consumer         *MockConsumer = defaultSaramaConsumerMock(t)
+			localOffset      int64             = sarama.OffsetOldest
+			partitionHwm     int64             = 1
+			stopAfterCatchup bool              = true
+			topic            string            = "some-topic"
+			partition        int32             = 0
+			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
 			recKey           string
 			recVal           []byte
 			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
@@ -478,13 +478,13 @@ func TestPT_loadMessages(t *testing.T) {
 	})
 	t.Run("consume_till_hwm_more_msgs", func(t *testing.T) {
 		var (
-			localOffset      int64          = 0
-			partitionHwm     int64          = 2
-			stopAfterCatchup bool           = true
-			topic            string         = "some-topic"
-			partition        int32          = 0
-			consumer         *MockConsumer  = defaultSaramaConsumerMock(t)
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
+			localOffset      int64             = 0
+			partitionHwm     int64             = 2
+			stopAfterCatchup bool              = true
+			topic            string            = "some-topic"
+			partition        int32             = 0
+			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			updateCB         UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
 				return nil
 			}
 		)
@@ -520,14 +520,14 @@ func TestPT_loadMessages(t *testing.T) {
 	})
 	t.Run("consume_till_cancel", func(t *testing.T) {
 		var (
-			localOffset      int64          = 0
-			partitionHwm     int64          = 2
-			stopAfterCatchup bool           = false
-			topic            string         = "some-topic"
-			partition        int32          = 0
-			consumer         *MockConsumer  = defaultSaramaConsumerMock(t)
-			count            int32          = 0
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
+			localOffset      int64             = 0
+			partitionHwm     int64             = 2
+			stopAfterCatchup bool              = false
+			topic            string            = "some-topic"
+			partition        int32             = 0
+			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			count            int32             = 0
+			updateCB         UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
 			}
@@ -568,13 +568,13 @@ func TestPT_loadMessages(t *testing.T) {
 	})
 	t.Run("close_msg_chan", func(t *testing.T) {
 		var (
-			localOffset      int64          = 0
-			partitionHwm     int64          = 2
-			stopAfterCatchup bool           = false
-			topic            string         = "some-topic"
-			partition        int32          = 0
-			consumer         *MockConsumer  = defaultSaramaConsumerMock(t)
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
+			localOffset      int64             = 0
+			partitionHwm     int64             = 2
+			stopAfterCatchup bool              = false
+			topic            string            = "some-topic"
+			partition        int32             = 0
+			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			updateCB         UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
 				return nil
 			}
 		)
@@ -622,12 +622,12 @@ func TestPT_loadMessages(t *testing.T) {
 	})
 	t.Run("stalled", func(t *testing.T) {
 		var (
-			localOffset      int64         = 0
-			partitionHwm     int64         = 2
-			stopAfterCatchup bool          = false
-			topic            string        = "some-topic"
-			partition        int32         = 0
-			consumer         *MockConsumer = defaultSaramaConsumerMock(t)
+			localOffset      int64             = 0
+			partitionHwm     int64             = 2
+			stopAfterCatchup bool              = false
+			topic            string            = "some-topic"
+			partition        int32             = 0
+			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
 		)
 		pt, _, ctrl := defaultPT(
 			t,
@@ -662,14 +662,14 @@ func TestPT_loadMessages(t *testing.T) {
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
-			localOffset      int64          = 0
-			partitionHwm     int64          = 2
-			stopAfterCatchup bool           = true
-			topic            string         = "some-topic"
-			partition        int32          = 0
-			consumer         *MockConsumer  = defaultSaramaConsumerMock(t)
-			retErr           error          = fmt.Errorf("update error")
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
+			localOffset      int64             = 0
+			partitionHwm     int64             = 2
+			stopAfterCatchup bool              = true
+			topic            string            = "some-topic"
+			partition        int32             = 0
+			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			retErr           error             = fmt.Errorf("update error")
+			updateCB         UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
 				return retErr
 			}
 		)
@@ -854,14 +854,14 @@ func TestPT_markRecovered(t *testing.T) {
 func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		var (
-			oldest    int64          = 161
-			newest    int64          = 1312
-			local     int64          = oldest
-			consumer  *MockConsumer  = defaultSaramaConsumerMock(t)
-			topic     string         = "some-topic"
-			partition int32          = 0
-			count     int32          = 0
-			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
+			oldest    int64             = 161
+			newest    int64             = 1312
+			local     int64             = oldest
+			consumer  *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			topic     string            = "some-topic"
+			partition int32             = 0
+			count     int32             = 0
+			updateCB  UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
 			}
@@ -908,10 +908,10 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
-			consumer  *MockConsumer = defaultSaramaConsumerMock(t)
-			topic     string        = "some-topic"
-			partition int32         = 0
-			retErr    error         = fmt.Errorf("offset-error")
+			consumer  *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			topic     string            = "some-topic"
+			partition int32             = 0
+			retErr    error             = fmt.Errorf("offset-error")
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -937,11 +937,11 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 			oldest int64 = 0
 			newest int64 = 10
 			// local     int64          = oldest
-			consumer  *MockConsumer  = defaultSaramaConsumerMock(t)
-			topic     string         = "some-topic"
-			partition int32          = 0
-			count     int64          = 0
-			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
+			consumer  *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			topic     string            = "some-topic"
+			partition int32             = 0
+			count     int64             = 0
+			updateCB  UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
 			}
@@ -994,11 +994,11 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
-			consumer       *MockConsumer = defaultSaramaConsumerMock(t)
-			topic          string        = "some-topic"
-			partition      int32         = 0
-			retErr         error         = fmt.Errorf("offset-error")
-			restartOnError bool          = false
+			consumer       *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			topic          string            = "some-topic"
+			partition      int32             = 0
+			retErr         error             = fmt.Errorf("offset-error")
+			restartOnError bool              = false
 		)
 		pt, bm, ctrl := defaultPT(
 			t,

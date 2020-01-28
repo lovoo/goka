@@ -69,6 +69,6 @@ func errStorageBuilder() storage.Builder {
 	}
 }
 
-func defaultSaramaConsumerMock(t *testing.T) *MockConsumer {
-	return NewMockConsumer(t, DefaultConfig())
+func defaultSaramaAutoConsumerMock(t *testing.T) *MockAutoConsumer {
+	return NewMockAutoConsumer(t, DefaultConfig())
 }
