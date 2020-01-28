@@ -251,6 +251,8 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		return
 	}
 
+	p.log.Printf("Offset stored locally: %d", localOffset)
+
 	loadOffset, hwm, err := p.findOffsetToLoad(localOffset)
 	if err != nil {
 		errs.Collect(err)

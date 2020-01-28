@@ -19,7 +19,7 @@ func defaultPT(
 	partition int32,
 	consumer sarama.Consumer,
 	updateCallback UpdateCallback,
-) (*PartitionTable, *builderMock) {
+) (*PartitionTable, *builderMock, *gomock.Controller) {
 
 	ctrl := gomock.NewController(t)
 	bm := newBuilderMock(ctrl)
@@ -31,7 +31,7 @@ func defaultPT(
 		updateCallback,
 		bm.getStorageBuilder(),
 		logger.Default(),
-	), bm
+	), bm, ctrl
 }
 
 func TestPT_createStorage(t *testing.T) {
@@ -42,13 +42,14 @@ func TestPT_createStorage(t *testing.T) {
 				return nil
 			}
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			partition,
 			nil,
 			callback,
 		)
+		defer ctrl.Finish()
 
 		equalSP := &storageProxy{
 			Storage:   bm.mst,
@@ -65,13 +66,14 @@ func TestPT_createStorage(t *testing.T) {
 		assertFuncEqual(t, sp.Update, equalSP.Update)
 	})
 	t.Run("fail_ctx_cancel", func(t *testing.T) {
-		pt, _ := defaultPT(
+		pt, _, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		pt.builder = errStorageBuilder()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
@@ -81,13 +83,14 @@ func TestPT_createStorage(t *testing.T) {
 		assertNil(t, sp)
 	})
 	t.Run("fail_storage", func(t *testing.T) {
-		pt, _ := defaultPT(
+		pt, _, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		pt.builder = errStorageBuilder()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
@@ -100,13 +103,14 @@ func TestPT_createStorage(t *testing.T) {
 
 func TestPT_setup(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
-		pt, _ := defaultPT(
+		pt, _, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -114,13 +118,14 @@ func TestPT_setup(t *testing.T) {
 		assertNil(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
-		pt, _ := defaultPT(
+		pt, _, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		pt.builder = errStorageBuilder()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
@@ -132,13 +137,14 @@ func TestPT_setup(t *testing.T) {
 
 func TestPT_close(t *testing.T) {
 	t.Run("on_storage", func(t *testing.T) {
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.mst.EXPECT().Close().AnyTimes()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -149,13 +155,14 @@ func TestPT_close(t *testing.T) {
 		assertNil(t, err)
 	})
 	t.Run("on_nil_storage", func(t *testing.T) {
-		pt, _ := defaultPT(
+		pt, _, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 
 		err := pt.Close()
 		assertNil(t, err)
@@ -169,13 +176,14 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 			newest int64 = 1312
 			local  int64 = 15
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
@@ -190,13 +198,14 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 			newest int64 = 1312
 			local  int64 = 175
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
@@ -211,13 +220,14 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 			newest int64 = 1312
 			local  int64 = 161111
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
@@ -231,13 +241,14 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 			oldest int64 = 161
 			newest int64 = 1312
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
@@ -251,13 +262,14 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 			oldest int64 = 161
 			newest int64 = 1312
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
@@ -270,13 +282,14 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		var (
 			expectedErr error = fmt.Errorf("some error")
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(int64(0), expectedErr)
 
 		_, _, err := pt.findOffsetToLoad(sarama.OffsetOldest)
@@ -287,13 +300,14 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 			oldest      int64 = 161
 			expectedErr error = fmt.Errorf("some error")
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(int64(0), expectedErr)
 
@@ -310,13 +324,14 @@ func TestPT_load(t *testing.T) {
 			local            int64 = 1311
 			stopAfterCatchup bool  = true
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.mst.EXPECT().GetOffset(sarama.OffsetOldest).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
@@ -337,13 +352,14 @@ func TestPT_load(t *testing.T) {
 			local            int64 = 1314
 			stopAfterCatchup bool  = true
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.mst.EXPECT().GetOffset(sarama.OffsetOldest).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
@@ -370,18 +386,19 @@ func TestPT_load(t *testing.T) {
 				return nil
 			}
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			updateCB,
 		)
+		defer ctrl.Finish()
 		pt.consumer = consumer
 		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
-		partConsumer := consumer.ExpectConsumePartition(topic, partition, oldest)
+		partConsumer := consumer.ExpectConsumePartition(topic, partition, AnyOffset)
 		partConsumer.ExpectMessagesDrainedOnClose()
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
@@ -415,7 +432,7 @@ func TestPT_load(t *testing.T) {
 func TestPT_loadMessages(t *testing.T) {
 	t.Run("consume_till_hwm", func(t *testing.T) {
 		var (
-			localOffset      int64         = 0
+			localOffset      int64         = sarama.OffsetOldest
 			partitionHwm     int64         = 1
 			stopAfterCatchup bool          = true
 			topic            string        = "some-topic"
@@ -431,13 +448,14 @@ func TestPT_loadMessages(t *testing.T) {
 			key   string = "some-key"
 			value []byte = []byte("some-vale")
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
 			nil,
 			updateCB,
 		)
+		defer ctrl.Finish()
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		partConsumer.YieldMessage(&sarama.ConsumerMessage{
 			Key:       []byte(key),
@@ -447,7 +465,7 @@ func TestPT_loadMessages(t *testing.T) {
 			Offset:    partitionHwm,
 		})
 		partConsumer.ExpectMessagesDrainedOnClose()
-		bm.mst.EXPECT().SetOffset(partitionHwm).Return(nil)
+		bm.mst.EXPECT().SetOffset(int64(0)).Return(nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -470,13 +488,14 @@ func TestPT_loadMessages(t *testing.T) {
 				return nil
 			}
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			updateCB,
 		)
+		defer ctrl.Finish()
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		partConsumer.YieldMessage(&sarama.ConsumerMessage{
 			Topic:     topic,
@@ -489,7 +508,7 @@ func TestPT_loadMessages(t *testing.T) {
 			Offset:    1,
 		})
 		partConsumer.ExpectMessagesDrainedOnClose()
-		bm.mst.EXPECT().SetOffset(int64(1)).Return(nil)
+		bm.mst.EXPECT().SetOffset(int64(0)).Return(nil)
 		bm.mst.EXPECT().SetOffset(int64(1)).Return(nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -513,13 +532,14 @@ func TestPT_loadMessages(t *testing.T) {
 				return nil
 			}
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			updateCB,
 		)
+		defer ctrl.Finish()
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -558,13 +578,14 @@ func TestPT_loadMessages(t *testing.T) {
 				return nil
 			}
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			updateCB,
 		)
+		defer ctrl.Finish()
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		err := pt.setup(ctx)
@@ -608,13 +629,14 @@ func TestPT_loadMessages(t *testing.T) {
 			partition        int32         = 0
 			consumer         *MockConsumer = defaultSaramaConsumerMock(t)
 		)
-		pt, _ := defaultPT(
+		pt, _, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		pt.stalledTimeout = time.Duration(0)
 		pt.stallPeriod = time.Nanosecond
 
@@ -651,13 +673,14 @@ func TestPT_loadMessages(t *testing.T) {
 				return retErr
 			}
 		)
-		pt, bm := defaultPT(
+		pt, _, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			updateCB,
 		)
+		defer ctrl.Finish()
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		partConsumer.YieldMessage(&sarama.ConsumerMessage{
 			Topic:     topic,
@@ -665,7 +688,6 @@ func TestPT_loadMessages(t *testing.T) {
 			Offset:    1,
 		})
 		partConsumer.ExpectMessagesDrainedOnClose()
-		bm.mst.EXPECT().SetOffset(int64(1)).Return(nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -692,13 +714,14 @@ func TestPT_storeEvent(t *testing.T) {
 				return nil
 			}
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			updateCB,
 		)
+		defer ctrl.Finish()
 		bm.mst.EXPECT().SetOffset(localOffset).Return(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -721,13 +744,14 @@ func TestPT_storeEvent(t *testing.T) {
 			}
 			retErr error = fmt.Errorf("storage err")
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			updateCB,
 		)
+		defer ctrl.Finish()
 		bm.mst.EXPECT().SetOffset(localOffset).Return(retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -744,13 +768,14 @@ func TestPT_Close(t *testing.T) {
 			partition int32  = 0
 			topic     string = "some-topic"
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.mst.EXPECT().Close().Return(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -764,13 +789,14 @@ func TestPT_Close(t *testing.T) {
 			partition int32  = 0
 			topic     string = "some-topic"
 		)
-		pt, _ := defaultPT(
+		pt, _, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		err := pt.Close()
 		assertNil(t, err)
 	})
@@ -782,13 +808,14 @@ func TestPT_markRecovered(t *testing.T) {
 			partition int32  = 0
 			topic     string = "some-topic"
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.mst.EXPECT().MarkRecovered().Return(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -805,13 +832,14 @@ func TestPT_markRecovered(t *testing.T) {
 			topic     string = "some-topic"
 			retErr    error  = fmt.Errorf("store error")
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		bm.mst.EXPECT().MarkRecovered().Return(retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -838,13 +866,14 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 				return nil
 			}
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			updateCB,
 		)
+		defer ctrl.Finish()
 		pt.consumer = consumer
 		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
@@ -855,7 +884,6 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 			bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
-			bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, gomock.Any()).Return(sarama.OffsetOldest, nil)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -885,13 +913,14 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 			partition int32         = 0
 			retErr    error         = fmt.Errorf("offset-error")
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		pt.consumer = consumer
 		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(int64(0), retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -905,42 +934,37 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 func TestPT_SetupAndCatchupForever(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		var (
-			oldest    int64          = 0
-			newest    int64          = 11
-			local     int64          = oldest
+			oldest int64 = 0
+			newest int64 = 10
+			// local     int64          = oldest
 			consumer  *MockConsumer  = defaultSaramaConsumerMock(t)
 			topic     string         = "some-topic"
 			partition int32          = 0
-			count     int32          = 0
+			count     int64          = 0
 			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
 			}
 			restartOnError bool = false
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			updateCB,
 		)
+		defer ctrl.Finish()
+		bm.useMemoryStorage()
 		pt.consumer = consumer
-		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
-		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
-		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
-		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
-		bm.mst.EXPECT().MarkRecovered().Return(nil)
-		partConsumer := consumer.ExpectConsumePartition(topic, partition, oldest)
-		partConsumer.ExpectMessagesDrainedOnClose()
+		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil).AnyTimes()
+		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil).AnyTimes()
+		partConsumer := consumer.ExpectConsumePartition(topic, partition, AnyOffset)
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
-			bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
-			bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
-			bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		go func() {
 			for {
@@ -950,18 +974,23 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 				default:
 				}
 				if count == 10 {
+					time.Sleep(time.Millisecond * 10)
 					cancel()
 					return
 				}
 			}
 		}()
 
-		recovered, errChan := pt.SetupAndCatchupForever(context.Background(), restartOnError)
+		recovered, errChan := pt.SetupAndCatchupForever(ctx, restartOnError)
+		var isRecovered bool
 		select {
 		case <-recovered:
+			isRecovered = true
+			cancel()
 		case <-ctx.Done():
 		}
 		assertNil(t, <-errChan)
+		assertTrue(t, isRecovered)
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
@@ -971,13 +1000,14 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 			retErr         error         = fmt.Errorf("offset-error")
 			restartOnError bool          = false
 		)
-		pt, bm := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
 			nil,
 			nil,
 		)
+		defer ctrl.Finish()
 		pt.consumer = consumer
 		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(int64(0), retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)

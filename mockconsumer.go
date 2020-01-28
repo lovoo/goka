@@ -276,7 +276,7 @@ func (pc *MockPartitionConsumer) Messages() <-chan *sarama.ConsumerMessage {
 }
 
 func (pc *MockPartitionConsumer) HighWaterMarkOffset() int64 {
-	return atomic.LoadInt64(&pc.highWaterMarkOffset) + 1
+	return atomic.LoadInt64(&pc.highWaterMarkOffset)
 }
 
 ///////////////////////////////////////////////////
@@ -294,7 +294,8 @@ func (pc *MockPartitionConsumer) YieldMessage(msg *sarama.ConsumerMessage) {
 
 	msg.Topic = pc.topic
 	msg.Partition = pc.partition
-	msg.Offset = atomic.AddInt64(&pc.highWaterMarkOffset, 1)
+	msg.Offset = atomic.LoadInt64(&pc.highWaterMarkOffset)
+	atomic.AddInt64(&pc.highWaterMarkOffset, 1)
 
 	pc.messages <- msg
 }

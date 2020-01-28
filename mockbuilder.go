@@ -10,22 +10,6 @@ import (
 	"github.com/lovoo/goka/storage"
 )
 
-// func createMockTopicManagerBuilder(t *testing.T) (TopicManagerBuilder, *MockTopicManager) {
-// 	tm := NewMockTopicManager(1, 1)
-
-// 	return func(broker []string) (TopicManager, error) {
-// 		return tm, nil
-// 	}, tm
-// }
-
-// func createMockProducer(t *testing.T) (ProducerBuilder, *MockProducer) {
-// 	pb := NewMockProducer(t)
-
-// 	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
-// 		return pb, nil
-// 	}, pb
-// }
-
 type builderMock struct {
 	ctrl          *gomock.Controller
 	st            storage.Storage
@@ -73,6 +57,10 @@ func (bm *builderMock) getProducerBuilder() ProducerBuilder {
 	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
 		return bm.producer, nil
 	}
+}
+
+func (bm *builderMock) useMemoryStorage() {
+	bm.st = storage.NewMemory()
 }
 
 func errStorageBuilder() storage.Builder {
