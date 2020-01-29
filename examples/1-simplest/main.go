@@ -102,7 +102,7 @@ func main() {
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	goka.ReplaceGlobalConfig(config)
 
-	tm, err := goka.NewSaramaTopicManager(brokers, goka.DefaultConfig(), tmc)
+	tm, err := goka.NewTopicManager(brokers, goka.DefaultConfig(), tmc)
 	if err != nil {
 		log.Fatalf("Error creating topic manager: %v", err)
 	}
