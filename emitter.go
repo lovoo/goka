@@ -1,8 +1,13 @@
 package goka
 
 import (
+	"errors"
 	"fmt"
 	"sync"
+)
+
+var (
+	ErrEmitterAlreadyClosed error = errors.New("emitter already closed")
 )
 
 // Emitter emits messages into a specific Kafka topic, first encoding the message with the given codec.
@@ -12,7 +17,8 @@ type Emitter struct {
 
 	topic string
 
-	wg sync.WaitGroup
+	wg   sync.WaitGroup
+	done chan struct{}
 }
 
 // NewEmitter creates a new emitter using passed brokers, topic, codec and possibly options.
@@ -27,10 +33,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 
 	opts := new(eoptions)
 
-	err := opts.applyOptions(topic, codec, options...)
-	if err != nil {
-		return nil, fmt.Errorf(errApplyOptions, err)
-	}
+	opts.applyOptions(topic, codec, options...)
 
 	prod, err := opts.builders.producer(brokers, opts.clientID, opts.hasher)
 	if err != nil {
@@ -41,11 +44,18 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 		codec:    codec,
 		producer: prod,
 		topic:    string(topic),
+		done:     make(chan struct{}),
 	}, nil
 }
 
 // Emit sends a message for passed key using the emitter's codec.
 func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
+	select {
+	case <-e.done:
+		return NewPromise().Finish(ErrEmitterAlreadyClosed), nil
+	default:
+	}
+
 	var (
 		err  error
 		data []byte
@@ -86,6 +96,7 @@ func (e *Emitter) EmitSync(key string, msg interface{}) error {
 
 // Finish waits until the emitter is finished producing all pending messages.
 func (e *Emitter) Finish() error {
+	close(e.done)
 	e.wg.Wait()
 	return e.producer.Close()
 }

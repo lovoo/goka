@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"errors"
 	"fmt"
 	"hash"
 	"testing"
@@ -8,6 +9,10 @@ import (
 	"github.com/golang/mock/gomock"
 
 	"github.com/lovoo/goka/storage"
+)
+
+var (
+	errProducerBuilder error = errors.New("building producer failed on purpose")
 )
 
 type builderMock struct {
@@ -56,6 +61,12 @@ func (bm *builderMock) getTopicManagerBuilder() TopicManagerBuilder {
 func (bm *builderMock) getProducerBuilder() ProducerBuilder {
 	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
 		return bm.producer, nil
+	}
+}
+
+func (bm *builderMock) getErrorProducerBuilder() ProducerBuilder {
+	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
+		return nil, errProducerBuilder
 	}
 }
 
