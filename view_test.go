@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	recoveredMessages int
-	group             Group  = "group-name"
-	topic             string = tableName(group)
+	viewTestRecoveredMessages int
+	viewTestGroup             Group  = "group-name"
+	viewTestTopic             string = tableName(viewTestGroup)
 )
 
 // constHasher implements a hasher that will always return the specified
@@ -64,7 +64,7 @@ func NewConstHasher(part uint32) *constHasher {
 func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock, *gomock.Controller) {
 	ctrl := gomock.NewController(t)
 	bm := newBuilderMock(ctrl)
-	recoveredMessages = 0
+	viewTestRecoveredMessages = 0
 	opts := &voptions{
 		log:        logger.Default(),
 		tableCodec: new(codec.String),
@@ -72,7 +72,7 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 			if err := DefaultUpdate(s, partition, key, value); err != nil {
 				return err
 			}
-			recoveredMessages++
+			viewTestRecoveredMessages++
 			return nil
 		},
 		hasher: DefaultHasher(),
@@ -83,7 +83,7 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 		return consumer, nil
 	}
 
-	view := &View{topic: topic, opts: opts}
+	view := &View{topic: viewTestTopic, opts: opts}
 	return view, bm, ctrl
 }
 
@@ -398,7 +398,7 @@ func TestView_Topic(t *testing.T) {
 		defer ctrl.Finish()
 
 		ret := view.Topic()
-		assertTrue(t, ret == topic)
+		assertTrue(t, ret == viewTestTopic)
 	})
 }
 
@@ -600,7 +600,7 @@ func TestView_Run(t *testing.T) {
 		bm.useMemoryStorage()
 
 		pt := newPartitionTable(
-			topic,
+			viewTestTopic,
 			partition,
 			consumer,
 			bm.tmgr,
@@ -615,7 +615,7 @@ func TestView_Run(t *testing.T) {
 
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil).AnyTimes()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil).AnyTimes()
-		partConsumer := consumer.ExpectConsumePartition(topic, partition, AnyOffset)
+		partConsumer := consumer.ExpectConsumePartition(viewTestTopic, partition, AnyOffset)
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 		}
@@ -653,7 +653,7 @@ func TestView_Run(t *testing.T) {
 		bm.useMemoryStorage()
 
 		pt := newPartitionTable(
-			topic,
+			viewTestTopic,
 			partition,
 			consumer,
 			bm.tmgr,
@@ -686,7 +686,7 @@ func TestView_createPartitions(t *testing.T) {
 		var (
 			partition int32 = 0
 		)
-		bm.tmgr.EXPECT().Partitions(topic).Return([]int32{partition}, nil)
+		bm.tmgr.EXPECT().Partitions(viewTestTopic).Return([]int32{partition}, nil)
 		bm.tmgr.EXPECT().Close()
 
 		ret := view.createPartitions([]string{""})
@@ -700,7 +700,7 @@ func TestView_createPartitions(t *testing.T) {
 		var (
 			retErr error = fmt.Errorf("tmgr-partition-error")
 		)
-		bm.tmgr.EXPECT().Partitions(topic).Return(nil, retErr)
+		bm.tmgr.EXPECT().Partitions(viewTestTopic).Return(nil, retErr)
 		bm.tmgr.EXPECT().Close()
 
 		ret := view.createPartitions([]string{""})
@@ -736,10 +736,10 @@ func TestView_NewView(t *testing.T) {
 		var (
 			partition int32 = 0
 		)
-		bm.tmgr.EXPECT().Partitions(topic).Return([]int32{partition}, nil).AnyTimes()
+		bm.tmgr.EXPECT().Partitions(viewTestTopic).Return([]int32{partition}, nil).AnyTimes()
 		bm.tmgr.EXPECT().Close().AnyTimes()
 
-		view, err := NewView([]string{""}, Table(topic), &codec.Int64{}, []ViewOption{
+		view, err := NewView([]string{""}, Table(viewTestTopic), &codec.Int64{}, []ViewOption{
 			WithViewTopicManagerBuilder(bm.getTopicManagerBuilder()),
 			WithViewConsumerSaramaBuilder(func(brokers []string, clientID string) (sarama.Consumer, error) {
 				return NewMockAutoConsumer(t, DefaultConfig()), nil
@@ -756,10 +756,10 @@ func TestView_NewView(t *testing.T) {
 		var (
 			retErr error = fmt.Errorf("tmgr-error")
 		)
-		bm.tmgr.EXPECT().Partitions(topic).Return(nil, retErr).AnyTimes()
+		bm.tmgr.EXPECT().Partitions(viewTestTopic).Return(nil, retErr).AnyTimes()
 		bm.tmgr.EXPECT().Close().AnyTimes()
 
-		view, err := NewView([]string{""}, Table(topic), &codec.Int64{}, []ViewOption{
+		view, err := NewView([]string{""}, Table(viewTestTopic), &codec.Int64{}, []ViewOption{
 			WithViewTopicManagerBuilder(bm.getTopicManagerBuilder()),
 			WithViewConsumerSaramaBuilder(func(brokers []string, clientID string) (sarama.Consumer, error) {
 				return NewMockAutoConsumer(t, DefaultConfig()), nil

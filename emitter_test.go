@@ -12,17 +12,17 @@ import (
 )
 
 var (
-	clientID string   = "161"
-	brokers  []string = []string{"0"}
-	topic    Stream   = "emitter-stream"
-	intCodec Codec    = new(codec.Int64)
+	emitterTestClientID string   = "161"
+	emitterTestBrokers  []string = []string{"0"}
+	emitterTestTopic    Stream   = "emitter-stream"
+	emitterIntCodec     Codec    = new(codec.Int64)
 )
 
 func createEmitter(t *testing.T, options ...EmitterOption) (*Emitter, *builderMock, *gomock.Controller) {
 	ctrl := NewMockController(t)
 	bm := newBuilderMock(ctrl)
-	emitter, _ := NewEmitter(brokers, topic, intCodec, append([]EmitterOption{
-		WithEmitterClientID(clientID),
+	emitter, _ := NewEmitter(emitterTestBrokers, emitterTestTopic, emitterIntCodec, append([]EmitterOption{
+		WithEmitterClientID(emitterTestClientID),
 		WithEmitterTopicManagerBuilder(bm.getTopicManagerBuilder()),
 		WithEmitterProducerBuilder(bm.getProducerBuilder()),
 		WithEmitterHasher(func() hash.Hash32 { return NewConstHasher(0) }),
@@ -34,23 +34,23 @@ func TestEmitter_NewEmitter(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		ctrl := NewMockController(t)
 		bm := newBuilderMock(ctrl)
-		emitter, err := NewEmitter(brokers, topic, intCodec, []EmitterOption{
-			WithEmitterClientID(clientID),
+		emitter, err := NewEmitter(emitterTestBrokers, emitterTestTopic, emitterIntCodec, []EmitterOption{
+			WithEmitterClientID(emitterTestClientID),
 			WithEmitterTopicManagerBuilder(bm.getTopicManagerBuilder()),
 			WithEmitterProducerBuilder(bm.getProducerBuilder()),
 			WithEmitterHasher(func() hash.Hash32 { return NewConstHasher(0) }),
 		}...)
 		assertNil(t, err)
 		assertNotNil(t, emitter)
-		assertTrue(t, emitter.codec == intCodec)
+		assertTrue(t, emitter.codec == emitterIntCodec)
 		assertEqual(t, emitter.producer, bm.producer)
-		assertTrue(t, emitter.topic == string(topic))
+		assertTrue(t, emitter.topic == string(emitterTestTopic))
 	})
 	t.Run("fail", func(t *testing.T) {
 		ctrl := NewMockController(t)
 		bm := newBuilderMock(ctrl)
 		defer ctrl.Finish()
-		emitter, err := NewEmitter(brokers, topic, intCodec, WithEmitterProducerBuilder(bm.getErrorProducerBuilder()))
+		emitter, err := NewEmitter(emitterTestBrokers, emitterTestTopic, emitterIntCodec, WithEmitterProducerBuilder(bm.getErrorProducerBuilder()))
 		assertNotNil(t, err)
 		assertNil(t, emitter)
 	})
