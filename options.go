@@ -446,7 +446,7 @@ func WithEmitterTester(t Tester) EmitterOption {
 		t.RegisterEmitter(topic, codec)
 	}
 }
-func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOption) error {
+func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOption) {
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
 	opt.hasher = DefaultHasher()
@@ -462,6 +462,4 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
-
-	return nil
 }
