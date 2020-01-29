@@ -40,8 +40,8 @@ func createTestConsumerGroupBuilder(t *testing.T) (ConsumerGroupBuilder, *MockCo
 	}, mock
 }
 
-func createTestConsumerBuilder(t *testing.T) (SaramaConsumerBuilder, *MockConsumer) {
-	cons := NewMockConsumer(t, nil)
+func createTestConsumerBuilder(t *testing.T) (SaramaConsumerBuilder, *MockAutoConsumer) {
+	cons := NewMockAutoConsumer(t, nil)
 
 	return func(brokers []string, clientID string) (sarama.Consumer, error) {
 		return cons, nil

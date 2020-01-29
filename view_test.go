@@ -1,543 +1,771 @@
 package goka
 
-// import (
-// 	"context"
-// 	"errors"
-// 	"hash"
-// 	"testing"
-// 	"time"
-
-// 	"github.com/lovoo/goka/codec"
-// 	"github.com/lovoo/goka/kafka"
-// 	"github.com/lovoo/goka/logger"
-// 	"github.com/lovoo/goka/mock"
-// 	"github.com/lovoo/goka/storage"
-
-// 	"github.com/facebookgo/ensure"
-// 	"github.com/golang/mock/gomock"
-// )
-
-// var (
-// 	recoveredMessages int
-// )
-
-// // constHasher implements a hasher that will always return the specified
-// // partition. Doesn't properly implement the Hash32 interface, use only in
-// // tests.
-// type constHasher struct {
-// 	partition uint32
-// }
-
-// func (ch *constHasher) Sum(b []byte) []byte {
-// 	return nil
-// }
-
-// func (ch *constHasher) Sum32() uint32 {
-// 	return ch.partition
-// }
-
-// func (ch *constHasher) BlockSize() int {
-// 	return 0
-// }
-
-// func (ch *constHasher) Reset() {}
-
-// func (ch *constHasher) Size() int { return 4 }
-
-// func (ch *constHasher) Write(p []byte) (n int, err error) {
-// 	return len(p), nil
-// }
-
-// // NewConstHasher creates a constant hasher that hashes any value to 0.
-// func NewConstHasher(part uint32) hash.Hash32 {
-// 	return &constHasher{partition: part}
-// }
-
-// func createTestView(t *testing.T, consumer kafka.Consumer, sb storage.Builder, tm kafka.TopicManager) *View {
-// 	recoveredMessages = 0
-// 	opts := &voptions{
-// 		log:        logger.Default(),
-// 		tableCodec: new(codec.String),
-// 		updateCallback: func(s storage.Storage, partition int32, key string, value []byte) error {
-// 			if err := DefaultUpdate(s, partition, key, value); err != nil {
-// 				return err
-// 			}
-// 			recoveredMessages++
-// 			return nil
-// 		},
-// 		hasher: DefaultHasher(),
-// 	}
-// 	opts.builders.storage = sb
-// 	opts.builders.topicmgr = func(brokers []string) (kafka.TopicManager, error) {
-// 		return tm, nil
-// 	}
-// 	opts.builders.consumer = func(brokers []string, topic, id string) (kafka.Consumer, error) {
-// 		return consumer, nil
-// 	}
-
-// 	reader := &View{topic: tableName(group), opts: opts}
-// 	return reader
-// }
-
-// func TestView_createPartitions(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
-// 	var (
-// 		consumer = NewMockConsumer(ctrl)
-// 		st       = NewMockStorage(ctrl)
-// 		sb       = func(topic string, partition int32) (storage.Storage, error) {
-// 			return st, nil
-// 		}
-// 		tm = NewMockTopicManager(ctrl)
-// 	)
-
-// 	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1}, nil)
-// 	tm.EXPECT().Close()
-// 	v := createTestView(t, consumer, sb, tm)
-
-// 	err := v.createPartitions(nil)
-// 	ensure.Nil(t, err)
-
-// 	tm.EXPECT().Partitions(tableName(group)).Return(nil, errors.New("some error"))
-// 	tm.EXPECT().Close()
-// 	v = createTestView(t, consumer, sb, tm)
-// 	err = v.createPartitions(nil)
-// 	ensure.NotNil(t, err)
-
-// 	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 4}, nil)
-// 	tm.EXPECT().Close()
-// 	v = createTestView(t, consumer, sb, tm)
-// 	err = v.createPartitions(nil)
-// 	ensure.NotNil(t, err)
-
-// 	sb = func(topic string, partition int32) (storage.Storage, error) {
-// 		return nil, errors.New("some error")
-// 	}
-// 	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1}, nil)
-// 	tm.EXPECT().Close()
-// 	v = createTestView(t, consumer, sb, tm)
-// 	err = v.createPartitions(nil)
-// 	ensure.NotNil(t, err)
-
-// }
-
-// func TestView_HasGet(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
-
-// 	var (
-// 		st = NewMockStorage(ctrl)
-// 		sb = func(topic string, partition int32) (storage.Storage, error) {
-// 			return st, nil
-// 		}
-// 		consumer = NewMockConsumer(ctrl)
-// 		tm       = NewMockTopicManager(ctrl)
-// 		v        = createTestView(t, consumer, sb, tm)
-// 	)
-
-// 	gomock.InOrder(
-// 		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1, 2}, nil),
-// 		tm.EXPECT().Close(),
-// 		st.EXPECT().Has("item1").Return(false, nil),
-// 		st.EXPECT().Get("item1").Return([]byte("item1-value"), nil),
-// 	)
-
-// 	err := v.createPartitions(nil)
-// 	ensure.Nil(t, err)
-
-// 	hasItem, err := v.Has("item1")
-// 	ensure.Nil(t, err)
-// 	ensure.False(t, hasItem)
-
-// 	value, err := v.Get("item1")
-// 	ensure.Nil(t, err)
-// 	ensure.DeepEqual(t, value.(string), "item1-value")
-// }
-
-// func TestView_StartStop(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
-
-// 	var (
-// 		st = NewMockStorage(ctrl)
-// 		sb = func(topic string, partition int32) (storage.Storage, error) {
-// 			return st, nil
-// 		}
-// 		consumer     = NewMockConsumer(ctrl)
-// 		tm           = NewMockTopicManager(ctrl)
-// 		v            = createTestView(t, consumer, sb, tm)
-// 		initial      = make(chan bool)
-// 		final        = make(chan bool)
-// 		ch           = make(chan kafka.Event)
-// 		chClose      = func() { close(ch) }
-// 		initialClose = func() { close(initial) }
-
-// 		offset = int64(123)
-// 		par    = int32(0)
-// 	)
-
-// 	gomock.InOrder(
-// 		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0}, nil),
-// 		tm.EXPECT().Close(),
-// 		consumer.EXPECT().Events().Do(initialClose).Return(ch),
-// 	)
-// 	gomock.InOrder(
-// 		st.EXPECT().Open(),
-// 		st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil),
-// 		consumer.EXPECT().AddPartition(tableName(group), int32(par), int64(offset)),
-// 	)
-// 	gomock.InOrder(
-// 		consumer.EXPECT().RemovePartition(tableName(group), int32(par)),
-// 		consumer.EXPECT().Close().Do(chClose).Return(nil),
-// 		st.EXPECT().Close(),
-// 	)
-
-// 	err := v.createPartitions(nil)
-// 	ensure.Nil(t, err)
-
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	go func() {
-// 		errs := v.Run(ctx)
-// 		ensure.Nil(t, errs)
-// 		close(final)
-// 	}()
-
-// 	err = doTimed(t, func() {
-// 		<-initial
-// 		cancel()
-// 		<-final
-// 	})
-// 	ensure.Nil(t, err)
-// }
-
-// func TestView_StartStopWithError(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
-
-// 	var (
-// 		st = NewMockStorage(ctrl)
-// 		sb = func(topic string, partition int32) (storage.Storage, error) {
-// 			return st, nil
-// 		}
-// 		consumer = NewMockConsumer(ctrl)
-// 		tm       = NewMockTopicManager(ctrl)
-// 		v        = createTestView(t, consumer, sb, tm)
-// 		final    = make(chan bool)
-// 		ch       = make(chan kafka.Event)
-// 	)
-
-// 	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0}, nil)
-// 	tm.EXPECT().Close()
-// 	err := v.createPartitions(nil)
-// 	ensure.Nil(t, err)
-
-// 	consumer.EXPECT().Events().Return(ch)
-// 	st.EXPECT().Open()
-// 	st.EXPECT().GetOffset(int64(-2)).Return(int64(0), errors.New("some error1"))
-// 	st.EXPECT().Close()
-// 	consumer.EXPECT().Close().Return(errors.New("some error2")).Do(func() { close(ch) })
-
-// 	go func() {
-// 		viewErrs := v.Run(context.Background())
-// 		ensure.StringContains(t, viewErrs.Error(), "error1")
-// 		ensure.StringContains(t, viewErrs.Error(), "error2")
-// 		close(final)
-// 	}()
-
-// 	err = doTimed(t, func() {
-// 		<-final
-// 	})
-// 	ensure.Nil(t, err)
-// }
-
-// func TestView_RestartNonRestartable(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
-
-// 	var (
-// 		st = NewMockStorage(ctrl)
-// 		sb = func(topic string, partition int32) (storage.Storage, error) {
-// 			return st, nil
-// 		}
-// 		consumer     = NewMockConsumer(ctrl)
-// 		tm           = NewMockTopicManager(ctrl)
-// 		v            = createTestView(t, consumer, sb, tm)
-// 		initial      = make(chan bool)
-// 		final        = make(chan bool)
-// 		ch           = make(chan kafka.Event)
-// 		chClose      = func() { close(ch) }
-// 		initialClose = func() { close(initial) }
-
-// 		offset = int64(123)
-// 		par    = int32(0)
-// 	)
-// 	v.opts.restartable = false
-
-// 	gomock.InOrder(
-// 		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0}, nil),
-// 		tm.EXPECT().Close(),
-// 		consumer.EXPECT().Events().Do(initialClose).Return(ch),
-// 	)
-// 	gomock.InOrder(
-// 		st.EXPECT().Open(),
-// 		st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil),
-// 		consumer.EXPECT().AddPartition(tableName(group), int32(par), int64(offset)),
-// 	)
-// 	gomock.InOrder(
-// 		consumer.EXPECT().RemovePartition(tableName(group), int32(par)),
-// 		consumer.EXPECT().Close().Do(chClose).Return(nil),
-// 		st.EXPECT().Close(),
-// 	)
-
-// 	err := v.createPartitions(nil)
-// 	ensure.Nil(t, err)
-
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	go func() {
-// 		errs := v.Run(ctx)
-// 		ensure.Nil(t, errs)
-// 		close(final)
-// 	}()
-
-// 	err = doTimed(t, func() {
-// 		<-initial
-// 		cancel()
-// 		<-final
-// 	})
-// 	ensure.Nil(t, err)
-
-// 	// restart view
-// 	final = make(chan bool)
-
-// 	go func() {
-// 		err = v.Run(context.Background())
-// 		ensure.NotNil(t, err)
-// 		ensure.StringContains(t, err.Error(), "terminated")
-// 		close(final)
-// 	}()
-
-// 	err = doTimed(t, func() {
-// 		<-final
-// 	})
-// 	ensure.Nil(t, err)
-
-// 	err = v.Terminate() // silent
-// 	ensure.Nil(t, err)
-// }
-
-// func TestView_Restart(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
-
-// 	var (
-// 		st = NewMockStorage(ctrl)
-// 		sb = func(topic string, partition int32) (storage.Storage, error) {
-// 			return st, nil
-// 		}
-// 		consumer     = NewMockConsumer(ctrl)
-// 		tm           = NewMockTopicManager(ctrl)
-// 		v            = createTestView(t, consumer, sb, tm)
-// 		initial      = make(chan bool)
-// 		final        = make(chan bool)
-// 		ch           = make(chan kafka.Event)
-// 		chClose      = func() { close(ch) }
-// 		initialClose = func() { close(initial) }
-
-// 		offset = int64(123)
-// 		par    = int32(0)
-// 	)
-// 	v.opts.restartable = true
-
-// 	gomock.InOrder(
-// 		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0}, nil),
-// 		tm.EXPECT().Close(),
-// 		consumer.EXPECT().Events().Do(initialClose).Return(ch),
-// 	)
-// 	gomock.InOrder(
-// 		st.EXPECT().Open(),
-// 		st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil),
-// 		consumer.EXPECT().AddPartition(tableName(group), int32(par), int64(offset)),
-// 	)
-// 	gomock.InOrder(
-// 		consumer.EXPECT().RemovePartition(tableName(group), int32(par)),
-// 		consumer.EXPECT().Close().Do(chClose).Return(nil),
-// 	)
-
-// 	err := v.createPartitions(nil)
-// 	ensure.Nil(t, err)
-
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	go func() {
-// 		errs := v.Run(ctx)
-// 		ensure.Nil(t, errs)
-// 		close(final)
-// 	}()
-
-// 	err = doTimed(t, func() {
-// 		<-initial
-// 		cancel()
-// 		<-final
-// 	})
-// 	ensure.Nil(t, err)
-
-// 	// restart view
-// 	final = make(chan bool)
-// 	initial = make(chan bool, 3)
-// 	initialPush := func() { initial <- true }
-// 	ch = make(chan kafka.Event)
-// 	chClose = func() { close(ch) }
-
-// 	// st.Open is not called because of openOnce in the storageProxy
-// 	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil)
-// 	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(offset))
-// 	consumer.EXPECT().Events().Return(ch)
-// 	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
-// 	consumer.EXPECT().Close().Do(chClose).Return(nil)
-
-// 	_ = initialPush
-// 	ctx, cancel = context.WithCancel(context.Background())
-// 	go func() {
-// 		err = v.Run(ctx)
-// 		ensure.Nil(t, err)
-// 		close(final)
-// 	}()
-// 	time.Sleep(2 * time.Second)
-
-// 	err = doTimed(t, func() {
-// 		cancel()
-// 		<-final
-// 	})
-// 	ensure.Nil(t, err)
-
-// 	st.EXPECT().Close()
-// 	err = v.Terminate()
-// 	ensure.Nil(t, err)
-// }
-
-// func TestView_GetErrors(t *testing.T) {
-// 	v := &View{opts: &voptions{hasher: DefaultHasher()}}
-// 	_, err := v.Get("hey")
-// 	ensure.NotNil(t, err)
-
-// 	_, err = v.Has("hey")
-// 	ensure.NotNil(t, err)
-
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
-
-// 	var (
-// 		st = NewMockStorage(ctrl)
-// 		sb = func(topic string, partition int32) (storage.Storage, error) {
-// 			return st, nil
-// 		}
-// 		consumer = NewMockConsumer(ctrl)
-// 		tm       = NewMockTopicManager(ctrl)
-// 	)
-
-// 	v = createTestView(t, consumer, sb, tm)
-
-// 	tm.EXPECT().Partitions(tableName(group)).Return([]int32{0}, nil)
-// 	tm.EXPECT().Close()
-// 	err = v.createPartitions(nil)
-// 	ensure.Nil(t, err)
-
-// 	st.EXPECT().Get("hey").Return(nil, errors.New("some error"))
-// 	_, err = v.Get("hey")
-// 	ensure.NotNil(t, err)
-// }
-
-// func TestNewView(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
-
-// 	var (
-// 		consumer = NewMockConsumer(ctrl)
-// 		tm       = NewMockTopicManager(ctrl)
-// 	)
-// 	_, err := NewView(nil, GroupTable(group), new(codec.Bytes), WithViewConsumerBuilder(createConsumerBuilder(nil)))
-// 	ensure.NotNil(t, err)
-
-// 	gomock.InOrder(
-// 		tm.EXPECT().Partitions(tableName(group)).Return(nil, errors.New("some error")),
-// 		tm.EXPECT().Close(),
-// 	)
-// 	_, err = NewView(nil, GroupTable(group), new(codec.Bytes),
-// 		WithViewConsumerBuilder(createConsumerBuilder(consumer)),
-// 		WithViewTopicManagerBuilder(createTopicManagerBuilder(tm)))
-// 	ensure.NotNil(t, err)
-
-// 	gomock.InOrder(
-// 		tm.EXPECT().Partitions(tableName(group)).Return([]int32{0, 1, 2}, nil),
-// 		tm.EXPECT().Close(),
-// 	)
-// 	v, err := NewView(nil, GroupTable(group), new(codec.Bytes),
-// 		WithViewConsumerBuilder(createConsumerBuilder(consumer)),
-// 		WithViewTopicManagerBuilder(createTopicManagerBuilder(tm)))
-// 	ensure.Nil(t, err)
-// 	ensure.DeepEqual(t, v.topic, tableName(group))
-// 	ensure.DeepEqual(t, v.consumer, nil) // is set first upon start
-// 	ensure.True(t, len(v.partitions) == 3)
-// }
-
-// func TestView_Evict(t *testing.T) {
-// 	key := "some-key"
-// 	val := "some-val"
-
-// 	st := storage.NewMemory()
-// 	err := st.Set(key, []byte(val))
-// 	ensure.Nil(t, err)
-
-// 	v := &View{
-// 		// partitions: []*partition{
-// 		// 	{st: &storageProxy{partition: 0, Storage: st}},
-// 		// },
-// 		opts: &voptions{
-// 			hasher: func() hash.Hash32 {
-// 				return NewConstHasher(0)
-// 			},
-// 			tableCodec: new(codec.String),
-// 		},
-// 	}
-
-// 	vinf, err := v.Get(key)
-// 	ensure.Nil(t, err)
-// 	ensure.DeepEqual(t, vinf, val)
-
-// 	err = v.Evict(key)
-// 	ensure.Nil(t, err)
-
-// 	vinf, err = v.Get(key)
-// 	ensure.Nil(t, err)
-// 	ensure.Nil(t, vinf)
-// }
-
-// func doTimed(t *testing.T, do func()) error {
-// 	ch := make(chan bool)
-// 	go func() {
-// 		do()
-// 		close(ch)
-// 	}()
-
-// 	select {
-// 	case <-time.After(2 * time.Second):
-// 		t.Fail()
-// 		return errors.New("function took too long to complete")
-// 	case <-ch:
-// 	}
-
-// 	return nil
-// }
-
-// func ExampleView_simple() {
-// 	var (
-// 		brokers       = []string{"localhost:9092"}
-// 		group   Group = "group-name"
-// 	)
-// 	v, err := NewView(brokers, GroupTable(group), nil)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	if err = v.Run(context.Background()); err != nil {
-// 		panic(err)
-// 	}
-// }
+import (
+	"context"
+	"fmt"
+	"hash"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/Shopify/sarama"
+	"github.com/golang/mock/gomock"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/logger"
+	"github.com/lovoo/goka/storage"
+)
+
+var (
+	recoveredMessages int
+	group             Group  = "group-name"
+	topic             string = tableName(group)
+)
+
+// constHasher implements a hasher that will always return the specified
+// partition. Doesn't properly implement the Hash32 interface, use only in
+// tests.
+type constHasher struct {
+	partition uint32
+	returnErr bool
+}
+
+func (ch *constHasher) Sum(b []byte) []byte {
+	return nil
+}
+
+func (ch *constHasher) Sum32() uint32 {
+	return ch.partition
+}
+
+func (ch *constHasher) BlockSize() int {
+	return 0
+}
+
+func (ch *constHasher) Reset() {}
+
+func (ch *constHasher) Size() int { return 4 }
+
+func (ch *constHasher) Write(p []byte) (int, error) {
+	if ch.returnErr {
+		return 0, fmt.Errorf("constHasher write error")
+	}
+	return len(p), nil
+}
+
+func (ch *constHasher) ReturnError() {
+	ch.returnErr = true
+}
+
+// NewConstHasher creates a constant hasher that hashes any value to 0.
+func NewConstHasher(part uint32) *constHasher {
+	return &constHasher{partition: part}
+}
+
+func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock, *gomock.Controller) {
+	ctrl := gomock.NewController(t)
+	bm := newBuilderMock(ctrl)
+	recoveredMessages = 0
+	opts := &voptions{
+		log:        logger.Default(),
+		tableCodec: new(codec.String),
+		updateCallback: func(s storage.Storage, partition int32, key string, value []byte) error {
+			if err := DefaultUpdate(s, partition, key, value); err != nil {
+				return err
+			}
+			recoveredMessages++
+			return nil
+		},
+		hasher: DefaultHasher(),
+	}
+	opts.builders.storage = bm.getStorageBuilder()
+	opts.builders.topicmgr = bm.getTopicManagerBuilder()
+	opts.builders.consumerSarama = func(brokers []string, clientID string) (sarama.Consumer, error) {
+		return consumer, nil
+	}
+
+	view := &View{topic: topic, opts: opts}
+	return view, bm, ctrl
+}
+
+func TestView_hash(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		view.partitions = []*PartitionTable{
+			&PartitionTable{},
+		}
+
+		h, err := view.hash("a")
+		assertNil(t, err)
+		assertTrue(t, h == 0)
+	})
+	t.Run("fail_hash", func(t *testing.T) {
+		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		view.partitions = []*PartitionTable{
+			&PartitionTable{},
+		}
+		view.opts.hasher = func() hash.Hash32 {
+			hasher := NewConstHasher(0)
+			hasher.ReturnError()
+			return hasher
+		}
+
+		_, err := view.hash("a")
+		assertNotNil(t, err)
+	})
+	t.Run("fail_no_partition", func(t *testing.T) {
+		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		_, err := view.hash("a")
+		assertNotNil(t, err)
+	})
+}
+
+func TestView_find(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			key   string        = "some-key"
+			proxy *storageProxy = &storageProxy{}
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.hasher = func() hash.Hash32 {
+			hasher := NewConstHasher(0)
+			return hasher
+		}
+
+		st, err := view.find(key)
+		assertNil(t, err)
+		assertEqual(t, st, proxy)
+	})
+	t.Run("fail", func(t *testing.T) {
+		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		view.partitions = []*PartitionTable{
+			&PartitionTable{},
+		}
+		view.opts.hasher = func() hash.Hash32 {
+			hasher := NewConstHasher(0)
+			hasher.ReturnError()
+			return hasher
+		}
+
+		_, err := view.find("a")
+		assertNotNil(t, err)
+	})
+}
+
+func TestView_Get(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage:   bm.mst,
+				partition: 0,
+				update: func(s storage.Storage, partition int32, key string, value []byte) error {
+					return nil
+				},
+			}
+			key   string = "some-key"
+			value int64  = 3
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.tableCodec = &codec.Int64{}
+
+		bm.mst.EXPECT().Get(key).Return([]byte(strconv.FormatInt(value, 10)), nil)
+
+		ret, err := view.Get(key)
+		assertNil(t, err)
+		assertTrue(t, ret == value)
+	})
+	t.Run("succeed_nil", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage:   bm.mst,
+				partition: 0,
+				update: func(s storage.Storage, partition int32, key string, value []byte) error {
+					return nil
+				},
+			}
+			key string = "some-key"
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.tableCodec = &codec.Int64{}
+
+		bm.mst.EXPECT().Get(key).Return(nil, nil)
+
+		ret, err := view.Get(key)
+		assertNil(t, err)
+		assertTrue(t, ret == nil)
+	})
+	t.Run("fail_get", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage:   bm.mst,
+				partition: 0,
+				update: func(s storage.Storage, partition int32, key string, value []byte) error {
+					return nil
+				},
+			}
+			key    string = "some-key"
+			errRet error  = fmt.Errorf("get failed")
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.tableCodec = &codec.Int64{}
+
+		bm.mst.EXPECT().Get(key).Return(nil, errRet)
+
+		_, err := view.Get(key)
+		assertNotNil(t, err)
+	})
+}
+
+func TestView_Has(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage: bm.mst,
+			}
+			key string = "some-key"
+			has bool   = true
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.hasher = func() hash.Hash32 {
+			hasher := NewConstHasher(0)
+			return hasher
+		}
+
+		bm.mst.EXPECT().Has(key).Return(has, nil)
+
+		ret, err := view.Has(key)
+		assertNil(t, err)
+		assertEqual(t, ret, has)
+	})
+	t.Run("succeed_false", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage: bm.mst,
+			}
+			key string = "some-key"
+			has bool   = false
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.hasher = func() hash.Hash32 {
+			hasher := NewConstHasher(0)
+			return hasher
+		}
+
+		bm.mst.EXPECT().Has(key).Return(has, nil)
+
+		ret, err := view.Has(key)
+		assertNil(t, err)
+		assertEqual(t, ret, has)
+	})
+	t.Run("fail_err", func(t *testing.T) {
+		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			key string = "some-key"
+			has bool   = false
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{},
+		}
+		view.opts.hasher = func() hash.Hash32 {
+			hasher := NewConstHasher(0)
+			hasher.ReturnError()
+			return hasher
+		}
+
+		ret, err := view.Has(key)
+		assertNotNil(t, err)
+		assertTrue(t, ret == has)
+	})
+}
+
+func TestView_Evict(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			key   string        = "some-key"
+			proxy *storageProxy = &storageProxy{
+				Storage: bm.mst,
+			}
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.hasher = func() hash.Hash32 {
+			hasher := NewConstHasher(0)
+			return hasher
+		}
+		bm.mst.EXPECT().Delete(key).Return(nil)
+
+		err := view.Evict(key)
+		assertNil(t, err)
+	})
+}
+
+func TestView_Recovered(t *testing.T) {
+	t.Run("true", func(t *testing.T) {
+		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			hasRecovered bool = true
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				state: NewSignal(State(PartitionRunning)).SetState(State(PartitionRunning)),
+			},
+		}
+		ret := view.Recovered()
+		assertTrue(t, ret == hasRecovered)
+	})
+	t.Run("true", func(t *testing.T) {
+		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			hasRecovered bool = false
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				state: NewSignal(State(PartitionRunning), State(PartitionRecovering)).SetState(State(PartitionRecovering)),
+			},
+			&PartitionTable{
+				state: NewSignal(State(PartitionRunning)).SetState(State(PartitionRunning)),
+			},
+		}
+		ret := view.Recovered()
+		assertTrue(t, ret == hasRecovered)
+	})
+}
+
+func TestView_Topic(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		ret := view.Topic()
+		assertTrue(t, ret == topic)
+	})
+}
+
+func TestView_close(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage: bm.mst,
+			}
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
+
+		multiErr := view.close()
+		assertNil(t, multiErr.NilOrError())
+		assertTrue(t, len(view.partitions) == 0)
+	})
+	t.Run("fail", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage: bm.mst,
+			}
+			retErr error = fmt.Errorf("some-error")
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
+
+		multiErr := view.close()
+		assertNotNil(t, multiErr.NilOrError())
+		assertTrue(t, len(view.partitions) == 0)
+	})
+}
+
+func TestView_Terminate(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage: bm.mst,
+			}
+			isRestartable bool = true
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.restartable = isRestartable
+		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
+
+		ret := view.Terminate()
+		assertNil(t, ret)
+		assertTrue(t, len(view.partitions) == 0)
+		assertTrue(t, view.terminated == true)
+	})
+	t.Run("succeed_twice", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage: bm.mst,
+			}
+			isRestartable bool = true
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.restartable = isRestartable
+		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
+
+		ret := view.Terminate()
+		assertNil(t, ret)
+		assertTrue(t, len(view.partitions) == 0)
+		assertTrue(t, view.terminated == true)
+		ret = view.Terminate()
+		assertNil(t, ret)
+		assertTrue(t, len(view.partitions) == 0)
+		assertTrue(t, view.terminated == true)
+	})
+	t.Run("succeed_not_restartable", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage: bm.mst,
+			}
+			isRestartable bool = false
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.restartable = isRestartable
+
+		ret := view.Terminate()
+		assertNil(t, ret)
+		assertTrue(t, len(view.partitions) == 3)
+		assertTrue(t, view.terminated == false)
+	})
+	t.Run("fail", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			proxy *storageProxy = &storageProxy{
+				Storage: bm.mst,
+			}
+			retErr        error = fmt.Errorf("some-error")
+			isRestartable bool  = true
+		)
+		view.partitions = []*PartitionTable{
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+			&PartitionTable{
+				st: proxy,
+			},
+		}
+		view.opts.restartable = isRestartable
+		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
+
+		ret := view.Terminate()
+		assertNotNil(t, ret)
+		assertTrue(t, len(view.partitions) == 0)
+	})
+}
+
+func TestView_Run(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			oldest int64 = 0
+			newest int64 = 10
+			// local     int64          = oldest
+			consumer  *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			partition int32             = 0
+			count     int64             = 0
+			updateCB  UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
+				count++
+				return nil
+			}
+		)
+		bm.useMemoryStorage()
+
+		pt := newPartitionTable(
+			topic,
+			partition,
+			consumer,
+			bm.tmgr,
+			updateCB,
+			bm.getStorageBuilder(),
+			logger.Default(),
+		)
+
+		pt.consumer = consumer
+		view.partitions = []*PartitionTable{pt}
+		view.state = NewSignal(State(ViewStateCatchUp), State(ViewStateRunning), State(ViewStateIdle)).SetState(State(ViewStateIdle))
+
+		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil).AnyTimes()
+		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil).AnyTimes()
+		partConsumer := consumer.ExpectConsumePartition(topic, partition, AnyOffset)
+		for i := 0; i < 10; i++ {
+			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				if count == 10 {
+					time.Sleep(time.Millisecond * 10)
+					cancel()
+					return
+				}
+			}
+		}()
+
+		ret := view.Run(ctx)
+		assertNil(t, ret)
+	})
+	t.Run("fail", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			partition int32             = 0
+			consumer  *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			updateCB  UpdateCallback    = nil
+			retErr    error             = fmt.Errorf("run error")
+		)
+		bm.useMemoryStorage()
+
+		pt := newPartitionTable(
+			topic,
+			partition,
+			consumer,
+			bm.tmgr,
+			updateCB,
+			bm.getStorageBuilder(),
+			logger.Default(),
+		)
+
+		pt.consumer = consumer
+		view.partitions = []*PartitionTable{pt}
+		view.state = NewSignal(State(ViewStateCatchUp), State(ViewStateRunning), State(ViewStateIdle)).SetState(State(ViewStateIdle))
+
+		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(int64(0), retErr).AnyTimes()
+		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(sarama.OffsetNewest, retErr).AnyTimes()
+		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(sarama.OffsetOldest, retErr).AnyTimes()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+
+		ret := view.Run(ctx)
+		assertNotNil(t, ret)
+	})
+}
+
+func TestView_createPartitions(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			partition int32 = 0
+		)
+		bm.tmgr.EXPECT().Partitions(topic).Return([]int32{partition}, nil)
+		bm.tmgr.EXPECT().Close()
+
+		ret := view.createPartitions([]string{""})
+		assertNil(t, ret)
+		assertTrue(t, len(view.partitions) == 1)
+	})
+	t.Run("fail_tmgr", func(t *testing.T) {
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			retErr error = fmt.Errorf("tmgr-partition-error")
+		)
+		bm.tmgr.EXPECT().Partitions(topic).Return(nil, retErr)
+		bm.tmgr.EXPECT().Close()
+
+		ret := view.createPartitions([]string{""})
+		assertNotNil(t, ret)
+		assertTrue(t, len(view.partitions) == 0)
+	})
+}
+
+func TestView_WaitRunning(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		view.state = NewSignal(State(ViewStateCatchUp), State(ViewStateRunning), State(ViewStateIdle)).SetState(State(ViewStateRunning))
+
+		var isRunning bool
+		select {
+		case <-view.WaitRunning():
+			isRunning = true
+		case <-time.After(time.Second):
+		}
+
+		assertTrue(t, isRunning == true)
+	})
+}
+
+func TestView_NewView(t *testing.T) {
+	t.Run("succeed", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		bm := newBuilderMock(ctrl)
+
+		var (
+			partition int32 = 0
+		)
+		bm.tmgr.EXPECT().Partitions(topic).Return([]int32{partition}, nil).AnyTimes()
+		bm.tmgr.EXPECT().Close().AnyTimes()
+
+		view, err := NewView([]string{""}, Table(topic), &codec.Int64{}, []ViewOption{
+			WithViewTopicManagerBuilder(bm.getTopicManagerBuilder()),
+			WithViewConsumerSaramaBuilder(func(brokers []string, clientID string) (sarama.Consumer, error) {
+				return NewMockAutoConsumer(t, DefaultConfig()), nil
+			}),
+		}...)
+		assertNil(t, err)
+		assertNotNil(t, view)
+	})
+	t.Run("succeed", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		bm := newBuilderMock(ctrl)
+
+		var (
+			retErr error = fmt.Errorf("tmgr-error")
+		)
+		bm.tmgr.EXPECT().Partitions(topic).Return(nil, retErr).AnyTimes()
+		bm.tmgr.EXPECT().Close().AnyTimes()
+
+		view, err := NewView([]string{""}, Table(topic), &codec.Int64{}, []ViewOption{
+			WithViewTopicManagerBuilder(bm.getTopicManagerBuilder()),
+			WithViewConsumerSaramaBuilder(func(brokers []string, clientID string) (sarama.Consumer, error) {
+				return NewMockAutoConsumer(t, DefaultConfig()), nil
+			}),
+		}...)
+		assertNotNil(t, err)
+		assertNil(t, view)
+	})
+}
