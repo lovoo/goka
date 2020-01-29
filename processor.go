@@ -52,7 +52,7 @@ type Processor struct {
 	state *Signal
 
 	ctx    context.Context
-	cancel func()
+	cancel context.CancelFunc
 }
 
 // NewProcessor creates a processor instance in a group given the address of
@@ -361,6 +361,21 @@ func (g *Processor) waitForLookupTables() {
 	}
 }
 
+func (g *Processor) assignmentFromSession(session sarama.ConsumerGroupSession) Assignment {
+	assignment := Assignment{}
+
+	// get the partitions this processor is assigned to.
+	// Since we're copartitioned, we can stop after the first
+	for _, claim := range session.Claims() {
+		for _, part := range claim {
+			assignment[part] = sarama.OffsetNewest
+		}
+		break
+	}
+
+	return assignment
+}
+
 // Setup is run at the beginning of a new session, before ConsumeClaim.
 func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	g.state.SetState(ProcStateSetup)
@@ -369,29 +384,19 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	defer g.log.Printf("setup generation %d ... done", session.GenerationID())
 	errs := new(multierr.Errors)
 
-	var (
-		assignment Assignment = Assignment{}
-		partitions []int32
-	)
-	for _, claim := range session.Claims() {
-		partitions = claim
-		for _, part := range claim {
-			assignment[part] = sarama.OffsetNewest
-		}
-		break
-	}
+	assignment := g.assignmentFromSession(session)
 
 	if g.rebalanceCallback != nil {
 		g.rebalanceCallback(assignment)
 	}
 
 	// no partitions configured, we cannot setup anything
-	if len(partitions) == 0 {
+	if len(assignment) == 0 {
 		g.log.Printf("No partitions assigned. Claims were: %#v. Will probably sleep this generation", session.Claims())
 		return nil
 	}
 	// create partition views for all partitions
-	for _, partition := range partitions {
+	for partition := range assignment {
 		// create partition processor for our partition
 		errs.Collect(g.createPartitionProcessor(session.Context(), partition, session))
 	}
