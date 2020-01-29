@@ -34,6 +34,8 @@ type Processor struct {
 	log     logger.Logger
 	brokers []string
 
+	rebalanceCallback RebalanceCallback
+
 	// Partition processors
 	partitions map[int32]*PartitionProcessor
 	// lookup tables
@@ -109,6 +111,8 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 		opts:    opts,
 		log:     opts.log.Prefix(fmt.Sprintf("Processor %s", gg.Group())),
 		brokers: brokers,
+
+		rebalanceCallback: opts.rebalanceCallback,
 
 		partitions:     make(map[int32]*PartitionProcessor),
 		partitionCount: npar,
@@ -364,13 +368,22 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	g.log.Printf("setup generation %d", session.GenerationID())
 	defer g.log.Printf("setup generation %d ... done", session.GenerationID())
 	errs := new(multierr.Errors)
-	var partitions []int32
+
+	var (
+		assignment Assignment = Assignment{}
+		partitions []int32
+	)
 	for _, claim := range session.Claims() {
 		partitions = claim
+		for _, part := range claim {
+			assignment[part] = sarama.OffsetNewest
+		}
 		break
 	}
 
-	session.Claims()
+	if g.rebalanceCallback != nil {
+		g.rebalanceCallback(assignment)
+	}
 
 	// no partitions configured, we cannot setup anything
 	if len(partitions) == 0 {
