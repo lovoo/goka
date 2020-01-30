@@ -4,16 +4,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/facebookgo/ensure"
+	"github.com/lovoo/goka/internal/test"
 )
 
 func TestOnce_Do(t *testing.T) {
 	var o once
 
 	err := o.Do(func() error { return errors.New("some error") })
-	ensure.NotNil(t, err)
+	test.AssertNotNil(t, err)
 
 	err2 := o.Do(func() error { return nil })
-	ensure.NotNil(t, err2)
-	ensure.DeepEqual(t, err, err2)
+	test.AssertNotNil(t, err2)
+	test.AssertEqual(t, err, err2)
 }

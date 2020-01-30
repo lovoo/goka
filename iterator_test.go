@@ -4,21 +4,21 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/facebookgo/ensure"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/storage"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
 func TestIterator(t *testing.T) {
 	tmpdir, err := ioutil.TempDir("", "goka_storage_TestIterator")
-	ensure.Nil(t, err)
+	test.AssertNil(t, err)
 
 	db, err := leveldb.OpenFile(tmpdir, nil)
-	ensure.Nil(t, err)
+	test.AssertNil(t, err)
 
 	st, err := storage.New(db)
-	ensure.Nil(t, err)
+	test.AssertNil(t, err)
 
 	kv := map[string]string{
 		"key-1": "val-1",
@@ -27,13 +27,13 @@ func TestIterator(t *testing.T) {
 	}
 
 	for k, v := range kv {
-		ensure.Nil(t, st.Set(k, []byte(v)))
+		test.AssertNil(t, st.Set(k, []byte(v)))
 	}
 
-	ensure.Nil(t, st.SetOffset(777))
+	test.AssertNil(t, st.SetOffset(777))
 
 	iter, err := st.Iterator()
-	ensure.Nil(t, err)
+	test.AssertNil(t, err)
 
 	it := &iterator{
 		iter:  storage.NewMultiIterator([]storage.Iterator{iter}),
@@ -44,8 +44,8 @@ func TestIterator(t *testing.T) {
 
 	// accessing iterator before Next should only return nils
 	val, err := it.Value()
-	ensure.True(t, val == nil)
-	ensure.Nil(t, err)
+	test.AssertTrue(t, val == nil)
+	test.AssertNil(t, err)
 
 	for it.Next() {
 		count++
@@ -56,13 +56,13 @@ func TestIterator(t *testing.T) {
 		}
 
 		val, err := it.Value()
-		ensure.Nil(t, err)
-		ensure.DeepEqual(t, expected, val.(string))
+		test.AssertNil(t, err)
+		test.AssertEqual(t, expected, val.(string))
 	}
 
 	if err := it.Err(); err != nil {
 		t.Fatalf("unexpected iteration error: %v", err)
 	}
 
-	ensure.DeepEqual(t, count, len(kv))
+	test.AssertEqual(t, count, len(kv))
 }

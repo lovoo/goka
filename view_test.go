@@ -11,6 +11,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 )
@@ -97,8 +98,8 @@ func TestView_hash(t *testing.T) {
 		}
 
 		h, err := view.hash("a")
-		assertNil(t, err)
-		assertTrue(t, h == 0)
+		test.AssertNil(t, err)
+		test.AssertTrue(t, h == 0)
 	})
 	t.Run("fail_hash", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -114,14 +115,14 @@ func TestView_hash(t *testing.T) {
 		}
 
 		_, err := view.hash("a")
-		assertNotNil(t, err)
+		test.AssertNotNil(t, err)
 	})
 	t.Run("fail_no_partition", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
 		_, err := view.hash("a")
-		assertNotNil(t, err)
+		test.AssertNotNil(t, err)
 	})
 }
 
@@ -145,8 +146,8 @@ func TestView_find(t *testing.T) {
 		}
 
 		st, err := view.find(key)
-		assertNil(t, err)
-		assertEqual(t, st, proxy)
+		test.AssertNil(t, err)
+		test.AssertEqual(t, st, proxy)
 	})
 	t.Run("fail", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -162,7 +163,7 @@ func TestView_find(t *testing.T) {
 		}
 
 		_, err := view.find("a")
-		assertNotNil(t, err)
+		test.AssertNotNil(t, err)
 	})
 }
 
@@ -192,8 +193,8 @@ func TestView_Get(t *testing.T) {
 		bm.mst.EXPECT().Get(key).Return([]byte(strconv.FormatInt(value, 10)), nil)
 
 		ret, err := view.Get(key)
-		assertNil(t, err)
-		assertTrue(t, ret == value)
+		test.AssertNil(t, err)
+		test.AssertTrue(t, ret == value)
 	})
 	t.Run("succeed_nil", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -219,8 +220,8 @@ func TestView_Get(t *testing.T) {
 		bm.mst.EXPECT().Get(key).Return(nil, nil)
 
 		ret, err := view.Get(key)
-		assertNil(t, err)
-		assertTrue(t, ret == nil)
+		test.AssertNil(t, err)
+		test.AssertTrue(t, ret == nil)
 	})
 	t.Run("fail_get", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -247,7 +248,7 @@ func TestView_Get(t *testing.T) {
 		bm.mst.EXPECT().Get(key).Return(nil, errRet)
 
 		_, err := view.Get(key)
-		assertNotNil(t, err)
+		test.AssertNotNil(t, err)
 	})
 }
 
@@ -276,8 +277,8 @@ func TestView_Has(t *testing.T) {
 		bm.mst.EXPECT().Has(key).Return(has, nil)
 
 		ret, err := view.Has(key)
-		assertNil(t, err)
-		assertEqual(t, ret, has)
+		test.AssertNil(t, err)
+		test.AssertEqual(t, ret, has)
 	})
 	t.Run("succeed_false", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -303,8 +304,8 @@ func TestView_Has(t *testing.T) {
 		bm.mst.EXPECT().Has(key).Return(has, nil)
 
 		ret, err := view.Has(key)
-		assertNil(t, err)
-		assertEqual(t, ret, has)
+		test.AssertNil(t, err)
+		test.AssertEqual(t, ret, has)
 	})
 	t.Run("fail_err", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -324,8 +325,8 @@ func TestView_Has(t *testing.T) {
 		}
 
 		ret, err := view.Has(key)
-		assertNotNil(t, err)
-		assertTrue(t, ret == has)
+		test.AssertNotNil(t, err)
+		test.AssertTrue(t, ret == has)
 	})
 }
 
@@ -352,7 +353,7 @@ func TestView_Evict(t *testing.T) {
 		bm.mst.EXPECT().Delete(key).Return(nil)
 
 		err := view.Evict(key)
-		assertNil(t, err)
+		test.AssertNil(t, err)
 	})
 }
 
@@ -370,7 +371,7 @@ func TestView_Recovered(t *testing.T) {
 			},
 		}
 		ret := view.Recovered()
-		assertTrue(t, ret == hasRecovered)
+		test.AssertTrue(t, ret == hasRecovered)
 	})
 	t.Run("true", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -388,7 +389,7 @@ func TestView_Recovered(t *testing.T) {
 			},
 		}
 		ret := view.Recovered()
-		assertTrue(t, ret == hasRecovered)
+		test.AssertTrue(t, ret == hasRecovered)
 	})
 }
 
@@ -398,7 +399,7 @@ func TestView_Topic(t *testing.T) {
 		defer ctrl.Finish()
 
 		ret := view.Topic()
-		assertTrue(t, ret == viewTestTopic)
+		test.AssertTrue(t, ret == viewTestTopic)
 	})
 }
 
@@ -426,8 +427,8 @@ func TestView_close(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
 		multiErr := view.close()
-		assertNil(t, multiErr.NilOrError())
-		assertTrue(t, len(view.partitions) == 0)
+		test.AssertNil(t, multiErr.NilOrError())
+		test.AssertTrue(t, len(view.partitions) == 0)
 	})
 	t.Run("fail", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -453,8 +454,8 @@ func TestView_close(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
 
 		multiErr := view.close()
-		assertNotNil(t, multiErr.NilOrError())
-		assertTrue(t, len(view.partitions) == 0)
+		test.AssertNotNil(t, multiErr.NilOrError())
+		test.AssertTrue(t, len(view.partitions) == 0)
 	})
 }
 
@@ -484,9 +485,9 @@ func TestView_Terminate(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
 		ret := view.Terminate()
-		assertNil(t, ret)
-		assertTrue(t, len(view.partitions) == 0)
-		assertTrue(t, view.terminated == true)
+		test.AssertNil(t, ret)
+		test.AssertTrue(t, len(view.partitions) == 0)
+		test.AssertTrue(t, view.terminated == true)
 	})
 	t.Run("succeed_twice", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -513,13 +514,13 @@ func TestView_Terminate(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
 		ret := view.Terminate()
-		assertNil(t, ret)
-		assertTrue(t, len(view.partitions) == 0)
-		assertTrue(t, view.terminated == true)
+		test.AssertNil(t, ret)
+		test.AssertTrue(t, len(view.partitions) == 0)
+		test.AssertTrue(t, view.terminated == true)
 		ret = view.Terminate()
-		assertNil(t, ret)
-		assertTrue(t, len(view.partitions) == 0)
-		assertTrue(t, view.terminated == true)
+		test.AssertNil(t, ret)
+		test.AssertTrue(t, len(view.partitions) == 0)
+		test.AssertTrue(t, view.terminated == true)
 	})
 	t.Run("succeed_not_restartable", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -545,9 +546,9 @@ func TestView_Terminate(t *testing.T) {
 		view.opts.restartable = isRestartable
 
 		ret := view.Terminate()
-		assertNil(t, ret)
-		assertTrue(t, len(view.partitions) == 3)
-		assertTrue(t, view.terminated == false)
+		test.AssertNil(t, ret)
+		test.AssertTrue(t, len(view.partitions) == 3)
+		test.AssertTrue(t, view.terminated == false)
 	})
 	t.Run("fail", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -575,8 +576,8 @@ func TestView_Terminate(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
 
 		ret := view.Terminate()
-		assertNotNil(t, ret)
-		assertTrue(t, len(view.partitions) == 0)
+		test.AssertNotNil(t, ret)
+		test.AssertTrue(t, len(view.partitions) == 0)
 	})
 }
 
@@ -638,7 +639,7 @@ func TestView_Run(t *testing.T) {
 		}()
 
 		ret := view.Run(ctx)
-		assertNil(t, ret)
+		test.AssertNil(t, ret)
 	})
 	t.Run("fail", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -674,7 +675,7 @@ func TestView_Run(t *testing.T) {
 		defer cancel()
 
 		ret := view.Run(ctx)
-		assertNotNil(t, ret)
+		test.AssertNotNil(t, ret)
 	})
 }
 
@@ -690,8 +691,8 @@ func TestView_createPartitions(t *testing.T) {
 		bm.tmgr.EXPECT().Close()
 
 		ret := view.createPartitions([]string{""})
-		assertNil(t, ret)
-		assertTrue(t, len(view.partitions) == 1)
+		test.AssertNil(t, ret)
+		test.AssertTrue(t, len(view.partitions) == 1)
 	})
 	t.Run("fail_tmgr", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -704,8 +705,8 @@ func TestView_createPartitions(t *testing.T) {
 		bm.tmgr.EXPECT().Close()
 
 		ret := view.createPartitions([]string{""})
-		assertNotNil(t, ret)
-		assertTrue(t, len(view.partitions) == 0)
+		test.AssertNotNil(t, ret)
+		test.AssertTrue(t, len(view.partitions) == 0)
 	})
 }
 
@@ -723,7 +724,7 @@ func TestView_WaitRunning(t *testing.T) {
 		case <-time.After(time.Second):
 		}
 
-		assertTrue(t, isRunning == true)
+		test.AssertTrue(t, isRunning == true)
 	})
 }
 
@@ -745,8 +746,8 @@ func TestView_NewView(t *testing.T) {
 				return NewMockAutoConsumer(t, DefaultConfig()), nil
 			}),
 		}...)
-		assertNil(t, err)
-		assertNotNil(t, view)
+		test.AssertNil(t, err)
+		test.AssertNotNil(t, view)
 	})
 	t.Run("succeed", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -765,7 +766,7 @@ func TestView_NewView(t *testing.T) {
 				return NewMockAutoConsumer(t, DefaultConfig()), nil
 			}),
 		}...)
-		assertNotNil(t, err)
-		assertNil(t, view)
+		test.AssertNotNil(t, err)
+		test.AssertNil(t, view)
 	})
 }
