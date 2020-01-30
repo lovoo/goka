@@ -10,7 +10,9 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
+
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/logger"
 )
 
@@ -52,7 +54,7 @@ func TestContext_Emit(t *testing.T) {
 	// after that the message is processed
 	ctx.emitter = newEmitter(nil, func(err error) {
 		emitted++
-		assertNil(t, err)
+		test.AssertNil(t, err)
 	})
 
 	ctx.start()
@@ -64,8 +66,8 @@ func TestContext_Emit(t *testing.T) {
 	ctx.wg.Wait()
 
 	// check everything is done
-	assertEqual(t, emitted, 1)
-	assertEqual(t, ack, 1)
+	test.AssertEqual(t, emitted, 1)
+	test.AssertEqual(t, ack, 1)
 }
 
 func TestContext_Timestamp(t *testing.T) {
@@ -77,7 +79,7 @@ func TestContext_Timestamp(t *testing.T) {
 		},
 	}
 
-	assertEqual(t, ctx.Timestamp(), ts)
+	test.AssertEqual(t, ctx.Timestamp(), ts)
 }
 
 func TestContext_EmitError(t *testing.T) {
@@ -95,13 +97,13 @@ func TestContext_EmitError(t *testing.T) {
 		wg:            &sync.WaitGroup{},
 		partProcStats: newPartitionProcStats(),
 		failer: func(err error) {
-			assertTrue(t, strings.Contains(err.Error(), errToEmit.Error()))
+			test.AssertTrue(t, strings.Contains(err.Error(), errToEmit.Error()))
 		},
 	}
 	ctx.emitter = newEmitter(errToEmit, func(err error) {
 		emitted++
-		assertNotNil(t, err)
-		assertEqual(t, err, errToEmit)
+		test.AssertNotNil(t, err)
+		test.AssertEqual(t, err, errToEmit)
 	})
 
 	ctx.start()
@@ -113,10 +115,10 @@ func TestContext_EmitError(t *testing.T) {
 	ctx.wg.Wait()
 
 	// check everything is done
-	assertEqual(t, emitted, 1)
+	test.AssertEqual(t, emitted, 1)
 
 	// nothing should be committed here
-	assertEqual(t, ack, 0)
+	test.AssertEqual(t, ack, 0)
 
 }
 
@@ -127,15 +129,15 @@ func TestContext_EmitToStateTopic(t *testing.T) {
 
 	ctx := &cbContext{graph: DefineGroup(group, Persist(c), Loop(c, cb))}
 	func() {
-		defer panicAssertEqual(t, errors.New("cannot emit to table topic (use SetValue instead)"))
+		defer test.PanicAssertEqual(t, errors.New("cannot emit to table topic (use SetValue instead)"))
 		ctx.Emit(Stream(tableName(group)), "key", []byte("value"))
 	}()
 	func() {
-		defer panicAssertEqual(t, errors.New("cannot emit to loop topic (use Loopback instead)"))
+		defer test.PanicAssertEqual(t, errors.New("cannot emit to loop topic (use Loopback instead)"))
 		ctx.Emit(Stream(loopName(group)), "key", []byte("value"))
 	}()
 	func() {
-		defer panicAssertEqual(t, errors.New("cannot emit to empty topic"))
+		defer test.PanicAssertEqual(t, errors.New("cannot emit to empty topic"))
 		ctx.Emit("", "key", []byte("value"))
 	}()
 }
@@ -144,11 +146,11 @@ func TestContext_GetSetStateless(t *testing.T) {
 	// ctx stateless since no storage passed
 	ctx := &cbContext{graph: DefineGroup("group"), msg: new(sarama.ConsumerMessage)}
 	func() {
-		defer PanicStringContains(t, "stateless")
+		defer test.PanicAssertStringContains(t, "stateless")
 		_ = ctx.Value()
 	}()
 	func() {
-		defer PanicStringContains(t, "stateless")
+		defer test.PanicAssertStringContains(t, "stateless")
 		ctx.SetValue("whatever")
 	}()
 }
@@ -184,12 +186,12 @@ func TestContext_Delete(t *testing.T) {
 
 	ctx.start()
 	err := ctx.deleteKey(key)
-	assertNil(t, err)
+	test.AssertNil(t, err)
 	ctx.finish(nil)
 
 	ctx.wg.Wait()
 
-	assertEqual(t, ctx.counters, struct {
+	test.AssertEqual(t, ctx.counters, struct {
 		emits  int
 		dones  int
 		stores int
@@ -214,7 +216,7 @@ func TestContext_DeleteStateless(t *testing.T) {
 	ctx.emitter = newEmitter(nil, nil)
 
 	err := ctx.deleteKey(key)
-	assertTrue(t, strings.Contains(err.Error(), "Cannot access state in stateless processor"))
+	test.AssertTrue(t, strings.Contains(err.Error(), "Cannot access state in stateless processor"))
 }
 
 func TestContext_DeleteStorageError(t *testing.T) {
@@ -246,7 +248,7 @@ func TestContext_DeleteStorageError(t *testing.T) {
 	ctx.emitter = newEmitter(nil, nil)
 
 	err := ctx.deleteKey(key)
-	assertTrue(t, strings.Contains(err.Error(), "error deleting key (key) from storage: storage error"))
+	test.AssertTrue(t, strings.Contains(err.Error(), "error deleting key (key) from storage: storage error"))
 }
 
 func TestContext_Set(t *testing.T) {
@@ -281,17 +283,17 @@ func TestContext_Set(t *testing.T) {
 
 	ctx.start()
 	err := ctx.setValueForKey(key, value)
-	assertNil(t, err)
+	test.AssertNil(t, err)
 	ctx.finish(nil)
 
 	ctx.wg.Wait()
 
-	assertEqual(t, ctx.counters, struct {
+	test.AssertEqual(t, ctx.counters, struct {
 		emits  int
 		dones  int
 		stores int
 	}{1, 1, 1})
-	assertEqual(t, ack, 1)
+	test.AssertEqual(t, ack, 1)
 }
 
 func TestContext_GetSetStateful(t *testing.T) {
@@ -325,20 +327,20 @@ func TestContext_GetSetStateful(t *testing.T) {
 		msg:           &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
 		emitter: func(tp string, k string, v []byte) *Promise {
 			wg.Add(1)
-			assertEqual(t, tp, graph.GroupTable().Topic())
-			assertEqual(t, string(k), key)
-			assertEqual(t, string(v), value)
+			test.AssertEqual(t, tp, graph.GroupTable().Topic())
+			test.AssertEqual(t, string(k), key)
+			test.AssertEqual(t, string(v), value)
 			return NewPromise().Finish(nil)
 		},
 	}
 
 	val := ctx.Value()
-	assertTrue(t, val == nil)
+	test.AssertTrue(t, val == nil)
 
 	ctx.SetValue(value)
 
 	val = ctx.Value()
-	assertEqual(t, val, value)
+	test.AssertEqual(t, val, value)
 }
 
 func TestContext_SetErrors(t *testing.T) {
@@ -371,34 +373,34 @@ func TestContext_SetErrors(t *testing.T) {
 	}
 
 	err := ctx.setValueForKey(key, nil)
-	assertNotNil(t, err)
-	assertTrue(t, strings.Contains(err.Error(), "cannot set nil"))
+	test.AssertNotNil(t, err)
+	test.AssertTrue(t, strings.Contains(err.Error(), "cannot set nil"))
 
 	err = ctx.setValueForKey(key, 123) // cannot encode 123 as string
-	assertNotNil(t, err)
-	assertTrue(t, strings.Contains(err.Error(), "error encoding"))
+	test.AssertNotNil(t, err)
+	test.AssertTrue(t, strings.Contains(err.Error(), "error encoding"))
 
 	st.EXPECT().Set(key, []byte(value)).Return(errors.New("some-error"))
 
 	err = ctx.setValueForKey(key, value)
-	assertNotNil(t, err)
-	assertTrue(t, strings.Contains(err.Error(), "some-error"))
+	test.AssertNotNil(t, err)
+	test.AssertTrue(t, strings.Contains(err.Error(), "some-error"))
 
 	// TODO(jb): check if still valid
 	// finish with error
 	// ctx.emitter = newEmitterW(wg, fmt.Errorf("some-error"), func(err error) {
-	// 	assertNotNil(t, err)
-	//	assertTrue(t, strings.Contains(err.Error(), "some-error"))
+	// 	test.AssertNotNil(t, err)
+	//	test.AssertTrue(t, strings.Contains(err.Error(), "some-error"))
 	// })
 	// err = ctx.setValueForKey(key, value)
-	// assertNil(t, err)
+	// test.AssertNil(t, err)
 }
 
 func TestContext_LoopbackNoLoop(t *testing.T) {
 	// ctx has no loop set
 	ctx := &cbContext{graph: DefineGroup("group", Persist(c)), msg: &sarama.ConsumerMessage{}}
 	func() {
-		defer PanicStringContains(t, "loop")
+		defer test.PanicAssertStringContains(t, "loop")
 		ctx.Loopback("some-key", "whatever")
 	}()
 }
@@ -421,15 +423,15 @@ func TestContext_Loopback(t *testing.T) {
 		partProcStats: newPartitionProcStats(),
 		emitter: func(tp string, k string, v []byte) *Promise {
 			cnt++
-			assertEqual(t, tp, graph.LoopStream().Topic())
-			assertEqual(t, string(k), key)
-			assertEqual(t, string(v), value)
+			test.AssertEqual(t, tp, graph.LoopStream().Topic())
+			test.AssertEqual(t, string(k), key)
+			test.AssertEqual(t, string(v), value)
 			return NewPromise()
 		},
 	}
 
 	ctx.Loopback(key, value)
-	assertTrue(t, cnt == 1)
+	test.AssertTrue(t, cnt == 1)
 }
 
 func TestContext_Join(t *testing.T) {
@@ -459,22 +461,22 @@ func TestContext_Join(t *testing.T) {
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Join(table)
-	assertEqual(t, v, value)
+	test.AssertEqual(t, v, value)
 
 	func() {
-		defer PanicStringContains(t, errSome.Error())
+		defer test.PanicAssertStringContains(t, errSome.Error())
 		st.EXPECT().Get(key).Return(nil, errSome)
 		_ = ctx.Join(table)
 	}()
 
 	func() {
-		defer PanicStringContains(t, "not subs")
+		defer test.PanicAssertStringContains(t, "not subs")
 		_ = ctx.Join("other-table")
 	}()
 
 	ctx.pviews = nil
 	func() {
-		defer PanicStringContains(t, "not subs")
+		defer test.PanicAssertStringContains(t, "not subs")
 		_ = ctx.Join(table)
 	}()
 }
@@ -513,22 +515,22 @@ func TestContext_Lookup(t *testing.T) {
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Lookup(table, key)
-	assertEqual(t, v, value)
+	test.AssertEqual(t, v, value)
 
 	func() {
-		defer PanicStringContains(t, errSome.Error())
+		defer test.PanicAssertStringContains(t, errSome.Error())
 		st.EXPECT().Get(key).Return(nil, errSome)
 		_ = ctx.Lookup(table, key)
 	}()
 
 	func() {
-		defer PanicStringContains(t, "not subs")
+		defer test.PanicAssertStringContains(t, "not subs")
 		_ = ctx.Lookup("other-table", key)
 	}()
 
 	ctx.views = nil
 	func() {
-		defer PanicStringContains(t, "not subs")
+		defer test.PanicAssertStringContains(t, "not subs")
 		_ = ctx.Lookup(table, key)
 	}()
 }
@@ -538,12 +540,12 @@ func TestContext_Fail(t *testing.T) {
 
 	defer func() {
 		err := recover()
-		assertNotNil(t, err)
-		assertTrue(t, strings.Contains(fmt.Sprintf("%v", err), "blubb"))
+		test.AssertNotNil(t, err)
+		test.AssertTrue(t, strings.Contains(fmt.Sprintf("%v", err), "blubb"))
 	}()
 
 	ctx.Fail(errors.New("blubb"))
 
 	// this must not be executed. ctx.Fail should stop execution
-	assertTrue(t, false)
+	test.AssertTrue(t, false)
 }

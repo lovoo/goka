@@ -9,22 +9,11 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/storage"
 )
-
-func PanicStringContains(t *testing.T, s string) {
-	if r := recover(); r != nil {
-		err := r.(error)
-		ensure.StringContains(t, err.Error(), s)
-	} else {
-		// there was no panic
-		t.Errorf("panic expected")
-		t.FailNow()
-	}
-}
 
 func createMockBuilder(t *testing.T) (*gomock.Controller, *builderMock) {
 	ctrl := NewMockController(t)
@@ -139,7 +128,7 @@ func TestProcessor_Run(t *testing.T) {
 		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
 		)
-		ensure.Nil(t, err)
+		test.AssertNil(t, err)
 		var (
 			procErr error
 			done    = make(chan struct{})
@@ -156,24 +145,24 @@ func TestProcessor_Run(t *testing.T) {
 
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
-		ensure.Nil(t, procErr)
+		test.AssertNil(t, procErr)
 
 		for _, msg := range toEmit {
 			cg.SendMessageWait(msg)
 		}
 
 		val, err := newProc.Get("test-key-1")
-		ensure.Nil(t, err)
-		ensure.DeepEqual(t, val.(int64), int64(3))
+		test.AssertNil(t, err)
+		test.AssertEqual(t, val.(int64), int64(3))
 
 		val, err = newProc.Get("test-key-2")
-		ensure.Nil(t, err)
-		ensure.DeepEqual(t, val.(int64), int64(3))
+		test.AssertNil(t, err)
+		test.AssertEqual(t, val.(int64), int64(3))
 
 		// shutdown
 		newProc.Stop()
 		<-done
-		ensure.Nil(t, procErr)
+		test.AssertNil(t, procErr)
 	})
 	t.Run("loopback", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
@@ -214,7 +203,7 @@ func TestProcessor_Run(t *testing.T) {
 		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
 		)
-		ensure.Nil(t, err)
+		test.AssertNil(t, err)
 		var (
 			procErr error
 			done    = make(chan struct{})
@@ -231,7 +220,7 @@ func TestProcessor_Run(t *testing.T) {
 
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
-		ensure.Nil(t, procErr)
+		test.AssertNil(t, procErr)
 
 		for _, msg := range toEmit {
 			cg.SendMessageWait(msg)
@@ -240,7 +229,7 @@ func TestProcessor_Run(t *testing.T) {
 		// shutdown
 		newProc.Stop()
 		<-done
-		ensure.Nil(t, procErr)
+		test.AssertNil(t, procErr)
 	})
 	t.Run("consume-error", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
@@ -266,7 +255,7 @@ func TestProcessor_Run(t *testing.T) {
 		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
 		)
-		ensure.Nil(t, err)
+		test.AssertNil(t, err)
 		var (
 			procErr error
 			done    = make(chan struct{})
@@ -281,12 +270,12 @@ func TestProcessor_Run(t *testing.T) {
 
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
-		ensure.Nil(t, procErr)
+		test.AssertNil(t, procErr)
 		cg.SendError(fmt.Errorf("test-error"))
 		cancel()
 		<-done
 		// the errors sent back by the consumergroup do not lead to a failure of the processor
-		ensure.Nil(t, procErr)
+		test.AssertNil(t, procErr)
 
 	})
 	t.Run("consgroup-error", func(t *testing.T) {
@@ -313,7 +302,7 @@ func TestProcessor_Run(t *testing.T) {
 		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
 		)
-		ensure.Nil(t, err)
+		test.AssertNil(t, err)
 		var (
 			procErr error
 			done    = make(chan struct{})
@@ -332,6 +321,6 @@ func TestProcessor_Run(t *testing.T) {
 		// and waiting for them to be delivered
 		<-done
 		// the errors sent back by the consumergroup do not lead to a failure of the processor
-		ensure.True(t, strings.Contains(procErr.Error(), "consume-error"))
+		test.AssertTrue(t, strings.Contains(procErr.Error(), "consume-error"))
 	})
 }

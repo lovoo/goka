@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/facebookgo/ensure"
+	"github.com/lovoo/goka/internal/test"
 )
 
 func TestPromise_thenBeforeFinish(t *testing.T) {
@@ -17,12 +17,12 @@ func TestPromise_thenBeforeFinish(t *testing.T) {
 
 	p.Finish(errors.New("test"))
 
-	ensure.DeepEqual(t, promiseErr.Error(), "test")
+	test.AssertEqual(t, promiseErr.Error(), "test")
 
 	// repeating finish won't change result
 	p.Finish(errors.New("test-whatever"))
 
-	ensure.DeepEqual(t, promiseErr.Error(), "test")
+	test.AssertEqual(t, promiseErr.Error(), "test")
 }
 
 func TestPromise_thenAfterFinish(t *testing.T) {
@@ -34,5 +34,5 @@ func TestPromise_thenAfterFinish(t *testing.T) {
 		promiseErr = err
 	})
 
-	ensure.DeepEqual(t, promiseErr.Error(), "test")
+	test.AssertEqual(t, promiseErr.Error(), "test")
 }

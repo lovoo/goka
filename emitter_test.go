@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/internal/test"
 )
 
 var (
@@ -40,19 +41,19 @@ func TestEmitter_NewEmitter(t *testing.T) {
 			WithEmitterProducerBuilder(bm.getProducerBuilder()),
 			WithEmitterHasher(func() hash.Hash32 { return NewConstHasher(0) }),
 		}...)
-		assertNil(t, err)
-		assertNotNil(t, emitter)
-		assertTrue(t, emitter.codec == emitterIntCodec)
-		assertEqual(t, emitter.producer, bm.producer)
-		assertTrue(t, emitter.topic == string(emitterTestTopic))
+		test.AssertNil(t, err)
+		test.AssertNotNil(t, emitter)
+		test.AssertTrue(t, emitter.codec == emitterIntCodec)
+		test.AssertEqual(t, emitter.producer, bm.producer)
+		test.AssertTrue(t, emitter.topic == string(emitterTestTopic))
 	})
 	t.Run("fail", func(t *testing.T) {
 		ctrl := NewMockController(t)
 		bm := newBuilderMock(ctrl)
 		defer ctrl.Finish()
 		emitter, err := NewEmitter(emitterTestBrokers, emitterTestTopic, emitterIntCodec, WithEmitterProducerBuilder(bm.getErrorProducerBuilder()))
-		assertNotNil(t, err)
-		assertNil(t, emitter)
+		test.AssertNotNil(t, err)
+		test.AssertNil(t, emitter)
 	})
 }
 
@@ -69,8 +70,8 @@ func TestEmitter_Emit(t *testing.T) {
 
 		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil))
 		promise, err := emitter.Emit(key, intVal)
-		assertNil(t, err)
-		assertNotNil(t, promise)
+		test.AssertNil(t, err)
+		test.AssertNotNil(t, promise)
 	})
 	t.Run("fail_producer_emit", func(t *testing.T) {
 		emitter, bm, ctrl := createEmitter(t)
@@ -85,8 +86,8 @@ func TestEmitter_Emit(t *testing.T) {
 
 		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(retErr))
 		promise, err := emitter.Emit(key, intVal)
-		assertNil(t, err)
-		assertEqual(t, promise.err, retErr)
+		test.AssertNil(t, err)
+		test.AssertEqual(t, promise.err, retErr)
 	})
 	t.Run("fail_closed", func(t *testing.T) {
 		emitter, bm, ctrl := createEmitter(t)
@@ -101,8 +102,8 @@ func TestEmitter_Emit(t *testing.T) {
 
 		emitter.Finish()
 		promise, err := emitter.Emit(key, intVal)
-		assertNil(t, err)
-		assertEqual(t, promise.err, ErrEmitterAlreadyClosed)
+		test.AssertNil(t, err)
+		test.AssertEqual(t, promise.err, ErrEmitterAlreadyClosed)
 	})
 	t.Run("fail_encode", func(t *testing.T) {
 		emitter, _, _ := createEmitter(t)
@@ -113,7 +114,7 @@ func TestEmitter_Emit(t *testing.T) {
 		)
 
 		_, err := emitter.Emit(key, intVal)
-		assertNotNil(t, err)
+		test.AssertNotNil(t, err)
 	})
 }
 
@@ -130,7 +131,7 @@ func TestEmitter_EmitSync(t *testing.T) {
 
 		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil))
 		err := emitter.EmitSync(key, intVal)
-		assertNil(t, err)
+		test.AssertNil(t, err)
 	})
 	t.Run("fail_producer_emit", func(t *testing.T) {
 		emitter, bm, ctrl := createEmitter(t)
@@ -145,7 +146,7 @@ func TestEmitter_EmitSync(t *testing.T) {
 
 		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(retErr))
 		err := emitter.EmitSync(key, intVal)
-		assertEqual(t, err, retErr)
+		test.AssertEqual(t, err, retErr)
 	})
 	t.Run("fail_closed", func(t *testing.T) {
 		emitter, bm, ctrl := createEmitter(t)
@@ -160,7 +161,7 @@ func TestEmitter_EmitSync(t *testing.T) {
 
 		emitter.Finish()
 		err := emitter.EmitSync(key, intVal)
-		assertEqual(t, err, ErrEmitterAlreadyClosed)
+		test.AssertEqual(t, err, ErrEmitterAlreadyClosed)
 	})
 	t.Run("fail_encode", func(t *testing.T) {
 		emitter, _, _ := createEmitter(t)
@@ -171,7 +172,7 @@ func TestEmitter_EmitSync(t *testing.T) {
 		)
 
 		err := emitter.EmitSync(key, intVal)
-		assertNotNil(t, err)
+		test.AssertNotNil(t, err)
 	})
 }
 
@@ -193,13 +194,13 @@ func TestEmitter_Finish(t *testing.T) {
 		go func() {
 			for i := 0; i < msgCount; i++ {
 				_, err := emitter.Emit(key, intVal)
-				assertNil(t, err)
+				test.AssertNil(t, err)
 				// promise errors are not checked here since they are expected
 			}
 		}()
 
 		time.Sleep(time.Nanosecond * 45)
 		err := emitter.Finish()
-		assertNil(t, err)
+		test.AssertNil(t, err)
 	})
 }
