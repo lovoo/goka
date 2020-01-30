@@ -33,13 +33,13 @@ type TopicManagerBuilder func(brokers []string) (TopicManager, error)
 // DefaultTopicManagerBuilder creates TopicManager using the Sarama library.
 func DefaultTopicManagerBuilder(brokers []string) (TopicManager, error) {
 	config := globalConfig
-	return NewSaramaTopicManager(brokers, &config, NewTopicManagerConfig())
+	return NewTopicManager(brokers, &config, NewTopicManagerConfig())
 }
 
 // TopicManagerBuilderWithConfig creates TopicManager using the Sarama library.
 func TopicManagerBuilderWithConfig(config *sarama.Config, tmConfig *TopicManagerConfig) TopicManagerBuilder {
 	return func(brokers []string) (TopicManager, error) {
-		return NewSaramaTopicManager(brokers, config, tmConfig)
+		return NewTopicManager(brokers, config, tmConfig)
 	}
 }
 
@@ -47,23 +47,7 @@ func TopicManagerBuilderWithConfig(config *sarama.Config, tmConfig *TopicManager
 func TopicManagerBuilderWithTopicManagerConfig(tmConfig *TopicManagerConfig) TopicManagerBuilder {
 	return func(brokers []string) (TopicManager, error) {
 		config := globalConfig
-		return NewSaramaTopicManager(brokers, &config, tmConfig)
-	}
-}
-
-// ZKTopicManagerBuilder creates a TopicManager that connects with ZooKeeper to
-// check partition counts and create tables.
-func ZKTopicManagerBuilder(servers []string) TopicManagerBuilder {
-	return func([]string) (TopicManager, error) {
-		return NewTopicManager(servers, NewTopicManagerConfig())
-	}
-}
-
-// ZKTopicManagerBuilderWithConfig creates a TopicManager that connects with ZooKeeper to
-// check partition counts and create tables given a topic configuration.
-func ZKTopicManagerBuilderWithConfig(servers []string, config *TopicManagerConfig) TopicManagerBuilder {
-	return func([]string) (TopicManager, error) {
-		return NewTopicManager(servers, config)
+		return NewTopicManager(brokers, &config, tmConfig)
 	}
 }
 
