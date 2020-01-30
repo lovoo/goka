@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ type TopicManager interface {
 
 type topicManager struct {
 	brokers            []string
-	broker             *sarama.Broker
+	broker             Broker
 	client             sarama.Client
 	topicManagerConfig *TopicManagerConfig
 }
@@ -42,28 +43,27 @@ func NewTopicManager(brokers []string, saramaConfig *sarama.Config, topicManager
 	if err != nil {
 		return nil, fmt.Errorf("Error creating the kafka client: %v", err)
 	}
+	return newTopicManager(brokers, saramaConfig, topicManagerConfig, client, checkBroker)
+}
+
+func newTopicManager(brokers []string, saramaConfig *sarama.Config, topicManagerConfig *TopicManagerConfig, client sarama.Client, check checkFunc) (*topicManager, error) {
+	if client == nil {
+		return nil, errors.New("cannot create topic manager with nil client")
+	}
 
 	if topicManagerConfig == nil {
-		return nil, fmt.Errorf("Cannot create topic manager with nil config")
+		return nil, errors.New("cannot create topic manager with nil config")
 	}
 
 	activeBrokers := client.Brokers()
 	if len(activeBrokers) == 0 {
-		return nil, fmt.Errorf("No brokers active in current client")
+		return nil, errors.New("no brokers active in current client")
 	}
 
 	broker := activeBrokers[0]
-	err = broker.Open(saramaConfig)
+	err := check(broker, saramaConfig)
 	if err != nil {
-		return nil, fmt.Errorf("error opening broker connection: %v", err)
-	}
-	connected, err := broker.Connected()
-	if err != nil {
-		return nil, fmt.Errorf("cannot connect to broker %s: %v", brokers[0], err)
-	}
-
-	if !connected {
-		return nil, fmt.Errorf("cannot connect to broker %s: not connected", brokers[0])
+		return nil, err
 	}
 
 	return &topicManager{
@@ -72,6 +72,29 @@ func NewTopicManager(brokers []string, saramaConfig *sarama.Config, topicManager
 		broker:             broker,
 		topicManagerConfig: topicManagerConfig,
 	}, nil
+}
+
+type checkFunc func(broker Broker, config *sarama.Config) error
+
+func checkBroker(broker Broker, config *sarama.Config) error {
+	if config == nil {
+		config = DefaultConfig()
+	}
+
+	err := broker.Open(config)
+	if err != nil {
+		return fmt.Errorf("error opening broker connection: %v", err)
+	}
+	connected, err := broker.Connected()
+	if err != nil {
+		return fmt.Errorf("cannot connect to broker %s: %v", broker.Addr(), err)
+	}
+
+	if !connected {
+		return fmt.Errorf("cannot connect to broker %s: not connected", broker.Addr())
+	}
+
+	return nil
 }
 
 func (m *topicManager) Close() error {
@@ -83,22 +106,6 @@ func (m *topicManager) Close() error {
 
 func (m *topicManager) Partitions(topic string) ([]int32, error) {
 	return m.client.Partitions(topic)
-}
-
-func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
-	exists, err := m.checkTopicExistsWithPartitions(topic, npar)
-	if err != nil {
-		return fmt.Errorf("error checking topic exists: %v", err)
-	}
-	if exists {
-		return nil
-	}
-	return m.createTopic(topic,
-		npar,
-		m.topicManagerConfig.Stream.Replication,
-		map[string]string{
-			"retention.ms": fmt.Sprintf("%d", m.topicManagerConfig.Stream.Retention),
-		})
 }
 
 func (m *topicManager) GetOffset(topic string, partitionID int32, time int64) (int64, error) {
@@ -125,6 +132,10 @@ func (m *topicManager) createTopic(topic string, npar, rfactor int, config map[s
 	topicDetail.ReplicationFactor = int16(rfactor)
 	topicDetail.ConfigEntries = make(map[string]*string)
 
+	for k, v := range config {
+		topicDetail.ConfigEntries[k] = &v
+	}
+
 	topicDetails := make(map[string]*sarama.TopicDetail)
 	topicDetails[topic] = topicDetail
 
@@ -146,7 +157,7 @@ func (m *topicManager) createTopic(topic string, npar, rfactor int, config map[s
 	return nil
 }
 
-func (m *topicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
+func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[string]string) error {
 	exists, err := m.checkTopicExistsWithPartitions(topic, npar)
 	if err != nil {
 		return fmt.Errorf("error checking topic exists: %v", err)
@@ -157,18 +168,30 @@ func (m *topicManager) EnsureTopicExists(topic string, npar, rfactor int, config
 	return m.createTopic(topic,
 		npar,
 		rfactor,
-		map[string]string{})
+		config)
+}
+
+func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
+	return m.ensureExists(
+		topic,
+		npar,
+		m.topicManagerConfig.Stream.Replication,
+		map[string]string{
+			"retention.ms": fmt.Sprintf("%d", m.topicManagerConfig.Stream.Retention),
+		})
+}
+
+func (m *topicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
+	return m.ensureExists(
+		topic,
+		npar,
+		rfactor,
+		config)
 }
 
 func (m *topicManager) EnsureTableExists(topic string, npar int) error {
-	exists, err := m.checkTopicExistsWithPartitions(topic, npar)
-	if err != nil {
-		return fmt.Errorf("error checking topic exists: %v", err)
-	}
-	if exists {
-		return nil
-	}
-	return m.createTopic(topic,
+	return m.ensureExists(
+		topic,
 		npar,
 		m.topicManagerConfig.Table.Replication,
 		map[string]string{
