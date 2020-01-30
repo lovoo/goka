@@ -39,6 +39,16 @@ func assertEqual(t *testing.T, actual, expected interface{}) {
 	}
 }
 
+func panicAssertEqual(t *testing.T, expected interface{}) {
+	if expected == nil {
+		panic("can't pass nil to panicAssertEqual")
+	}
+	actual := recover()
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("Expected values were equal.\nactual=%#v\nexpected=%#v in %s", actual, expected, string(debug.Stack()))
+	}
+}
+
 func assertNotEqual(t *testing.T, actual, expected interface{}) {
 	if reflect.DeepEqual(actual, expected) {
 		t.Fatalf("Expected values were equal.\nactual=%#v\nexpected=%#v in %s", actual, expected, string(debug.Stack()))

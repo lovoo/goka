@@ -3,14 +3,12 @@ package goka
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/facebookgo/ensure"
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/logger"
@@ -54,7 +52,7 @@ func TestContext_Emit(t *testing.T) {
 	// after that the message is processed
 	ctx.emitter = newEmitter(nil, func(err error) {
 		emitted++
-		ensure.Nil(t, err)
+		assertNil(t, err)
 	})
 
 	ctx.start()
@@ -66,8 +64,8 @@ func TestContext_Emit(t *testing.T) {
 	ctx.wg.Wait()
 
 	// check everything is done
-	ensure.DeepEqual(t, emitted, 1)
-	ensure.DeepEqual(t, ack, 1)
+	assertEqual(t, emitted, 1)
+	assertEqual(t, ack, 1)
 }
 
 func TestContext_Timestamp(t *testing.T) {
@@ -79,7 +77,7 @@ func TestContext_Timestamp(t *testing.T) {
 		},
 	}
 
-	ensure.DeepEqual(t, ctx.Timestamp(), ts)
+	assertEqual(t, ctx.Timestamp(), ts)
 }
 
 func TestContext_EmitError(t *testing.T) {
@@ -97,13 +95,13 @@ func TestContext_EmitError(t *testing.T) {
 		wg:            &sync.WaitGroup{},
 		partProcStats: newPartitionProcStats(),
 		failer: func(err error) {
-			ensure.StringContains(t, err.Error(), errToEmit.Error())
+			assertTrue(t, strings.Contains(err.Error(), errToEmit.Error()))
 		},
 	}
 	ctx.emitter = newEmitter(errToEmit, func(err error) {
 		emitted++
-		ensure.NotNil(t, err)
-		ensure.DeepEqual(t, err, errToEmit)
+		assertNotNil(t, err)
+		assertEqual(t, err, errToEmit)
 	})
 
 	ctx.start()
@@ -115,10 +113,10 @@ func TestContext_EmitError(t *testing.T) {
 	ctx.wg.Wait()
 
 	// check everything is done
-	ensure.DeepEqual(t, emitted, 1)
+	assertEqual(t, emitted, 1)
 
 	// nothing should be committed here
-	ensure.DeepEqual(t, ack, 0)
+	assertEqual(t, ack, 0)
 
 }
 
@@ -129,15 +127,15 @@ func TestContext_EmitToStateTopic(t *testing.T) {
 
 	ctx := &cbContext{graph: DefineGroup(group, Persist(c), Loop(c, cb))}
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to table topic (use SetValue instead)"))
+		defer panicAssertEqual(t, errors.New("cannot emit to table topic (use SetValue instead)"))
 		ctx.Emit(Stream(tableName(group)), "key", []byte("value"))
 	}()
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to loop topic (use Loopback instead)"))
+		defer panicAssertEqual(t, errors.New("cannot emit to loop topic (use Loopback instead)"))
 		ctx.Emit(Stream(loopName(group)), "key", []byte("value"))
 	}()
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to empty topic"))
+		defer panicAssertEqual(t, errors.New("cannot emit to empty topic"))
 		ctx.Emit("", "key", []byte("value"))
 	}()
 }
@@ -186,12 +184,12 @@ func TestContext_Delete(t *testing.T) {
 
 	ctx.start()
 	err := ctx.deleteKey(key)
-	ensure.Nil(t, err)
+	assertNil(t, err)
 	ctx.finish(nil)
 
 	ctx.wg.Wait()
 
-	ensure.DeepEqual(t, ctx.counters, struct {
+	assertEqual(t, ctx.counters, struct {
 		emits  int
 		dones  int
 		stores int
@@ -216,7 +214,7 @@ func TestContext_DeleteStateless(t *testing.T) {
 	ctx.emitter = newEmitter(nil, nil)
 
 	err := ctx.deleteKey(key)
-	ensure.Err(t, err, regexp.MustCompile("^Cannot access state in stateless processor$"))
+	assertTrue(t, strings.Contains(err.Error(), "Cannot access state in stateless processor"))
 }
 
 func TestContext_DeleteStorageError(t *testing.T) {
@@ -248,7 +246,7 @@ func TestContext_DeleteStorageError(t *testing.T) {
 	ctx.emitter = newEmitter(nil, nil)
 
 	err := ctx.deleteKey(key)
-	ensure.Err(t, err, regexp.MustCompile("^error deleting key \\(key\\) from storage: storage error$"))
+	assertTrue(t, strings.Contains(err.Error(), "error deleting key (key) from storage: storage error"))
 }
 
 func TestContext_Set(t *testing.T) {
@@ -283,17 +281,17 @@ func TestContext_Set(t *testing.T) {
 
 	ctx.start()
 	err := ctx.setValueForKey(key, value)
-	ensure.Nil(t, err)
+	assertNil(t, err)
 	ctx.finish(nil)
 
 	ctx.wg.Wait()
 
-	ensure.DeepEqual(t, ctx.counters, struct {
+	assertEqual(t, ctx.counters, struct {
 		emits  int
 		dones  int
 		stores int
 	}{1, 1, 1})
-	ensure.DeepEqual(t, ack, 1)
+	assertEqual(t, ack, 1)
 }
 
 func TestContext_GetSetStateful(t *testing.T) {
@@ -327,20 +325,20 @@ func TestContext_GetSetStateful(t *testing.T) {
 		msg:           &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
 		emitter: func(tp string, k string, v []byte) *Promise {
 			wg.Add(1)
-			ensure.DeepEqual(t, tp, graph.GroupTable().Topic())
-			ensure.DeepEqual(t, string(k), key)
-			ensure.DeepEqual(t, string(v), value)
+			assertEqual(t, tp, graph.GroupTable().Topic())
+			assertEqual(t, string(k), key)
+			assertEqual(t, string(v), value)
 			return NewPromise().Finish(nil)
 		},
 	}
 
 	val := ctx.Value()
-	ensure.True(t, val == nil)
+	assertTrue(t, val == nil)
 
 	ctx.SetValue(value)
 
 	val = ctx.Value()
-	ensure.DeepEqual(t, val, value)
+	assertEqual(t, val, value)
 }
 
 func TestContext_SetErrors(t *testing.T) {
@@ -373,28 +371,27 @@ func TestContext_SetErrors(t *testing.T) {
 	}
 
 	err := ctx.setValueForKey(key, nil)
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "cannot set nil")
+	assertNotNil(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "cannot set nil"))
 
 	err = ctx.setValueForKey(key, 123) // cannot encode 123 as string
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "error encoding")
+	assertNotNil(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "error encoding"))
 
 	st.EXPECT().Set(key, []byte(value)).Return(errors.New("some-error"))
-	// st.EXPECT().Get(key).Return([]byte(value), nil)
 
 	err = ctx.setValueForKey(key, value)
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "some-error")
+	assertNotNil(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "some-error"))
 
 	// TODO(jb): check if still valid
 	// finish with error
 	// ctx.emitter = newEmitterW(wg, fmt.Errorf("some-error"), func(err error) {
-	// 	ensure.NotNil(t, err)
-	// 	ensure.StringContains(t, err.Error(), "some-error")
+	// 	assertNotNil(t, err)
+	//	assertTrue(t, strings.Contains(err.Error(), "some-error"))
 	// })
 	// err = ctx.setValueForKey(key, value)
-	// ensure.Nil(t, err)
+	// assertNil(t, err)
 }
 
 func TestContext_LoopbackNoLoop(t *testing.T) {
@@ -424,15 +421,15 @@ func TestContext_Loopback(t *testing.T) {
 		partProcStats: newPartitionProcStats(),
 		emitter: func(tp string, k string, v []byte) *Promise {
 			cnt++
-			ensure.DeepEqual(t, tp, graph.LoopStream().Topic())
-			ensure.DeepEqual(t, string(k), key)
-			ensure.DeepEqual(t, string(v), value)
+			assertEqual(t, tp, graph.LoopStream().Topic())
+			assertEqual(t, string(k), key)
+			assertEqual(t, string(v), value)
 			return NewPromise()
 		},
 	}
 
 	ctx.Loopback(key, value)
-	ensure.True(t, cnt == 1)
+	assertTrue(t, cnt == 1)
 }
 
 func TestContext_Join(t *testing.T) {
@@ -462,7 +459,7 @@ func TestContext_Join(t *testing.T) {
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Join(table)
-	ensure.DeepEqual(t, v, value)
+	assertEqual(t, v, value)
 
 	func() {
 		defer PanicStringContains(t, errSome.Error())
@@ -516,7 +513,7 @@ func TestContext_Lookup(t *testing.T) {
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Lookup(table, key)
-	ensure.DeepEqual(t, v, value)
+	assertEqual(t, v, value)
 
 	func() {
 		defer PanicStringContains(t, errSome.Error())
@@ -541,12 +538,12 @@ func TestContext_Fail(t *testing.T) {
 
 	defer func() {
 		err := recover()
-		ensure.NotNil(t, err)
-		ensure.True(t, strings.Contains(fmt.Sprintf("%v", err), "blubb"))
+		assertNotNil(t, err)
+		assertTrue(t, strings.Contains(fmt.Sprintf("%v", err), "blubb"))
 	}()
 
 	ctx.Fail(errors.New("blubb"))
 
 	// this must not be executed. ctx.Fail should stop execution
-	ensure.True(t, false)
+	assertTrue(t, false)
 }
