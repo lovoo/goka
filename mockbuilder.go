@@ -22,6 +22,8 @@ type builderMock struct {
 	tmgr          *MockTopicManager
 	consumerGroup *MockConsumerGroup
 	producer      *MockProducer
+	client        *MockClient
+	broker        *MockBroker
 }
 
 func newBuilderMock(ctrl *gomock.Controller) *builderMock {
@@ -30,6 +32,8 @@ func newBuilderMock(ctrl *gomock.Controller) *builderMock {
 		mst:      NewMockStorage(ctrl),
 		tmgr:     NewMockTopicManager(ctrl),
 		producer: NewMockProducer(ctrl),
+		client:   NewMockClient(ctrl),
+		broker:   NewMockBroker(ctrl),
 	}
 }
 
