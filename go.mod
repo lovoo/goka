@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/Shopify/sarama v1.25.0
+	github.com/davecgh/go-spew v1.1.1
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/facebookgo/ensure v0.0.0-20160127193407-b4ab57deab51
 	github.com/facebookgo/stack v0.0.0-20160209184415-751773369052 // indirect
