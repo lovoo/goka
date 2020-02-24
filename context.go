@@ -83,7 +83,6 @@ type cbContext struct {
 	views map[string]*View
 
 	partProcStats *PartitionProcStats
-	tableStats    *TableStats
 
 	msg      *sarama.ConsumerMessage
 	done     bool
@@ -149,10 +148,7 @@ func (ctx *cbContext) emit(topic string, key string, value []byte) {
 		ctx.emitDone(err)
 	})
 
-	s := ctx.partProcStats.Output[topic]
-	s.Count++
-	s.Bytes += len(value)
-	ctx.partProcStats.Output[topic] = s
+	ctx.partProcStats.trackOutput(topic, value)
 }
 
 func (ctx *cbContext) Delete() {

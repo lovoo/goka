@@ -71,12 +71,23 @@ func newPartitionProcessor(partition int32,
 	}
 
 	var (
-		topicList []string
-		callbacks = make(map[string]ProcessCallback)
+		topicList  []string
+		outputList []string
+		callbacks  = make(map[string]ProcessCallback)
 	)
 	for t := range topicMap {
 		topicList = append(topicList, t)
 		callbacks[t] = graph.callback(t)
+	}
+	for _, output := range graph.OutputStreams() {
+		outputList = append(outputList, output.Topic())
+	}
+	if graph.LoopStream() != nil {
+		outputList = append(outputList, graph.LoopStream().Topic())
+	}
+
+	if graph.GroupTable() != nil {
+		outputList = append(outputList, graph.GroupTable().Topic())
 	}
 
 	log := logger.Prefix(fmt.Sprintf("PartitionProcessor (%d)", partition))
@@ -95,7 +106,7 @@ func newPartitionProcessor(partition int32,
 		input:         make(chan *sarama.ConsumerMessage, opts.partitionChannelSize),
 		inputTopics:   topicList,
 		graph:         graph,
-		stats:         newPartitionProcStats(),
+		stats:         newPartitionProcStats(topicList, outputList),
 		requestStats:  make(chan bool),
 		responseStats: make(chan *PartitionProcStats, 1),
 		session:       session,
@@ -239,6 +250,9 @@ func (pp *PartitionProcessor) run(ctx context.Context) error {
 		}
 	}()
 
+	updateHwmStatsTicker := time.NewTicker(statsHwmUpdateInterval)
+	defer updateHwmStatsTicker.Stop()
+
 	for {
 		select {
 		case ev, isOpen := <-pp.input:
@@ -250,14 +264,20 @@ func (pp *PartitionProcessor) run(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("error processing message: %v", err)
 			}
+
+			pp.updateStats(ev)
+
 		case <-pp.requestStats:
-			lastStats := newPartitionProcStats().init(pp.stats)
+			stats := pp.collectStats(ctx)
 			select {
-			case pp.responseStats <- lastStats:
+			case pp.responseStats <- stats:
 			case <-ctx.Done():
 				pp.log.Printf("exiting, context is cancelled")
 				return nil
 			}
+		case <-updateHwmStatsTicker.C:
+			pp.updateHwmStats()
+
 		case <-ctx.Done():
 			pp.log.Printf("exiting, context is cancelled")
 			return nil
@@ -270,9 +290,78 @@ func (pp *PartitionProcessor) run(ctx context.Context) error {
 	}
 }
 
-func (pp *PartitionProcessor) getPartitionStats() *PartitionStats {
-	// TODO: create getPartitionStats
-	return nil
+func (pp *PartitionProcessor) updateStats(ev *sarama.ConsumerMessage) {
+	ip := pp.stats.Input[ev.Topic]
+	ip.Bytes += len(ev.Value)
+	ip.LastOffset = ev.Offset
+	if !ev.Timestamp.IsZero() {
+		ip.Delay = time.Since(ev.Timestamp)
+	}
+	ip.Count++
+}
+
+func (pp *PartitionProcessor) updateHwmStats() {
+	hwms := pp.consumer.HighWaterMarks()
+	for input, inputStats := range pp.stats.Input {
+		hwm := hwms[input][pp.partition]
+		if hwm != 0 && inputStats.LastOffset != 0 {
+			inputStats.LastOffset = hwm - inputStats.LastOffset
+		}
+	}
+}
+
+func (pp *PartitionProcessor) collectStats(ctx context.Context) *PartitionProcStats {
+	var (
+		stats = pp.stats.clone()
+		m     sync.Mutex
+	)
+
+	errg, ctx := multierr.NewErrGroup(ctx)
+
+	for topic, join := range pp.joins {
+		topic, join := topic, join
+		errg.Go(func() error {
+			joinStats := join.fetchStats(ctx)
+			m.Lock()
+			defer m.Unlock()
+			stats.Joined[topic] = joinStats
+			return nil
+		})
+	}
+
+	if pp.table != nil {
+		errg.Go(func() error {
+			stats.TableStats = pp.table.fetchStats(ctx)
+			return nil
+		})
+	}
+
+	err := errg.Wait().NilOrError()
+	if err != nil {
+		pp.log.Printf("Error retrieving stats: %v", err)
+	}
+
+	return stats
+}
+
+func (pp *PartitionProcessor) fetchStats(ctx context.Context) *PartitionProcStats {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-time.After(fetchStatsTimeout):
+		return nil
+	case pp.requestStats <- true:
+	}
+
+	// retrieve from response-channel
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-time.After(fetchStatsTimeout):
+		return nil
+	case stats := <-pp.responseStats:
+		return stats
+	}
 }
 
 func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitGroup, msg *sarama.ConsumerMessage, syncFailer func(err error), asyncFailer func(err error)) error {
@@ -358,15 +447,5 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	}()
 	// now call cb
 	cb(msgContext, m)
-
-	// metrics
-	s := pp.stats.Input[msg.Topic]
-	s.Count++
-	s.Bytes += len(msg.Value)
-	if !msg.Timestamp.IsZero() {
-		s.Delay = time.Since(msg.Timestamp)
-	}
-	pp.stats.Input[msg.Topic] = s
-
 	return nil
 }

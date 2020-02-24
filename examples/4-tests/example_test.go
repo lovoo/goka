@@ -7,6 +7,7 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/tester"
 )
 
@@ -40,7 +41,7 @@ func Test_1Input(t *testing.T) {
 	tt.Consume("input", "key", "some message")
 
 	// ensure the message was received
-	assertEqual(t, receivedMessage, "some message")
+	test.AssertEqual(t, receivedMessage, "some message")
 
 	// stop the processor and wait to finish
 	proc.Stop()
@@ -76,9 +77,9 @@ func Test_2InputOutput(t *testing.T) {
 
 	// make sure received the message in the output
 	key, value, valid := mt.Next()
-	assertTrue(t, valid)
-	assertEqual(t, key, "key")
-	assertEqual(t, value, "forwarded: some-message")
+	test.AssertTrue(t, valid)
+	test.AssertEqual(t, key, "key")
+	test.AssertEqual(t, value, "forwarded: some-message")
 }
 
 // Scenario (3)
@@ -106,7 +107,7 @@ func Test_3Persist(t *testing.T) {
 
 	// make sure it's correctly persisted in the state
 	value := gkt.TableValue("group-table", "key")
-	assertEqual(t, value, "state: some-message")
+	test.AssertEqual(t, value, "state: some-message")
 }
 
 // Scenario (4)
@@ -142,17 +143,17 @@ func Test_Subtest(t *testing.T) {
 
 		// check it was emitted
 		key, value, ok := mt.Next()
-		assertTrue(t, ok)
-		assertEqual(t, key, "output-key")
-		assertEqual(t, value, "forwarded: hello")
+		test.AssertTrue(t, ok)
+		test.AssertEqual(t, key, "output-key")
+		test.AssertEqual(t, value, "forwarded: hello")
 
 		// we should be at the end
-		assertEqual(t, mt.Hwm(), int64(1))
-		assertEqual(t, mt.NextOffset(), int64(1))
+		test.AssertEqual(t, mt.Hwm(), int64(1))
+		test.AssertEqual(t, mt.NextOffset(), int64(1))
 
 		// this is equivalent
 		_, _, ok = mt.Next()
-		assertFalse(t, ok)
+		test.AssertFalse(t, ok)
 	})
 	t.Run("test-2", func(t *testing.T) {
 		// clear all values so we can start with an empty state
@@ -163,7 +164,7 @@ func Test_Subtest(t *testing.T) {
 
 		// do some state checks
 		value := gkt.TableValue("group-table", "bob")
-		assertEqual(t, value, "state: hello")
+		test.AssertEqual(t, value, "state: hello")
 	})
 }
 
@@ -211,5 +212,5 @@ func Test_Chain(t *testing.T) {
 	// the value should be persisted in the second processor's table
 	value := gkt.TableValue("proc2-table", "bob")
 
-	assertEqual(t, value, "persist: proc1-out: loop: hello world")
+	test.AssertEqual(t, value, "persist: proc1-out: loop: hello world")
 }

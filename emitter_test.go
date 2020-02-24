@@ -13,10 +13,10 @@ import (
 )
 
 var (
-	emitterTestClientID string   = "161"
-	emitterTestBrokers  []string = []string{"0"}
-	emitterTestTopic    Stream   = "emitter-stream"
-	emitterIntCodec     Codec    = new(codec.Int64)
+	emitterTestClientID = "161"
+	emitterTestBrokers  = []string{"0"}
+	emitterTestTopic    = Stream("emitter-stream")
+	emitterIntCodec     = new(codec.Int64)
 )
 
 func createEmitter(t *testing.T, options ...EmitterOption) (*Emitter, *builderMock, *gomock.Controller) {
@@ -26,7 +26,7 @@ func createEmitter(t *testing.T, options ...EmitterOption) (*Emitter, *builderMo
 		WithEmitterClientID(emitterTestClientID),
 		WithEmitterTopicManagerBuilder(bm.getTopicManagerBuilder()),
 		WithEmitterProducerBuilder(bm.getProducerBuilder()),
-		WithEmitterHasher(func() hash.Hash32 { return NewConstHasher(0) }),
+		WithEmitterHasher(func() hash.Hash32 { return newConstHasher(0) }),
 	}, options...)...)
 	return emitter, bm, ctrl
 }
@@ -39,7 +39,7 @@ func TestEmitter_NewEmitter(t *testing.T) {
 			WithEmitterClientID(emitterTestClientID),
 			WithEmitterTopicManagerBuilder(bm.getTopicManagerBuilder()),
 			WithEmitterProducerBuilder(bm.getProducerBuilder()),
-			WithEmitterHasher(func() hash.Hash32 { return NewConstHasher(0) }),
+			WithEmitterHasher(func() hash.Hash32 { return newConstHasher(0) }),
 		}...)
 		test.AssertNil(t, err)
 		test.AssertNotNil(t, emitter)

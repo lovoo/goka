@@ -48,7 +48,7 @@ func TestContext_Emit(t *testing.T) {
 		graph:         DefineGroup(group),
 		commit:        func() { ack++ },
 		wg:            &sync.WaitGroup{},
-		partProcStats: newPartitionProcStats(),
+		partProcStats: newPartitionProcStats(nil, []string{"emit-topic"}),
 	}
 
 	// after that the message is processed
@@ -95,7 +95,7 @@ func TestContext_EmitError(t *testing.T) {
 		graph:         DefineGroup(group, Persist(new(codec.String))),
 		commit:        func() { ack++ },
 		wg:            &sync.WaitGroup{},
-		partProcStats: newPartitionProcStats(),
+		partProcStats: newPartitionProcStats(nil, []string{"emit-topic"}),
 		failer: func(err error) {
 			test.AssertTrue(t, strings.Contains(err.Error(), errToEmit.Error()))
 		},
@@ -274,7 +274,7 @@ func TestContext_Set(t *testing.T) {
 		graph:         DefineGroup(group, Persist(new(codec.String))),
 		wg:            new(sync.WaitGroup),
 		commit:        func() { ack++ },
-		partProcStats: newPartitionProcStats(),
+		partProcStats: newPartitionProcStats(nil, []string{string(GroupTable(group))}),
 		msg:           &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
 		table:         pt,
 	}
@@ -323,7 +323,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 		table:         pt,
 		wg:            wg,
 		graph:         graph,
-		partProcStats: newPartitionProcStats(),
+		partProcStats: newPartitionProcStats(nil, []string{string(GroupTable(group))}),
 		msg:           &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
 		emitter: func(tp string, k string, v []byte) *Promise {
 			wg.Add(1)
@@ -365,7 +365,7 @@ func TestContext_SetErrors(t *testing.T) {
 
 	ctx := &cbContext{
 		table:         pt,
-		partProcStats: newPartitionProcStats(),
+		partProcStats: newPartitionProcStats(nil, nil),
 		wg:            wg,
 		graph:         DefineGroup(group, Persist(new(codec.String))),
 		msg:           &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
@@ -420,7 +420,7 @@ func TestContext_Loopback(t *testing.T) {
 	ctx := &cbContext{
 		graph:         graph,
 		msg:           &sarama.ConsumerMessage{},
-		partProcStats: newPartitionProcStats(),
+		partProcStats: newPartitionProcStats([]string{"group-loop"}, []string{"group-loop"}),
 		emitter: func(tp string, k string, v []byte) *Promise {
 			cnt++
 			test.AssertEqual(t, tp, graph.LoopStream().Topic())

@@ -29,10 +29,10 @@ type View struct {
 	brokers    []string
 	topic      string
 	opts       *voptions
+	log        logger.Logger
 	partitions []*PartitionTable
 	consumer   sarama.Consumer
 	tmgr       TopicManager
-	terminated bool
 	state      *Signal
 }
 
@@ -72,6 +72,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 		brokers:  brokers,
 		topic:    string(topic),
 		opts:     opts,
+		log:      opts.log.Prefix(fmt.Sprintf("View %s", topic)),
 		consumer: consumer,
 		tmgr:     tmgr,
 		state:    NewSignal(ViewStateIdle, ViewStateCatchUp, ViewStateRunning).SetState(ViewStateIdle),
@@ -113,25 +114,24 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 		}
 	}
 
-	v.opts.log.Printf("Table %s has %d partitions", v.topic, len(partitions))
-
-	for _, p := range partitions {
+	for partID, p := range partitions {
 		v.partitions = append(v.partitions, newPartitionTable(v.topic,
 			p,
 			v.consumer,
 			v.tmgr,
 			v.opts.updateCallback,
 			v.opts.builders.storage,
-			v.opts.log))
+			v.log.Prefix(fmt.Sprintf("PartTable [%d]", partID)),
+		))
 	}
 
 	return nil
 }
 
 // Run starts consuming the view's topic.
-func (v *View) Run(ctx context.Context) error {
-	v.opts.log.Printf("view [%s]: starting", v.Topic())
-	defer v.opts.log.Printf("view [%s]: stopped", v.Topic())
+func (v *View) Run(ctx context.Context) (rerr error) {
+	v.log.Printf("starting")
+	defer v.log.Printf("stopped")
 
 	v.state.SetState(ViewStateCatchUp)
 
@@ -163,35 +163,30 @@ func (v *View) Run(ctx context.Context) error {
 		})
 	}
 
-	return errg.Wait().NilOrError()
+	// close the view after running
+	defer func() {
+		errs := new(multierr.Errors)
+		errs.Collect(rerr)
+		errs.Collect(v.close())
+		rerr = errs.NilOrError()
+	}()
+
+	// wait for all partitions to finish up (or be terminated)
+	rerr = errg.Wait().NilOrError()
+	return
 }
 
 // close closes all storage partitions
-func (v *View) close() *multierr.Errors {
-	errs := new(multierr.Errors)
+func (v *View) close() error {
+	errg, _ := multierr.NewErrGroup(context.Background())
 	for _, p := range v.partitions {
-		_ = errs.Collect(p.st.Close())
+		p := p
+		errg.Go(func() error {
+			return p.Close()
+		})
 	}
 	v.partitions = nil
-	return errs
-}
-
-// Terminate closes storage partitions. It must be called only if the view is
-// restartable (see WithViewRestartable() option). Once Terminate() is called,
-// the view cannot be restarted anymore.
-func (v *View) Terminate() error {
-	if !v.opts.restartable {
-		return nil
-	}
-	v.opts.log.Printf("View: closing")
-
-	// do not allow any reinitialization
-	if v.terminated {
-		return nil
-	}
-	v.terminated = true
-
-	return v.close().NilOrError()
+	return errg.Wait().NilOrError()
 }
 
 func (v *View) hash(key string) (int32, error) {
@@ -335,28 +330,33 @@ func (v *View) Recovered() bool {
 }
 
 // Stats returns a set of performance metrics of the view.
-func (v *View) Stats() *ViewStats {
-	return v.statsWithContext(context.Background())
+func (v *View) Stats(ctx context.Context) *ViewStats {
+	return v.statsWithContext(ctx)
 }
 
 func (v *View) statsWithContext(ctx context.Context) *ViewStats {
 	var (
-		// m     sync.Mutex
-		wg    sync.WaitGroup
+		m     sync.Mutex
 		stats = newViewStats()
 	)
+	errg, ctx := multierr.NewErrGroup(ctx)
 
-	wg.Add(len(v.partitions))
-	for i, p := range v.partitions {
-		go func(pid int32, par *PartitionTable) {
-			// TODO: implement fetching stats in the partitiontable
-			// s := par.fetchStats(ctx)
-			// m.Lock()
-			// stats.Partitions[pid] = s
-			// m.Unlock()
-			// wg.Done()
-		}(int32(i), p)
+	for _, partTable := range v.partitions {
+		partTable := partTable
+
+		errg.Go(func() error {
+			tableStats := partTable.fetchStats(ctx)
+			m.Lock()
+			defer m.Unlock()
+
+			stats.Partitions[partTable.partition] = tableStats
+			return nil
+		})
 	}
-	wg.Wait()
+
+	err := errg.Wait().NilOrError()
+	if err != nil {
+		v.log.Printf("Error retrieving stats: %v", err)
+	}
 	return stats
 }

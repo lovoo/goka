@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -124,6 +125,10 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	}
 
 	return processor, nil
+}
+
+func (g *Processor) Graph() *GroupGraph {
+	return g.graph
 }
 
 // isStateless returns whether the processor is a stateless one.
@@ -476,6 +481,51 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 	return nil
 }
 
+// Stats returns the aggregated stats for the processor including all partitions, tables, lookups and joins
+func (g *Processor) Stats() *ProcessorStats {
+	return g.StatsWithContext(context.Background())
+}
+
+// StatsWithContext returns stats for the processor, see #Processor.Stats()
+func (g *Processor) StatsWithContext(ctx context.Context) *ProcessorStats {
+	var (
+		m     sync.Mutex
+		stats = newProcessorStats(len(g.partitions))
+	)
+
+	errg, ctx := multierr.NewErrGroup(ctx)
+
+	// get partition-processor stats
+	for partID, proc := range g.partitions {
+		partID, proc := partID, proc
+		errg.Go(func() error {
+			partStats := proc.fetchStats(ctx)
+
+			m.Lock()
+			defer m.Unlock()
+			stats.Group[partID] = partStats
+			return nil
+		})
+	}
+
+	for topic, view := range g.lookupTables {
+		topic, view := topic, view
+		errg.Go(func() error {
+			m.Lock()
+			viewStats := view.Stats(ctx)
+			defer m.Unlock()
+			stats.Lookup[topic] = viewStats
+			return nil
+		})
+	}
+
+	err := errg.Wait().NilOrError()
+	if err != nil {
+		g.log.Printf("Error retrieving stats: %v", err)
+	}
+	return stats
+}
+
 // creates the partition that is responsible for the group processor's table
 func (g *Processor) createPartitionProcessor(ctx context.Context, partition int32, session sarama.ConsumerGroupSession) error {
 
@@ -490,6 +540,11 @@ func (g *Processor) createPartitionProcessor(ctx context.Context, partition int3
 	return nil
 }
 
+// Stop stops the processor.
+// This is semantically equivalent of closing the Context
+// that was passed to Processor.Run(..).
+// This method will return immediately, errors during running
+// will be returned from teh Processor.Run(..)
 func (g *Processor) Stop() {
 	g.cancel()
 }

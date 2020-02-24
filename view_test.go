@@ -18,8 +18,8 @@ import (
 
 var (
 	viewTestRecoveredMessages int
-	viewTestGroup             Group  = "group-name"
-	viewTestTopic             string = tableName(viewTestGroup)
+	viewTestGroup             Group = "group-name"
+	viewTestTopic                   = tableName(viewTestGroup)
 )
 
 // constHasher implements a hasher that will always return the specified
@@ -57,8 +57,8 @@ func (ch *constHasher) ReturnError() {
 	ch.returnErr = true
 }
 
-// NewConstHasher creates a constant hasher that hashes any value to 0.
-func NewConstHasher(part uint32) *constHasher {
+// newConstHasher creates a constant hasher that hashes any value to 0.
+func newConstHasher(part uint32) *constHasher {
 	return &constHasher{partition: part}
 }
 
@@ -84,7 +84,7 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 		return consumer, nil
 	}
 
-	view := &View{topic: viewTestTopic, opts: opts}
+	view := &View{topic: viewTestTopic, opts: opts, log: opts.log}
 	return view, bm, ctrl
 }
 
@@ -109,7 +109,7 @@ func TestView_hash(t *testing.T) {
 			&PartitionTable{},
 		}
 		view.opts.hasher = func() hash.Hash32 {
-			hasher := NewConstHasher(0)
+			hasher := newConstHasher(0)
 			hasher.ReturnError()
 			return hasher
 		}
@@ -132,8 +132,8 @@ func TestView_find(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key   string        = "some-key"
-			proxy *storageProxy = &storageProxy{}
+			key   string = "some-key"
+			proxy        = &storageProxy{}
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
@@ -141,7 +141,7 @@ func TestView_find(t *testing.T) {
 			},
 		}
 		view.opts.hasher = func() hash.Hash32 {
-			hasher := NewConstHasher(0)
+			hasher := newConstHasher(0)
 			return hasher
 		}
 
@@ -157,7 +157,7 @@ func TestView_find(t *testing.T) {
 			&PartitionTable{},
 		}
 		view.opts.hasher = func() hash.Hash32 {
-			hasher := NewConstHasher(0)
+			hasher := newConstHasher(0)
 			hasher.ReturnError()
 			return hasher
 		}
@@ -173,7 +173,7 @@ func TestView_Get(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			proxy *storageProxy = &storageProxy{
+			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
 				update: func(s storage.Storage, partition int32, key string, value []byte) error {
@@ -201,7 +201,7 @@ func TestView_Get(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			proxy *storageProxy = &storageProxy{
+			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
 				update: func(s storage.Storage, partition int32, key string, value []byte) error {
@@ -228,7 +228,7 @@ func TestView_Get(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			proxy *storageProxy = &storageProxy{
+			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
 				update: func(s storage.Storage, partition int32, key string, value []byte) error {
@@ -258,7 +258,7 @@ func TestView_Has(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			proxy *storageProxy = &storageProxy{
+			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
 			key string = "some-key"
@@ -270,7 +270,7 @@ func TestView_Has(t *testing.T) {
 			},
 		}
 		view.opts.hasher = func() hash.Hash32 {
-			hasher := NewConstHasher(0)
+			hasher := newConstHasher(0)
 			return hasher
 		}
 
@@ -285,7 +285,7 @@ func TestView_Has(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			proxy *storageProxy = &storageProxy{
+			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
 			key string = "some-key"
@@ -297,7 +297,7 @@ func TestView_Has(t *testing.T) {
 			},
 		}
 		view.opts.hasher = func() hash.Hash32 {
-			hasher := NewConstHasher(0)
+			hasher := newConstHasher(0)
 			return hasher
 		}
 
@@ -319,7 +319,7 @@ func TestView_Has(t *testing.T) {
 			&PartitionTable{},
 		}
 		view.opts.hasher = func() hash.Hash32 {
-			hasher := NewConstHasher(0)
+			hasher := newConstHasher(0)
 			hasher.ReturnError()
 			return hasher
 		}
@@ -336,8 +336,8 @@ func TestView_Evict(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key   string        = "some-key"
-			proxy *storageProxy = &storageProxy{
+			key   string = "some-key"
+			proxy        = &storageProxy{
 				Storage: bm.mst,
 			}
 		)
@@ -347,7 +347,7 @@ func TestView_Evict(t *testing.T) {
 			},
 		}
 		view.opts.hasher = func() hash.Hash32 {
-			hasher := NewConstHasher(0)
+			hasher := newConstHasher(0)
 			return hasher
 		}
 		bm.mst.EXPECT().Delete(key).Return(nil)
@@ -363,7 +363,7 @@ func TestView_Recovered(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			hasRecovered bool = true
+			hasRecovered = true
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
@@ -378,7 +378,7 @@ func TestView_Recovered(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			hasRecovered bool = false
+			hasRecovered = false
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
@@ -409,7 +409,7 @@ func TestView_close(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			proxy *storageProxy = &storageProxy{
+			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
 		)
@@ -426,8 +426,8 @@ func TestView_close(t *testing.T) {
 		}
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
-		multiErr := view.close()
-		test.AssertNil(t, multiErr.NilOrError())
+		err := view.close()
+		test.AssertNil(t, err)
 		test.AssertTrue(t, len(view.partitions) == 0)
 	})
 	t.Run("fail", func(t *testing.T) {
@@ -435,7 +435,7 @@ func TestView_close(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			proxy *storageProxy = &storageProxy{
+			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
 			retErr error = fmt.Errorf("some-error")
@@ -453,8 +453,8 @@ func TestView_close(t *testing.T) {
 		}
 		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
 
-		multiErr := view.close()
-		test.AssertNotNil(t, multiErr.NilOrError())
+		err := view.close()
+		test.AssertNotNil(t, err)
 		test.AssertTrue(t, len(view.partitions) == 0)
 	})
 }
@@ -465,10 +465,10 @@ func TestView_Terminate(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			proxy *storageProxy = &storageProxy{
+			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
-			isRestartable bool = true
+			isRestartable = true
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
@@ -484,20 +484,20 @@ func TestView_Terminate(t *testing.T) {
 		view.opts.restartable = isRestartable
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
-		ret := view.Terminate()
+		ret := view.close()
 		test.AssertNil(t, ret)
 		test.AssertTrue(t, len(view.partitions) == 0)
-		test.AssertTrue(t, view.terminated == true)
 	})
+
 	t.Run("succeed_twice", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
 		var (
-			proxy *storageProxy = &storageProxy{
+			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
-			isRestartable bool = true
+			isRestartable = true
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
@@ -513,53 +513,24 @@ func TestView_Terminate(t *testing.T) {
 		view.opts.restartable = isRestartable
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
-		ret := view.Terminate()
+		ret := view.close()
 		test.AssertNil(t, ret)
 		test.AssertTrue(t, len(view.partitions) == 0)
-		test.AssertTrue(t, view.terminated == true)
-		ret = view.Terminate()
+		ret = view.close()
 		test.AssertNil(t, ret)
 		test.AssertTrue(t, len(view.partitions) == 0)
-		test.AssertTrue(t, view.terminated == true)
 	})
-	t.Run("succeed_not_restartable", func(t *testing.T) {
-		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
-		defer ctrl.Finish()
 
-		var (
-			proxy *storageProxy = &storageProxy{
-				Storage: bm.mst,
-			}
-			isRestartable bool = false
-		)
-		view.partitions = []*PartitionTable{
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
-		}
-		view.opts.restartable = isRestartable
-
-		ret := view.Terminate()
-		test.AssertNil(t, ret)
-		test.AssertTrue(t, len(view.partitions) == 3)
-		test.AssertTrue(t, view.terminated == false)
-	})
 	t.Run("fail", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
 		var (
-			proxy *storageProxy = &storageProxy{
+			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
 			retErr        error = fmt.Errorf("some-error")
-			isRestartable bool  = true
+			isRestartable       = true
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
@@ -575,7 +546,7 @@ func TestView_Terminate(t *testing.T) {
 		view.opts.restartable = isRestartable
 		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
 
-		ret := view.Terminate()
+		ret := view.close()
 		test.AssertNotNil(t, ret)
 		test.AssertTrue(t, len(view.partitions) == 0)
 	})
@@ -587,13 +558,13 @@ func TestView_Run(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			oldest int64 = 0
+			oldest int64
 			newest int64 = 10
 			// local     int64          = oldest
-			consumer  *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			partition int32             = 0
-			count     int64             = 0
-			updateCB  UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
+			consumer  = defaultSaramaAutoConsumerMock(t)
+			partition int32
+			count     int64
+			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
 			}
@@ -646,10 +617,10 @@ func TestView_Run(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			partition int32             = 0
-			consumer  *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			updateCB  UpdateCallback    = nil
-			retErr    error             = fmt.Errorf("run error")
+			partition int32
+			consumer  = defaultSaramaAutoConsumerMock(t)
+			updateCB  UpdateCallback
+			retErr    = fmt.Errorf("run error")
 		)
 		bm.useMemoryStorage()
 
@@ -685,7 +656,7 @@ func TestView_createPartitions(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			partition int32 = 0
+			partition int32
 		)
 		bm.tmgr.EXPECT().Partitions(viewTestTopic).Return([]int32{partition}, nil)
 		bm.tmgr.EXPECT().Close()
@@ -735,7 +706,7 @@ func TestView_NewView(t *testing.T) {
 		bm := newBuilderMock(ctrl)
 
 		var (
-			partition int32 = 0
+			partition int32
 		)
 		bm.tmgr.EXPECT().Partitions(viewTestTopic).Return([]int32{partition}, nil).AnyTimes()
 		bm.tmgr.EXPECT().Close().AnyTimes()

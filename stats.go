@@ -1,21 +1,9 @@
 package goka
 
-import "time"
-
-// InputStats represents the number of messages and the number of bytes consumed
-// from a stream or table topic since the process started.
-type InputStats struct {
-	Count uint
-	Bytes int
-	Delay time.Duration
-}
-
-// OutputStats represents the number of messages and the number of bytes emitted
-// into a stream or table since the process started.
-type OutputStats struct {
-	Count uint
-	Bytes int
-}
+import (
+	"log"
+	"time"
+)
 
 // PartitionStatus is the status of the partition of a table (group table or joined table).
 type PartitionStatus int
@@ -34,136 +22,191 @@ const (
 	PartitionRunning
 )
 
-// PartitionStats represents metrics and measurements of a partition.
-type PartitionStats struct {
-	Now time.Time
+const (
+	statsHwmUpdateInterval = 5 * time.Second
+	fetchStatsTimeout      = 10 * time.Second
+)
 
-	Table struct {
-		Status  PartitionStatus
-		Stalled bool
+// InputStats represents the number of messages and the number of bytes consumed
+// from a stream or table topic since the process started.
+type InputStats struct {
+	Count      uint
+	Bytes      int
+	OffsetLag  int64
+	LastOffset int64
+	Delay      time.Duration
+}
 
-		Offset int64 // last offset processed or recovered
-		Hwm    int64 // next offset to be written
-
-		StartTime    time.Time
-		RecoveryTime time.Time
-	}
-	Input  map[string]InputStats
-	Output map[string]OutputStats
+// OutputStats represents the number of messages and the number of bytes emitted
+// into a stream or table since the process started.
+type OutputStats struct {
+	Count uint
+	Bytes int
 }
 
 // PartitionProcStats represents metrics and measurements of a partition processor
 type PartitionProcStats struct {
 	Now time.Time
 
-	Input  map[string]InputStats
-	Output map[string]OutputStats
+	TableStats *TableStats
+
+	Joined map[string]*TableStats
+
+	Input  map[string]*InputStats
+	Output map[string]*OutputStats
+}
+
+type RecoveryStats struct {
+	StartTime    time.Time
+	RecoveryTime time.Time
+
+	Offset int64 // last offset processed or recovered
+	Hwm    int64 // next offset to be written
 }
 
 // TableStats represents stats for a table partition
 type TableStats struct {
-	Status  PartitionStatus
 	Stalled bool
 
-	Offset int64 // last offset processed or recovered
-	Hwm    int64 // next offset to be written
+	Recovery *RecoveryStats
 
-	StartTime    time.Time
-	RecoveryTime time.Time
-
-	Input  map[string]InputStats
-	Output map[string]OutputStats
+	Input  *InputStats
+	Output *OutputStats
 }
 
-func newPartitionStats() *PartitionStats {
-	return &PartitionStats{
-		Now:    time.Now(),
-		Input:  make(map[string]InputStats),
-		Output: make(map[string]OutputStats),
-	}
+func newInputStats() *InputStats {
+	return &InputStats{}
 }
 
-func newPartitionProcStats() *PartitionProcStats {
-	return &PartitionProcStats{
-		Now:    time.Now(),
-		Input:  make(map[string]InputStats),
-		Output: make(map[string]OutputStats),
+func newOutputStats() *OutputStats {
+	return &OutputStats{}
+}
+
+func (is *InputStats) clone() *InputStats {
+	return &(*is)
+}
+
+func (os *OutputStats) clone() *OutputStats {
+	return &(*os)
+}
+
+type InputStatsMap map[string]*InputStats
+type OutputStatsMap map[string]*OutputStats
+
+func (isp InputStatsMap) clone() map[string]*InputStats {
+	var c = map[string]*InputStats{}
+	if isp == nil {
+		return c
 	}
+	for k, v := range isp {
+		c[k] = v.clone()
+	}
+	return c
+}
+
+func (osp OutputStatsMap) clone() map[string]*OutputStats {
+	var c = map[string]*OutputStats{}
+	if osp == nil {
+		return c
+	}
+	for k, v := range osp {
+		c[k] = v.clone()
+	}
+	return c
+}
+
+func newRecoveryStats() *RecoveryStats {
+	return new(RecoveryStats)
+}
+
+func (rs *RecoveryStats) clone() *RecoveryStats {
+	var rsCopy = *rs
+	return &rsCopy
+}
+
+func newPartitionProcStats(inputs []string, outputs []string) *PartitionProcStats {
+	procStats := &PartitionProcStats{
+		Now: time.Now(),
+
+		Input:  make(map[string]*InputStats),
+		Output: make(map[string]*OutputStats),
+	}
+
+	for _, input := range inputs {
+		procStats.Input[input] = newInputStats()
+	}
+
+	for _, output := range outputs {
+		procStats.Output[output] = newOutputStats()
+	}
+
+	return procStats
 }
 
 func newTableStats() *TableStats {
 	return &TableStats{
-		Input:  make(map[string]InputStats),
-		Output: make(map[string]OutputStats),
+		Input:    newInputStats(),
+		Output:   newOutputStats(),
+		Recovery: newRecoveryStats(),
 	}
 }
 
 func (ts *TableStats) reset() {
-	ts.Input = make(map[string]InputStats)
-	ts.Output = make(map[string]OutputStats)
+	ts.Input = newInputStats()
+	ts.Output = newOutputStats()
 }
 
-func (s *PartitionProcStats) init(o *PartitionProcStats) *PartitionProcStats {
-	s.Now = time.Now()
-	for k, v := range o.Input {
-		s.Input[k] = v
+func (ts *TableStats) clone() *TableStats {
+	return &TableStats{
+		Input:    ts.Input.clone(),
+		Output:   ts.Output.clone(),
+		Recovery: ts.Recovery.clone(),
+		Stalled:  ts.Stalled,
 	}
-	for k, v := range o.Output {
-		s.Output[k] = v
-	}
-	return s
 }
 
-func (s *PartitionStats) init(o *PartitionStats, offset, hwm int64) *PartitionStats {
-	s.Table.Status = o.Table.Status
-	s.Table.Stalled = o.Table.Stalled
-	s.Table.StartTime = o.Table.StartTime
-	s.Table.RecoveryTime = o.Table.RecoveryTime
-	s.Table.Offset = offset
-	s.Table.Hwm = hwm
-	s.Now = time.Now()
-	for k, v := range o.Input {
-		s.Input[k] = v
-	}
-	for k, v := range o.Output {
-		s.Output[k] = v
-	}
-	return s
+func (s *PartitionProcStats) clone() *PartitionProcStats {
+	pps := newPartitionProcStats(nil, nil)
+	pps.Now = time.Now()
+	pps.Joined = make(map[string]*TableStats)
+	pps.Input = InputStatsMap(s.Input).clone()
+	pps.Output = OutputStatsMap(s.Output).clone()
+
+	return pps
 }
 
-func (s *PartitionStats) reset() {
-	s.Input = make(map[string]InputStats)
-	s.Output = make(map[string]OutputStats)
+func (s *PartitionProcStats) trackOutput(topic string, value []byte) {
+	outStats := s.Output[topic]
+	if outStats == nil {
+		log.Printf("no out stats for topic %s", topic)
+	}
+	outStats.Count++
+	outStats.Bytes += len(value)
 }
 
 // ViewStats represents the metrics of all partitions of a view.
 type ViewStats struct {
-	Partitions map[int32]*PartitionStats
+	Partitions map[int32]*TableStats
 }
 
 func newViewStats() *ViewStats {
 	return &ViewStats{
-		Partitions: make(map[int32]*PartitionStats),
+		Partitions: make(map[int32]*TableStats),
 	}
 }
 
 // ProcessorStats represents the metrics of all partitions of the processor,
 // including its group, joined tables and lookup tables.
 type ProcessorStats struct {
-	Group  map[int32]*PartitionStats
-	Joined map[int32]map[string]*PartitionStats
+	Group  map[int32]*PartitionProcStats
 	Lookup map[string]*ViewStats
 }
 
 func newProcessorStats(partitions int) *ProcessorStats {
 	stats := &ProcessorStats{
-		Group:  make(map[int32]*PartitionStats),
-		Joined: make(map[int32]map[string]*PartitionStats),
+		Group:  make(map[int32]*PartitionProcStats),
 		Lookup: make(map[string]*ViewStats),
 	}
 
-	for i := int32(0); i < int32(partitions); i++ {
-		stats.Joined[i] = make(map[string]*PartitionStats)
-	}
 	return stats
 }

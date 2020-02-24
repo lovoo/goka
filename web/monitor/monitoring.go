@@ -1,10 +1,12 @@
 package monitor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/logger"
@@ -116,7 +118,9 @@ func (s *Server) renderData(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		stats = s.views[idx].Stats()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		stats = s.views[idx].Stats(ctx)
 	default:
 		w.Write([]byte("Invalid render type"))
 		http.NotFound(w, r)

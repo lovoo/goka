@@ -26,12 +26,15 @@ type PartitionTable struct {
 	topic          string
 	partition      int32
 	state          *Signal
-	stats          *TableStats
 	builder        storage.Builder
 	st             *storageProxy
 	consumer       sarama.Consumer
 	tmgr           TopicManager
 	updateCallback UpdateCallback
+
+	stats         *TableStats
+	requestStats  chan bool
+	responseStats chan *TableStats
 
 	offsetM sync.Mutex
 	// current offset
@@ -53,7 +56,6 @@ func newPartitionTable(topic string,
 	return &PartitionTable{
 		partition:      partition,
 		state:          NewSignal(State(PartitionRecovering), State(PartitionPreparing), State(PartitionRunning)),
-		stats:          newTableStats(),
 		consumer:       consumer,
 		tmgr:           tmgr,
 		topic:          topic,
@@ -62,6 +64,10 @@ func newPartitionTable(topic string,
 		log:            log,
 		stallPeriod:    defaultStallPeriod,
 		stalledTimeout: defaultStalledTimeout,
+
+		stats:         newTableStats(),
+		requestStats:  make(chan bool),
+		responseStats: make(chan *TableStats, 1),
 	}
 }
 
@@ -174,14 +180,12 @@ WaitLoop:
 
 // start loads the table partition up to HWM and then consumes streams
 func (p *PartitionTable) catchupToHwm(ctx context.Context) error {
-	p.stats.StartTime = time.Now()
 	// catchup until hwm
 	return p.load(ctx, true)
 }
 
 // continue
 func (p *PartitionTable) catchupForever(ctx context.Context) error {
-	p.stats.StartTime = time.Now()
 	err := p.load(ctx, true)
 	if err != nil {
 		return fmt.Errorf("Error catching up: %v", err)
@@ -289,6 +293,11 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	// consume errors asynchronously
 	go p.handleConsumerErrors(ctx, errs, partConsumer)
 
+	if stopAfterCatchup {
+		p.stats.Recovery.StartTime = time.Now()
+		p.stats.Recovery.Hwm = hwm
+	}
+
 	// load messages and stop when you're at HWM
 	loadErr := p.loadMessages(ctx, partConsumer, hwm, stopAfterCatchup)
 
@@ -299,6 +308,8 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 
 	if stopAfterCatchup {
 		errs.Collect(p.markRecovered(ctx))
+
+		p.stats.Recovery.RecoveryTime = time.Now()
 	}
 	return
 }
@@ -364,6 +375,9 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 	stallTicker := time.NewTicker(p.stallPeriod)
 	defer stallTicker.Stop()
 
+	updateHwmStatsTicker := time.NewTicker(statsHwmUpdateInterval)
+	defer updateHwmStatsTicker.Stop()
+
 	lastMessage := time.Now()
 
 	for {
@@ -397,15 +411,11 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 				return
 			}
 
-			// update metrics
-			s := p.stats.Input[msg.Topic]
-			s.Count++
-			s.Bytes += len(msg.Value)
-			if !msg.Timestamp.IsZero() {
-				s.Delay = time.Since(msg.Timestamp)
+			if stopAfterCatchup {
+				p.stats.Recovery.Offset = msg.Offset
 			}
-			p.stats.Input[msg.Topic] = s
-			p.stats.Stalled = false
+
+			p.updateStats(msg)
 		case now := <-stallTicker.C:
 			// only set to stalled, if the last message was earlier
 			// than the stalled timeout
@@ -413,9 +423,60 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 				p.stats.Stalled = true
 			}
 
+		case <-p.requestStats:
+			stats := p.stats.clone()
+			select {
+			case p.responseStats <- stats:
+			case <-ctx.Done():
+				p.log.Printf("exiting, context is cancelled")
+				return nil
+			}
+
+		case <-updateHwmStatsTicker.C:
+			p.updateHwmStats()
+
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+func (p *PartitionTable) fetchStats(ctx context.Context) *TableStats {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-time.After(fetchStatsTimeout):
+		return nil
+	case p.requestStats <- true:
+	}
+
+	// retrieve from response-channel
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-time.After(fetchStatsTimeout):
+		return nil
+	case stats := <-p.responseStats:
+		return stats
+	}
+}
+
+func (p *PartitionTable) updateStats(msg *sarama.ConsumerMessage) {
+	ip := p.stats.Input
+	ip.Bytes += len(msg.Value)
+	ip.LastOffset = msg.Offset
+	if !msg.Timestamp.IsZero() {
+		ip.Delay = time.Since(msg.Timestamp)
+	}
+	ip.Count++
+	p.stats.Stalled = false
+}
+
+func (p *PartitionTable) updateHwmStats() {
+	hwms := p.consumer.HighWaterMarks()
+	hwm := hwms[p.topic][p.partition]
+	if hwm != 0 {
+		p.stats.Input.OffsetLag = hwm - p.stats.Input.LastOffset
 	}
 }
 
