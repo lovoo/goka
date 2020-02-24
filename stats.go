@@ -11,6 +11,9 @@ type PartitionStatus int
 const (
 	// PartitionStopped indicates the partition stopped and should not be used anymore.
 	PartitionStopped PartitionStatus = iota
+	// PartitionInitializing indicates that the underlying storage is initializing (e.g. opening leveldb files),
+	// and has not actually started working yet.
+	PartitionInitializing
 	// PartitionRecovering indicates the partition is recovering and the storage
 	// is writing updates in bulk-mode (if the storage implementation supports it).
 	PartitionRecovering
@@ -67,6 +70,8 @@ type RecoveryStats struct {
 // TableStats represents stats for a table partition
 type TableStats struct {
 	Stalled bool
+
+	Status PartitionStatus
 
 	Recovery *RecoveryStats
 

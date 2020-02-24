@@ -54,8 +54,14 @@ func newPartitionTable(topic string,
 	builder storage.Builder,
 	log logger.Logger) *PartitionTable {
 	return &PartitionTable{
-		partition:      partition,
-		state:          NewSignal(State(PartitionRecovering), State(PartitionPreparing), State(PartitionRunning)),
+		partition: partition,
+		state: NewSignal(
+			State(PartitionStopped),
+			State(PartitionInitializing),
+			State(PartitionRecovering),
+			State(PartitionPreparing),
+			State(PartitionRunning),
+		).SetState(State(PartitionStopped)),
 		consumer:       consumer,
 		tmgr:           tmgr,
 		topic:          topic,
@@ -124,8 +130,10 @@ func (p *PartitionTable) SetupAndCatchupForever(ctx context.Context, restartOnEr
 
 // Setup creates the storage for the partition table
 func (p *PartitionTable) setup(ctx context.Context) error {
+	p.state.SetState(State(PartitionInitializing))
 	storage, err := p.createStorage(ctx)
 	if err != nil {
+		p.state.SetState(State(PartitionStopped))
 		return fmt.Errorf("error setting up partition table: %v", err)
 	}
 
@@ -277,6 +285,10 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	p.log.Printf("Loading partition table from %d (hwm=%d)", loadOffset, hwm)
 	defer p.log.Printf("... Loading done")
 
+	if stopAfterCatchup {
+		p.state.SetState(State(PartitionRecovering))
+	}
+
 	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, loadOffset)
 	if err != nil {
 		errs.Collect(fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, localOffset, err))
@@ -425,6 +437,7 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 
 		case <-p.requestStats:
 			stats := p.stats.clone()
+			stats.Status = PartitionStatus(p.state.State())
 			select {
 			case p.responseStats <- stats:
 			case <-ctx.Done():
