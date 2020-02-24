@@ -39,6 +39,27 @@ func (s *std) Panicf(msg string, args ...interface{}) {
 }
 
 func (s *std) Prefix(prefix string) Logger {
+	return s.StackPrefix(prefix).(*std)
+}
+
+// Default returns the standard library logger
+func Default() Logger {
+	return defaultLogger
+}
+
+func EmptyPrefixer() Prefixer {
+	return &std{}
+}
+
+type Prefixer interface {
+	CurrentPrefix() string
+	StackPrefix(prefix string) Prefixer
+}
+
+func (s *std) CurrentPrefix() string {
+	return s.prefix
+}
+func (s *std) StackPrefix(prefix string) Prefixer {
 	var prefPath []string
 	// append existing path
 	prefPath = append(prefPath, s.prefixPath...)
@@ -58,9 +79,4 @@ func (s *std) Prefix(prefix string) Logger {
 		prefixPath: prefPath,
 		prefix:     newPrefix,
 	}
-}
-
-// Default returns the standard library logger
-func Default() Logger {
-	return defaultLogger
 }
