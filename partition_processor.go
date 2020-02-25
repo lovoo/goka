@@ -129,6 +129,10 @@ func (pp *PartitionProcessor) EnqueueMessage(msg *sarama.ConsumerMessage) {
 	pp.input <- msg
 }
 
+func (pp *PartitionProcessor) Recovered() bool {
+	return pp.state.IsState(PPStateRunning)
+}
+
 func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	ctx, pp.cancelRunnerGroup = context.WithCancel(ctx)
 

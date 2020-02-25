@@ -366,6 +366,12 @@ func (g *Processor) waitForLookupTables() {
 	}
 }
 
+// Recovered returns whether the processor is running, i.e. if the processor
+// has recovered all lookups/joins/tables and is running
+func (g *Processor) Recovered() bool {
+	return g.state.IsState(ProcStateRunning)
+}
+
 func (g *Processor) assignmentFromSession(session sarama.ConsumerGroupSession) Assignment {
 	assignment := Assignment{}
 
