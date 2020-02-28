@@ -3,6 +3,8 @@ package goka
 import (
 	"context"
 	"fmt"
+	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -133,10 +135,23 @@ func (pp *PartitionProcessor) Recovered() bool {
 	return pp.state.IsState(PPStateRunning)
 }
 
+func (pp *PartitionProcessor) Errors() <-chan error {
+	errs := make(chan error)
+
+	go func() {
+		defer close(errs)
+		err := pp.runnerGroup.Wait().NilOrError()
+		if err != nil {
+			errs <- err
+		}
+	}()
+	return errs
+}
+
 func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	ctx, pp.cancelRunnerGroup = context.WithCancel(ctx)
 
-	pp.runnerGroup, _ = multierr.NewErrGroup(ctx)
+	pp.runnerGroup, ctx = multierr.NewErrGroup(ctx)
 
 	pp.state.SetState(PPStateRecovering)
 	defer pp.state.SetState(PPStateRunning)
@@ -154,7 +169,12 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	for _, join := range pp.graph.JointTables() {
 		table := newPartitionTable(join.Topic(),
 			pp.partition,
-			pp.consumer, pp.tmgr, pp.opts.updateCallback, pp.opts.builders.storage, pp.opts.log)
+			pp.consumer,
+			pp.tmgr,
+			pp.opts.updateCallback,
+			pp.opts.builders.storage,
+			pp.log.Prefix(fmt.Sprintf("Join %s", join.Topic())),
+		)
 		pp.joins[join.Topic()] = table
 		setupErrg.Go(func() error {
 			return pp.startJoinTable(setupCtx, table)
@@ -167,9 +187,30 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 		return fmt.Errorf("Setup failed. Cannot start processor for partition %d: %v", pp.partition, err)
 	}
 
+	// as the table is now recovered, we have to start handling stats requests
+	// separately during running
+	if pp.table != nil {
+		pp.runnerGroup.Go(func() error {
+			pp.table.handleStatsRequests(ctx)
+			return nil
+		})
+	}
+
+	for _, join := range pp.joins {
+		join := join
+		pp.runnerGroup.Go(func() error {
+			join.handleStatsRequests(ctx)
+			return nil
+		})
+	}
+
 	// now run the processor in a runner-group
 	pp.runnerGroup.Go(func() error {
-		return pp.run(ctx)
+		err := pp.run(ctx)
+		if err != nil {
+			pp.log.Printf("Run failed with erorr: %v", err)
+		}
+		return err
 	})
 	return nil
 }
@@ -180,11 +221,14 @@ func (pp *PartitionProcessor) startJoinTable(ctx context.Context, table *Partiti
 
 	// the join tables keep updating while we're running, so run them in the runner-group to check for errors
 	pp.runnerGroup.Go(func() error {
-		err, ok := <-errorChan
-		if ok && err != nil {
-			return fmt.Errorf("Error while setup/catchingup/updating topic/partition %s/%d: %v", table.topic, pp.partition, err)
+		errs := new(multierr.Errors)
+
+		for err := range errorChan {
+			if err != nil {
+				errs.Collect(fmt.Errorf("Error while setup/catchingup/updating topic/partition %s/%d: %v", table.topic, pp.partition, err))
+			}
 		}
-		return nil
+		return errs.NilOrError()
 	})
 
 	select {
@@ -215,8 +259,17 @@ func (pp *PartitionProcessor) Stop() error {
 	return errs.NilOrError()
 }
 
-func (pp *PartitionProcessor) run(ctx context.Context) error {
+func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 	pp.log.Printf("starting")
+	defer pp.log.Printf("stopped")
+
+	defer func() {
+		errs := new(multierr.Errors)
+		errs.Collect(rerr)
+		rerr = errs.NilOrError()
+		log.Printf("partition processor stopped with errors. %#v", rerr)
+	}()
+
 	var (
 		// syncFailer is called synchronously from the callback within *this*
 		// goroutine
@@ -224,23 +277,33 @@ func (pp *PartitionProcessor) run(ctx context.Context) error {
 			// only fail processor if context not already Done
 			select {
 			case <-ctx.Done():
+				rerr = err
 				return
 			default:
 			}
 			panic(err)
 		}
 
-		asyncErrors = make(chan error, pp.opts.partitionChannelSize)
+		asyncErrors = make(chan error, 10)
 		// asyncFailer is called asynchronously from other goroutines, e.g.
-		// when the
+		// when the promise of a Emit (using a producer internally) fails
 		asyncFailer = func(err error) {
-			asyncErrors <- err
+			select {
+			case asyncErrors <- err:
+			default:
+				pp.log.Printf("async error while processing message: %v", err)
+			}
 		}
 
 		wg sync.WaitGroup
 	)
-	// wait for the wg-group but with timeout in case there's a messed up race condition somewhere
+
 	defer func() {
+		if r := recover(); r != nil {
+			rerr = fmt.Errorf("%v\n%v", r, string(debug.Stack()))
+			return
+		}
+
 		done := make(chan struct{})
 		go func() {
 			wg.Wait()
@@ -249,8 +312,8 @@ func (pp *PartitionProcessor) run(ctx context.Context) error {
 
 		select {
 		case <-done:
-		case <-time.NewTimer(10 * time.Second).C:
-			pp.log.Printf("partition shutdown timed out. Will stop waiting.")
+		case <-time.NewTimer(60 * time.Second).C:
+			pp.log.Printf("partition processor did not shutdown in time. Will stop waiting")
 		}
 	}()
 
@@ -277,19 +340,17 @@ func (pp *PartitionProcessor) run(ctx context.Context) error {
 			case pp.responseStats <- stats:
 			case <-ctx.Done():
 				pp.log.Printf("exiting, context is cancelled")
-				return nil
+				return
 			}
 		case <-updateHwmStatsTicker.C:
 			pp.updateHwmStats()
 
 		case <-ctx.Done():
 			pp.log.Printf("exiting, context is cancelled")
-			return nil
+			return
 		case err := <-asyncErrors:
-			// close it so the other messages that might write to the channel will panic
-			// TODO: is there a more elegant solution?
-			close(asyncErrors)
-			return fmt.Errorf("error processing a message: %v", err)
+			rerr = fmt.Errorf("error processing a message: %v", err)
+			return
 		}
 	}
 }
@@ -353,6 +414,7 @@ func (pp *PartitionProcessor) fetchStats(ctx context.Context) *PartitionProcStat
 	case <-ctx.Done():
 		return nil
 	case <-time.After(fetchStatsTimeout):
+		pp.log.Printf("requesting stats timed out")
 		return nil
 	case pp.requestStats <- true:
 	}
@@ -362,6 +424,7 @@ func (pp *PartitionProcessor) fetchStats(ctx context.Context) *PartitionProcStat
 	case <-ctx.Done():
 		return nil
 	case <-time.After(fetchStatsTimeout):
+		pp.log.Printf("Fetching stats timed out")
 		return nil
 	case stats := <-pp.responseStats:
 		return stats
@@ -376,30 +439,13 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 		partProcStats: pp.stats,
 		pviews:        pp.joins,
 		views:         pp.lookups,
+		cgSession:     pp.session,
 		wg:            wg,
 		msg:           msg,
-		failer:        syncFailer,
-		emitter: func(topic string, key string, value []byte) *Promise {
-			return pp.producer.Emit(topic, key, value).Then(func(err error) {
-				if err != nil {
-					asyncFailer(fmt.Errorf("error emitting message to %s (key=%s): %v", topic, key, err))
-				}
-			})
-		},
-		table: pp.table,
-	}
-	msgContext.commit = func() {
-		// write group table offset to local storage
-		if msgContext.counters.stores > 0 {
-			err := msgContext.table.IncrementOffsets(int64(msgContext.counters.stores))
-			if err != nil {
-				asyncFailer(fmt.Errorf("error incrementing offset for %s/%d: %v", pp.graph.GroupTable().Topic(), msg.Partition, err))
-				return
-			}
-		}
-
-		// mark upstream offset
-		pp.session.MarkMessage(msg, "")
+		syncFailer:    syncFailer,
+		asyncFailer:   asyncFailer,
+		emitter:       pp.producer.Emit,
+		table:         pp.table,
 	}
 
 	var (
@@ -437,19 +483,8 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	// start context and call the ProcessorCallback cb
 	msgContext.start()
 
-	// call finish with the panic or with nil depending on a pending panic
-	defer func() {
-		if r := recover(); r != nil {
-			// if handling the message panicked, we will still mark the
-			// context as done, so we don't wait in the waitgroup forever
-			msgContext.markDone()
-			msgContext.finish(fmt.Errorf("panic: %v", r))
-			panic(r) // propagate panic up
-		} else {
-			msgContext.finish(nil)
-		}
-	}()
 	// now call cb
 	cb(msgContext, m)
+	msgContext.finish(nil)
 	return nil
 }

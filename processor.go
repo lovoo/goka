@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -95,7 +96,6 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 		view, err := NewView(brokers, Table(t.Topic()), t.Codec(),
 			WithViewLogger(opts.log),
 			WithViewHasher(opts.hasher),
-			WithViewPartitionChannelSize(opts.partitionChannelSize),
 			WithViewClientID(opts.clientID),
 			WithViewTopicManagerBuilder(opts.builders.topicmgr),
 			WithViewStorageBuilder(opts.builders.storage),
@@ -235,10 +235,6 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 		return fmt.Errorf(errBuildConsumer, err)
 	}
 
-	defer func() {
-		errors.Collect(consumerGroup.Close())
-	}()
-
 	go func() {
 		for err := range consumerGroup.Errors() {
 			g.log.Printf("Error executing group consumer: %v", err)
@@ -264,6 +260,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	g.producer = producer
 	defer func() {
 		g.log.Printf("closing producer")
+		defer g.log.Printf("producer ... closed")
 		if err := g.producer.Close(); err != nil {
 			errors.Collect(fmt.Errorf("error closing producer: %v", err))
 		}
@@ -286,44 +283,65 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 
 	// run the main rebalance-consume-loop
 	errg.Go(func() error {
-		var topics []string
-		for _, e := range g.graph.InputStreams() {
-			topics = append(topics, e.Topic())
-		}
-		if g.graph.LoopStream() != nil {
-			topics = append(topics, g.graph.LoopStream().Topic())
-		}
-
-		for {
-			var (
-				err  error
-				done = make(chan struct{})
-			)
-			go func() {
-				defer close(done)
-				g.log.Printf("consuming from consumer loop")
-				err = consumerGroup.Consume(ctx, topics, g)
-			}()
-			select {
-			case <-done:
-				g.log.Printf("Consumer group loop done, will stop here")
-				if err != nil {
-					return fmt.Errorf("error running consumergroup: %v", err)
-				}
-				return nil
-			case <-ctx.Done():
-				g.log.Printf("context closed, waiting for processor to finish up")
-				<-done
-				g.log.Printf("context closed, processor finished")
-				if err != nil {
-					return fmt.Errorf("error running consumergroup: %v", err)
-				}
-				return nil
-			}
-		}
+		return g.rebalanceLoop(ctx, consumerGroup)
 	})
 
 	return errg.Wait().NilOrError()
+}
+
+func (g *Processor) rebalanceLoop(ctx context.Context, consumerGroup sarama.ConsumerGroup) (rerr error) {
+	var topics []string
+	for _, e := range g.graph.InputStreams() {
+		topics = append(topics, e.Topic())
+	}
+	if g.graph.LoopStream() != nil {
+		topics = append(topics, g.graph.LoopStream().Topic())
+	}
+
+	var errs = new(multierr.Errors)
+
+	defer func() {
+		errs.Collect(rerr)
+		rerr = errs.NilOrError()
+	}()
+
+	defer func() {
+		g.log.Printf("defer: closing consumer group")
+		defer g.log.Printf("defer: closing consumer group ... done")
+		errs.Collect(consumerGroup.Close())
+	}()
+
+	for {
+		var (
+			consumeErr = make(chan error)
+		)
+		go func() {
+			g.log.Printf("consuming from consumer loop")
+			defer g.log.Printf("consuming from consumer loop done")
+			defer close(consumeErr)
+			err := consumerGroup.Consume(ctx, topics, g)
+			if err != nil {
+				consumeErr <- err
+			}
+		}()
+		select {
+		case err := <-consumeErr:
+			g.log.Printf("Consumer group loop done, will stop here")
+
+			if err != nil {
+				errs.Collect(err)
+				return
+			}
+		case <-ctx.Done():
+			g.log.Printf("context closed, waiting for processor to finish up")
+			err := <-consumeErr
+			errs.Collect(err)
+			g.log.Printf("context closed, waiting for processor to finish up")
+			return
+		}
+		// let's wait some time before we retry to consume
+		<-time.After(5 * time.Second)
+	}
 }
 
 func (g *Processor) waitForLookupTables() {
@@ -343,6 +361,7 @@ func (g *Processor) waitForLookupTables() {
 		start     = time.Now()
 		logTicker = time.NewTicker(1 * time.Minute)
 	)
+
 	defer logTicker.Stop()
 	for {
 		select {
@@ -393,7 +412,6 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	defer g.state.SetState(ProcStateRunning)
 	g.log.Printf("setup generation %d", session.GenerationID())
 	defer g.log.Printf("setup generation %d ... done", session.GenerationID())
-	errs := new(multierr.Errors)
 
 	assignment := g.assignmentFromSession(session)
 
@@ -409,7 +427,10 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	// create partition views for all partitions
 	for partition := range assignment {
 		// create partition processor for our partition
-		errs.Collect(g.createPartitionProcessor(session.Context(), partition, session))
+		err := g.createPartitionProcessor(session.Context(), partition, session)
+		if err != nil {
+			return fmt.Errorf("Error creating partition processor for %s/%d: %v", g.Graph().Group(), partition, err)
+		}
 	}
 
 	// setup all processors
@@ -421,8 +442,7 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 		})
 	}
 
-	errs.Collect(errg.Wait().NilOrError())
-	return errs.NilOrError()
+	return errg.Wait().NilOrError()
 }
 
 // Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
@@ -481,10 +501,28 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 		return fmt.Errorf("No partition (%d) to handle input in topic %s", claim.Partition(), claim.Topic())
 	}
 
-	for msg := range claim.Messages() {
-		part.EnqueueMessage(msg)
+	messages := claim.Messages()
+	errors := part.Errors()
+
+	for {
+		select {
+		case msg, ok := <-messages:
+			if !ok {
+				return nil
+			}
+
+			select {
+			case part.input <- msg:
+			case err := <-errors:
+				log.Printf("consume claim got error from partition processor. Returning: %v", err)
+				return err
+			}
+
+		case err := <-errors:
+			log.Printf("consume claim got error from partition processor. Returning: %v", err)
+			return err
+		}
 	}
-	return nil
 }
 
 // Stats returns the aggregated stats for the processor including all partitions, tables, lookups and joins

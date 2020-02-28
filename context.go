@@ -71,10 +71,12 @@ type Context interface {
 type cbContext struct {
 	ctx   context.Context
 	graph *GroupGraph
+	// ConsumerGroupSession from our current consumer group session
+	cgSession sarama.ConsumerGroupSession
 
-	commit  func()
-	emitter emitter
-	failer  func(err error)
+	emitter     emitter
+	asyncFailer func(err error)
+	syncFailer  func(err error)
 
 	table *PartitionTable
 	// joins
@@ -295,10 +297,7 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 		ctx.emitDone(err)
 	})
 
-	s := ctx.partProcStats.Output[table]
-	s.Count++
-	s.Bytes += len(encodedValue)
-	ctx.partProcStats.Output[table] = s
+	ctx.table.trackOutgoingMessage(len(encodedValue))
 
 	return nil
 }
@@ -338,13 +337,24 @@ func (ctx *cbContext) tryCommit(err error) {
 
 	// commit if no errors, otherwise fail context
 	if ctx.errors.HasErrors() {
-		ctx.failer(ctx.errors.NilOrError())
+		ctx.asyncFailer(ctx.errors.NilOrError())
 	} else {
 		ctx.commit()
 	}
 
-	// no further callback will be called from this context
 	ctx.markDone()
+}
+
+func (ctx *cbContext) commit() {
+	if ctx.counters.stores > 0 {
+		err := ctx.table.IncrementOffsets(int64(ctx.counters.stores))
+		if err != nil {
+			ctx.asyncFailer(fmt.Errorf("error incrementing offset : %v", err))
+		}
+	}
+
+	// mark upstream offset as done
+	ctx.cgSession.MarkMessage(ctx.msg, "")
 }
 
 // markdone marks the context as done
@@ -354,7 +364,7 @@ func (ctx *cbContext) markDone() {
 
 // Fail stops execution and shuts down the processor
 func (ctx *cbContext) Fail(err error) {
-	panic(err)
+	ctx.syncFailer(err)
 }
 
 func (ctx *cbContext) Context() context.Context {

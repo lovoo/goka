@@ -43,7 +43,6 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 		[]ViewOption{
 			WithViewLogger(logger.Default()),
 			WithViewCallback(DefaultUpdate),
-			WithViewPartitionChannelSize(defaultPartitionChannelSize),
 			WithViewStorageBuilder(storage.DefaultBuilder(DefaultViewStoragePath())),
 		},
 
@@ -121,7 +120,7 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 			v.tmgr,
 			v.opts.updateCallback,
 			v.opts.builders.storage,
-			v.log.Prefix(fmt.Sprintf("PartTable [%d]", partID)),
+			v.log.Prefix(fmt.Sprintf("PartTable-%d", partID)),
 		))
 	}
 

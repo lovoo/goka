@@ -90,15 +90,18 @@ func TestContext_EmitError(t *testing.T) {
 		group     Group = "some-group"
 	)
 
+	failer := func(err error) {
+		test.AssertTrue(t, strings.Contains(err.Error(), errToEmit.Error()))
+	}
+
 	// test error case
 	ctx := &cbContext{
 		graph:         DefineGroup(group, Persist(new(codec.String))),
 		commit:        func() { ack++ },
 		wg:            &sync.WaitGroup{},
 		partProcStats: newPartitionProcStats(nil, []string{"emit-topic"}),
-		failer: func(err error) {
-			test.AssertTrue(t, strings.Contains(err.Error(), errToEmit.Error()))
-		},
+		syncFailer:    failer,
+		asyncFailer:   failer,
 	}
 	ctx.emitter = newEmitter(errToEmit, func(err error) {
 		emitted++
@@ -363,13 +366,16 @@ func TestContext_SetErrors(t *testing.T) {
 		_      = failed // make linter happy
 	)
 
+	failer := func(err error) { failed = err }
+
 	ctx := &cbContext{
 		table:         pt,
 		partProcStats: newPartitionProcStats(nil, nil),
 		wg:            wg,
 		graph:         DefineGroup(group, Persist(new(codec.String))),
 		msg:           &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
-		failer:        func(err error) { failed = err },
+		syncFailer:    failer,
+		asyncFailer:   failer,
 	}
 
 	err := ctx.setValueForKey(key, nil)
