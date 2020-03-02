@@ -133,34 +133,7 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 	defer v.log.Printf("stopped")
 
 	v.state.SetState(ViewStateCatchUp)
-
-	errg, ctx := multierr.NewErrGroup(ctx)
-
-	multiWait := multierr.NewMultiWait(ctx, len(v.partitions))
-	go func() {
-		if multiWait.Wait() {
-			v.state.SetState(ViewStateRunning)
-		}
-	}()
-
-	for _, partition := range v.partitions {
-		partition := partition
-		errg.Go(func() error {
-			catchupChan, errChan := partition.SetupAndCatchupForever(ctx, v.opts.restartable)
-
-			multiWait.Add(catchupChan)
-
-			select {
-			case <-ctx.Done():
-				return nil
-			case err, ok := <-errChan:
-				if ok && err != nil {
-					return fmt.Errorf("Error while setup/catching up/recovering: %v", err)
-				}
-			}
-			return nil
-		})
-	}
+	defer v.state.SetState(ViewStateIdle)
 
 	// close the view after running
 	defer func() {
@@ -170,8 +143,35 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 		rerr = errs.NilOrError()
 	}()
 
-	// wait for all partitions to finish up (or be terminated)
-	rerr = errg.Wait().NilOrError()
+	recoverErrg, ctx := multierr.NewErrGroup(ctx)
+
+	for _, partition := range v.partitions {
+		partition := partition
+		recoverErrg.Go(func() error {
+			return partition.SetupAndRecover(ctx)
+		})
+	}
+
+	err := recoverErrg.Wait().NilOrError()
+	if err != nil {
+		rerr = fmt.Errorf("Error recovering partitions for view %s: %v", v.Topic(), err)
+		return
+	}
+	v.state.SetState(ViewStateRunning)
+
+	catchupErrg, ctx := multierr.NewErrGroup(ctx)
+
+	for _, partition := range v.partitions {
+		partition := partition
+		catchupErrg.Go(func() error {
+			return partition.CatchupForever(ctx, v.opts.restartable)
+		})
+	}
+
+	err = catchupErrg.Wait().NilOrError()
+	if err != nil {
+		rerr = fmt.Errorf("Error catching up partitions for view %s: %v", v.Topic(), err)
+	}
 	return
 }
 

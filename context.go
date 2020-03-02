@@ -293,7 +293,10 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 
 	table := ctx.graph.GroupTable().Topic()
 	ctx.counters.emits++
-	ctx.emitter(table, key, encodedValue).Then(func(err error) {
+	ctx.emitter(table, key, encodedValue).ThenWithMessage(func(msg *sarama.ProducerMessage, err error) {
+		if msg != nil {
+			ctx.table.StoreNewestOffset(msg.Offset)
+		}
 		ctx.emitDone(err)
 	})
 
@@ -346,12 +349,13 @@ func (ctx *cbContext) tryCommit(err error) {
 }
 
 func (ctx *cbContext) commit() {
-	if ctx.counters.stores > 0 {
-		err := ctx.table.IncrementOffsets(int64(ctx.counters.stores))
-		if err != nil {
-			ctx.asyncFailer(fmt.Errorf("error incrementing offset : %v", err))
-		}
-	}
+
+	// if ctx.counters.stores > 0 {
+	// 	err := ctx.table.IncrementOffsets(int64(ctx.counters.stores))
+	// 	if err != nil {
+	// 		ctx.asyncFailer(fmt.Errorf("error incrementing offset : %v", err))
+	// 	}
+	// }
 
 	// mark upstream offset as done
 	ctx.cgSession.MarkMessage(ctx.msg, "")

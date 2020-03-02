@@ -13,21 +13,18 @@
             <tr>
               <th title="partition number" rowspan="2">Partition</th>
               <th title="Status of the processor" rowspan="2">State</th>
-              <th title="Number of messages lagging behind HWM" rowspan="2">Offset-Lag</th>
-              <th title="High water mark (offset of the next message being consumed)" rowspan="2">HWM</th>
-              <th rowspan="2">Write-Rate</th>
-              <th colspan="3">Input</th>
-              <th colspan="2">Output</th>
-            </tr>
+              <th title="Stats during recovery" colspan="3">Recovery</th>
+              <th title="Stats during run time" colspan="2">Runtime</th>
+              <th
             <tr>
-              <th>rate</th>
-              <th>bytes</th>
-              <th>delay</th>
-              <th>rate</th>
-              <th>bytes</th>
+              <th title="Time of passed recovery so far">Time</th>
+              <th title="Number of messages recovered per second">Rate</th>
+              <th title="Number of messages lagging behind HWM">Lag</th>
+              <th title="Number of messages updated per second">Rate</th>
+              <th title="Number of bytes updated per second">Bytes</th>
             </tr>
           </thead>
-          <tbody id="partitionView">
+          <tbody id="tableStatistics">
           </tbody>
         </table>
       </div>
@@ -61,7 +58,7 @@
 
       var lastPartition = d3.local();
       var lastJoinStats = d3.local();
-      var statusMap = {0: "recovering", 1:"preparing", 2: "running"};
+      var statusMap = {0:"stopped", 1:"initializing", 2: "recovering", 3:"preparing", 4: "running"};
 
       var renderDetails = function(partitions){
 
@@ -69,12 +66,12 @@
           var partitionId = data[0];
           var stats = data[1];
 
-          var status = statusMap[stats.Table.Status];
+          var status = statusMap[stats.TableStats.Status];
 
-          if(stats.Table.Stalled){
+          if(stats.TableStats.Stalled){
             status = "stalled";
           }
-          var offsetLag = stats.Table.Hwm - stats.Table.Offset - 1;
+          var offsetLag = stats.TableStats.Recovery.Hwm - stats.TableStats.Recovery.Offset - 1;
 
 
           // initialize them by default
@@ -124,7 +121,7 @@
           return '<td>'+partitionId+'</td>\n'+
             '<td>'+status+'</td>\n'+
             '<td>'+offsetLag+'</td>\n'+
-            '<td>'+stats.Table.Hwm+'</td>\n'+
+            '<td>'+stats.TableStats.Recovery.Hwm+'</td>\n'+
             '<td>'+writeRate.toFixed(2)+'</td>\n'+
             '<td>'+inputRate.toFixed(2)+'</td>\n'+
             '<td>'+inputBytes.toFixed(0)+'</td>\n'+
@@ -142,9 +139,9 @@
         // Group Table
         var groupList = _.toPairs(group).sort(function(a,b){return parseInt(a[0]) - parseInt(b[0]);});
         // update, enter and remove data
-        var d = d3.select("#partitionView").selectAll(".partitionbox").data(groupList, function(d){ return d[0]; });
+        var d = d3.select("#tableStatistics").selectAll(".partitionbox").data(groupList, function(d){ return d[0]; });
         d.html(updatePartitionPanel);
-        d3.select("#partitionView").selectAll(".partitionbox").data(groupList, function(d){ return d[0]; }).enter().append("tr").classed("partitionbox", true).html(updatePartitionPanel);
+        d3.select("#tableStatistics").selectAll(".partitionbox").data(groupList, function(d){ return d[0]; }).enter().append("tr").classed("partitionbox", true).html(updateTableStatistics);
         d.exit().remove()
 
 {{if eq .renderType "processor"}}

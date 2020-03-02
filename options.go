@@ -284,14 +284,6 @@ func WithViewLogger(log logger.Logger) ViewOption {
 	}
 }
 
-// WithViewFullRecoverOnError sets the logger the view should use. By default, views
-// use the standard library logger.
-func WithViewFullRecoverOnError(log logger.Logger) ViewOption {
-	return func(o *voptions, table Table, codec Codec) {
-		o.log = log
-	}
-}
-
 // WithViewCallback defines the callback called upon recovering a message
 // from the log.
 func WithViewCallback(cb UpdateCallback) ViewOption {

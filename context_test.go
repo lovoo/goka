@@ -22,7 +22,7 @@ func newEmitter(err error, done func(err error)) emitter {
 		if done != nil {
 			p.Then(done)
 		}
-		return p.Finish(err)
+		return p.finish(nil, err)
 	}
 }
 
@@ -33,7 +33,7 @@ func newEmitterW(wg *sync.WaitGroup, err error, done func(err error)) emitter {
 		if done != nil {
 			p.Then(done)
 		}
-		return p.Finish(err)
+		return p.finish(nil, err)
 	}
 }
 
@@ -333,7 +333,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 			test.AssertEqual(t, tp, graph.GroupTable().Topic())
 			test.AssertEqual(t, string(k), key)
 			test.AssertEqual(t, string(v), value)
-			return NewPromise().Finish(nil)
+			return NewPromise().finish(nil, nil)
 		},
 	}
 

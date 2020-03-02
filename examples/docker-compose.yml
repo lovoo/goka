@@ -23,7 +23,7 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
       KAFKA_DEFAULT_REPLICATION_FACTOR: 2
-      KAFKA_NUM_PARTITIONS: 6
+      KAFKA_NUM_PARTITIONS: 1
     depends_on:
       - zoo1
   kafka2:
@@ -40,7 +40,7 @@ services:
       KAFKA_BROKER_ID: 2
       KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
       KAFKA_DEFAULT_REPLICATION_FACTOR: 2
-      KAFKA_NUM_PARTITIONS: 6
+      KAFKA_NUM_PARTITIONS: 1
     depends_on:
       - zoo1
   kafka3:
@@ -57,6 +57,6 @@ services:
       KAFKA_BROKER_ID: 3
       KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
       KAFKA_DEFAULT_REPLICATION_FACTOR: 2
-      KAFKA_NUM_PARTITIONS: 6
+      KAFKA_NUM_PARTITIONS: 1
     depends_on:
       - zoo1

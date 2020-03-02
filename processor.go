@@ -514,12 +514,16 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 			select {
 			case part.input <- msg:
 			case err := <-errors:
-				log.Printf("consume claim got error from partition processor. Returning: %v", err)
+				if err != nil {
+					log.Printf("consume claim got error from partition processor. Returning: %v", err)
+				}
 				return err
 			}
 
 		case err := <-errors:
-			log.Printf("consume claim got error from partition processor. Returning: %v", err)
+			if err != nil {
+				log.Printf("consume claim got error from partition processor. Returning: %v", err)
+			}
 			return err
 		}
 	}

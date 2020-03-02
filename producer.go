@@ -66,6 +66,7 @@ func (p *producer) Close() error {
 // can be checked for errors asynchronously
 func (p *producer) Emit(topic string, key string, value []byte) *Promise {
 	promise := NewPromise()
+
 	p.producer.Input() <- &sarama.ProducerMessage{
 		Topic:    topic,
 		Key:      sarama.StringEncoder(key),
@@ -87,7 +88,7 @@ func (p *producer) run() {
 			if !ok {
 				return
 			}
-			err.Msg.Metadata.(*Promise).Finish(err.Err)
+			err.Msg.Metadata.(*Promise).finish(nil, err.Err)
 		}
 	}()
 
@@ -99,7 +100,7 @@ func (p *producer) run() {
 			if !ok {
 				return
 			}
-			msg.Metadata.(*Promise).Finish(nil)
+			msg.Metadata.(*Promise).finish(msg, nil)
 		}
 	}()
 }

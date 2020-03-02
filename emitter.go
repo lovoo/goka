@@ -52,7 +52,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
 	select {
 	case <-e.done:
-		return NewPromise().Finish(ErrEmitterAlreadyClosed), nil
+		return NewPromise().finish(nil, ErrEmitterAlreadyClosed), nil
 	default:
 	}
 

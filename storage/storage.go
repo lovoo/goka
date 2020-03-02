@@ -64,8 +64,6 @@ type storage struct {
 	db    *leveldb.DB
 	// tx is the transaction used for recovery
 	tx *leveldb.Transaction
-
-	currentOffset int64
 }
 
 // New creates a new Storage backed by LevelDB.
@@ -161,10 +159,6 @@ func (s *storage) Set(key string, value []byte) error {
 }
 
 func (s *storage) SetOffset(offset int64) error {
-	if offset > s.currentOffset {
-		s.currentOffset = offset
-	}
-
 	return s.Set(offsetKey, []byte(strconv.FormatInt(offset, 10)))
 }
 
