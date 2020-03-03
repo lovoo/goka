@@ -85,9 +85,6 @@ func runEmitter(ctx context.Context) (rerr error) {
 		case <-ctx.Done():
 			return
 		}
-		if i > 0 {
-			return
-		}
 	}
 }
 
@@ -266,18 +263,18 @@ func main() {
 		defer log.Printf("processor done")
 		return runProcessor(ctx, monitorServer, queryServer)
 	})
-	// errg.Go(func() error {
-	// 	defer log.Printf("stateless processor done")
-	// 	return runStatelessProcessor(ctx, monitorServer)
-	// })
-	// errg.Go(func() error {
-	// 	defer log.Printf("join procdessor done")
-	// 	return runJoinProcessor(ctx, monitorServer)
-	// })
-	// if err := runView(errg, ctx, root, monitorServer); err != nil {
-	// 	log.Printf("Error running view, will shutdown: %v", err)
-	// 	cancel()
-	// }
+	errg.Go(func() error {
+		defer log.Printf("stateless processor done")
+		return runStatelessProcessor(ctx, monitorServer)
+	})
+	errg.Go(func() error {
+		defer log.Printf("join procdessor done")
+		return runJoinProcessor(ctx, monitorServer)
+	})
+	if err := runView(errg, ctx, root, monitorServer); err != nil {
+		log.Printf("Error running view, will shutdown: %v", err)
+		cancel()
+	}
 
 	if err := errg.Wait().NilOrError(); err != nil {
 		log.Fatalf("Error running monitoring example: %v", err)
