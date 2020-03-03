@@ -143,12 +143,12 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 		rerr = errs.NilOrError()
 	}()
 
-	recoverErrg, ctx := multierr.NewErrGroup(ctx)
+	recoverErrg, recoverCtx := multierr.NewErrGroup(ctx)
 
 	for _, partition := range v.partitions {
 		partition := partition
 		recoverErrg.Go(func() error {
-			return partition.SetupAndRecover(ctx)
+			return partition.SetupAndRecover(recoverCtx)
 		})
 	}
 
@@ -159,12 +159,12 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 	}
 	v.state.SetState(ViewStateRunning)
 
-	catchupErrg, ctx := multierr.NewErrGroup(ctx)
+	catchupErrg, catchupCtx := multierr.NewErrGroup(ctx)
 
 	for _, partition := range v.partitions {
 		partition := partition
 		catchupErrg.Go(func() error {
-			return partition.CatchupForever(ctx, v.opts.restartable)
+			return partition.CatchupForever(catchupCtx, v.opts.restartable)
 		})
 	}
 

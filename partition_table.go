@@ -80,18 +80,21 @@ func newPartitionTable(topic string,
 	}
 }
 
+// SetupAndRecover sets up the partition storage and recovers to HWM
 func (p *PartitionTable) SetupAndRecover(ctx context.Context) error {
 	err := p.setup(ctx)
 	if err != nil {
 		return err
 	}
-	return p.catchupToHwm(ctx)
+	return p.load(ctx, true)
 }
 
+// CatchupForever starts catching the partition table forever (until the context is cancelled).
+// Option restartOnError allows the view to stay open/intact even in case of consumer errors
 func (p *PartitionTable) CatchupForever(ctx context.Context, restartOnError bool) error {
 	if restartOnError {
 		for {
-			err := p.catchupForever(ctx)
+			err := p.load(ctx, false)
 			if err != nil {
 				p.log.Printf("Error while catching up, but we'll try to keep it running: %v", err)
 			}
@@ -99,12 +102,14 @@ func (p *PartitionTable) CatchupForever(ctx context.Context, restartOnError bool
 			select {
 			case <-ctx.Done():
 				return nil
-			default:
+
+			case <-time.After(10 * time.Second):
+				// retry after some time
 				// TODO (frairon) add exponential backoff
 			}
 		}
 	}
-	return p.catchupForever(ctx)
+	return p.load(ctx, false)
 }
 
 // Setup creates the storage for the partition table
@@ -120,6 +125,7 @@ func (p *PartitionTable) setup(ctx context.Context) error {
 	return nil
 }
 
+// Close closes the partition table
 func (p *PartitionTable) Close() error {
 	if p.st != nil {
 		return p.st.Close()
@@ -163,17 +169,6 @@ WaitLoop:
 		update:    p.updateCallback,
 	}, nil
 
-}
-
-// start loads the table partition up to HWM and then consumes streams
-func (p *PartitionTable) catchupToHwm(ctx context.Context) error {
-	// catchup until hwm
-	return p.load(ctx, true)
-}
-
-func (p *PartitionTable) catchupForever(ctx context.Context) error {
-
-	return p.load(ctx, false)
 }
 
 // TODO(jb): refactor comment
@@ -240,12 +235,6 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		return
 	}
 
-	if stopAfterCatchup {
-		p.log.Printf("Recovering from %d to hwm=%d; (local offset is %d)", loadOffset, hwm, storedOffset)
-	} else {
-		p.log.Printf("Catching up from %d to hwm=%d; (local offset is %d)", loadOffset, hwm, storedOffset)
-	}
-
 	if storedOffset > 0 && hwm == 0 {
 		errs.Collect(fmt.Errorf("kafka tells us there's no message in the topic, but our cache has one. The table might be gone. Try to delete your local cache! Topic %s, partition %d, hwm %d, local offset %d", p.topic, p.partition, hwm, storedOffset))
 		return
@@ -264,6 +253,12 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	if stopAfterCatchup && loadOffset >= hwm {
 		errs.Collect(p.markRecovered(ctx))
 		return
+	}
+
+	if stopAfterCatchup {
+		p.log.Printf("Recovering from %d to hwm=%d; (local offset is %d)", loadOffset, hwm, storedOffset)
+	} else {
+		p.log.Printf("Catching up from %d to hwm=%d; (local offset is %d)", loadOffset, hwm, storedOffset)
 	}
 
 	defer p.log.Printf("... Loading done")
@@ -504,7 +499,6 @@ func (p *PartitionTable) updateHwmStats() {
 }
 
 func (p *PartitionTable) storeEvent(key string, value []byte, offset int64) error {
-	p.log.Printf("storing event with offset %d", offset)
 	err := p.st.Update(key, value)
 	if err != nil {
 		return fmt.Errorf("Error from the update callback while recovering from the log: %v", err)
@@ -516,38 +510,32 @@ func (p *PartitionTable) storeEvent(key string, value []byte, offset int64) erro
 	return nil
 }
 
+// IsRecovered returns whether the partition table is recovered
 func (p *PartitionTable) IsRecovered() bool {
 	return p.state.IsState(State(PartitionRunning))
 }
 
+// WaitRecovered returns a channel that closes when the partition table enters state `PartitionRunning`
 func (p *PartitionTable) WaitRecovered() chan struct{} {
 	return p.state.WaitForState(State(PartitionRunning))
 }
 
+// Get returns the value for passed key
 func (p *PartitionTable) Get(key string) ([]byte, error) {
 	return p.st.Get(key)
 }
+
+// Set sets a key value key in the partition table by modifying the underlying storage
 func (p *PartitionTable) Set(key string, value []byte) error {
 	return p.st.Set(key, value)
 }
+
+// Delete removes the passed key from the partition table by deleting from the underlying storage
 func (p *PartitionTable) Delete(key string) error {
 	return p.st.Delete(key)
 }
 
-func (p *PartitionTable) IncrementOffsets(increment int64) error {
-	p.offsetM.Lock()
-	defer p.offsetM.Unlock()
-
-	offset, err := p.GetOffset(-1)
-	if err != nil {
-		return err
-	}
-
-	p.log.Printf("Writing new offset: %d", offset+increment)
-	return p.SetOffset(offset + increment)
-}
-
-func (p *PartitionTable) StoreNewestOffset(newOffset int64) error {
+func (p *PartitionTable) storeNewestOffset(newOffset int64) error {
 	p.offsetM.Lock()
 	defer p.offsetM.Unlock()
 

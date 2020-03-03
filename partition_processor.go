@@ -20,6 +20,9 @@ const (
 	PPStateStopping
 )
 
+// PartitionProcessor handles message processing of one partition by serializing
+// messages from different input topics.
+// It also handles joined tables as well as lookup views (managed by `Processor`).
 type PartitionProcessor struct {
 	callbacks map[string]ProcessCallback
 
@@ -151,7 +154,8 @@ func (pp *PartitionProcessor) Errors() <-chan error {
 func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	ctx, pp.cancelRunnerGroup = context.WithCancel(ctx)
 
-	pp.runnerGroup, ctx = multierr.NewErrGroup(ctx)
+	var runnerCtx context.Context
+	pp.runnerGroup, runnerCtx = multierr.NewErrGroup(ctx)
 
 	setupErrg, setupCtx := multierr.NewErrGroup(ctx)
 
@@ -192,7 +196,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	// separately during running
 	if pp.table != nil {
 		pp.runnerGroup.Go(func() error {
-			pp.table.handleStatsRequests(ctx)
+			pp.table.handleStatsRequests(runnerCtx)
 			return nil
 		})
 	}
@@ -200,13 +204,13 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	for _, join := range pp.joins {
 		join := join
 		pp.runnerGroup.Go(func() error {
-			return join.CatchupForever(ctx, false)
+			return join.CatchupForever(runnerCtx, false)
 		})
 	}
 
 	// now run the processor in a runner-group
 	pp.runnerGroup.Go(func() error {
-		err := pp.run(ctx)
+		err := pp.run(runnerCtx)
 		if err != nil {
 			pp.log.Printf("Run failed with erorr: %v", err)
 		}
@@ -426,7 +430,6 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 		table:         pp.table,
 	}
 
-	pp.log.Printf("processing message")
 	var (
 		m   interface{}
 		err error

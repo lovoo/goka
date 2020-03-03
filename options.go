@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"path/filepath"
 
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 )
@@ -231,6 +232,11 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	if opt.builders.storage == nil {
 		return fmt.Errorf("StorageBuilder not set")
 	}
+
+	if globalConfig.Producer.RequiredAcks == sarama.NoResponse {
+		return fmt.Errorf("Processors do not work with `Config.Producer.RequiredAcks==sarama.NoResponse`, as it uses the response's offset to store the value")
+	}
+
 	if opt.builders.producer == nil {
 		opt.builders.producer = DefaultProducerBuilder
 	}

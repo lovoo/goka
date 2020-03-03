@@ -294,8 +294,8 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 	table := ctx.graph.GroupTable().Topic()
 	ctx.counters.emits++
 	ctx.emitter(table, key, encodedValue).ThenWithMessage(func(msg *sarama.ProducerMessage, err error) {
-		if msg != nil {
-			ctx.table.StoreNewestOffset(msg.Offset)
+		if err == nil && msg != nil {
+			err = ctx.table.storeNewestOffset(msg.Offset)
 		}
 		ctx.emitDone(err)
 	})
