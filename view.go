@@ -129,8 +129,8 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 
 // Run starts consuming the view's topic.
 func (v *View) Run(ctx context.Context) (rerr error) {
-	v.log.Printf("starting")
-	defer v.log.Printf("stopped")
+	v.log.Debugf("starting")
+	defer v.log.Debugf("stopped")
 
 	v.state.SetState(ViewStateCatchUp)
 	defer v.state.SetState(ViewStateIdle)

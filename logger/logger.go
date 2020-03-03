@@ -15,6 +15,11 @@ type Logger interface {
 	// Printf will be used for informational messages. These can be thought of
 	// having an 'Info'-level in a structured logger.
 	Printf(string, ...interface{})
+
+	// Debugf is used for debugging messages, mostly for debugging goka itself.
+	// It is turned off unless goka is initialized
+	Debugf(string, ...interface{})
+
 	// Panicf will be only called an unexpected programming error such as a type
 	// assertion which should never fail. Regular errors will be returned out
 	// from the library.
@@ -26,12 +31,19 @@ type Logger interface {
 
 // std bridges the logger calls to the standard library log.
 type std struct {
+	debug      bool
 	prefixPath []string
 	prefix     string
 }
 
 func (s *std) Printf(msg string, args ...interface{}) {
 	log.Printf(fmt.Sprintf("%s%s", s.prefix, msg), args...)
+}
+
+func (s *std) Debugf(msg string, args ...interface{}) {
+	if s.debug {
+		log.Printf(fmt.Sprintf("%s%s", s.prefix, msg), args...)
+	}
 }
 
 func (s *std) Panicf(msg string, args ...interface{}) {
@@ -47,10 +59,17 @@ func Default() Logger {
 	return defaultLogger
 }
 
+// Debug enables or disables debug logging using the global logger.
+func Debug(enabled bool) {
+	defaultLogger.debug = enabled
+}
+
+// EmptyPrefixer encapsulates a prefixer that is initially without a prefix
 func EmptyPrefixer() Prefixer {
 	return &std{}
 }
 
+// Prefixer abstracts the functionality of stacking the prefix for a custom logger implementation
 type Prefixer interface {
 	CurrentPrefix() string
 	StackPrefix(prefix string) Prefixer

@@ -155,7 +155,7 @@ WaitLoop:
 		case <-ticker.C:
 			p.log.Printf("creating storage for topic %s/%d for %.1f minutes ...", p.topic, p.partition, time.Since(start).Minutes())
 		case <-done:
-			p.log.Printf("finished building storage for topic %s/%d", p.topic, p.partition)
+			p.log.Printf("finished building storage for topic %s/%d in %.1f minutes", p.topic, p.partition, time.Since(start).Minutes())
 			if err != nil {
 				return nil, fmt.Errorf("error building storage: %v", err)
 			}
@@ -186,7 +186,7 @@ func (p *PartitionTable) findOffsetToLoad(storedOffset int64) (int64, int64, err
 	if err != nil {
 		return 0, 0, fmt.Errorf("Error getting newest offset for topic/partition %s/%d: %v", p.topic, p.partition, err)
 	}
-	p.log.Printf("topic manager gives us oldest: %d, hwm: %d", oldest, hwm)
+	p.log.Debugf("topic manager gives us oldest: %d, hwm: %d", oldest, hwm)
 
 	var start int64
 
@@ -256,12 +256,12 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	}
 
 	if stopAfterCatchup {
-		p.log.Printf("Recovering from %d to hwm=%d; (local offset is %d)", loadOffset, hwm, storedOffset)
+		p.log.Debugf("Recovering from %d to hwm=%d; (local offset is %d)", loadOffset, hwm, storedOffset)
 	} else {
-		p.log.Printf("Catching up from %d to hwm=%d; (local offset is %d)", loadOffset, hwm, storedOffset)
+		p.log.Debugf("Catching up from %d to hwm=%d; (local offset is %d)", loadOffset, hwm, storedOffset)
 	}
 
-	defer p.log.Printf("... Loading done")
+	defer p.log.Debugf("... Loading done")
 
 	if stopAfterCatchup {
 		p.state.SetState(State(PartitionRecovering))
@@ -379,7 +379,6 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 		select {
 		case msg, ok := <-cons.Messages():
 			if !ok {
-				p.log.Printf("Message channel closed. WIll stop loading messages")
 				return
 			}
 
@@ -448,7 +447,7 @@ func (p *PartitionTable) handleStatsRequest(ctx context.Context) {
 	select {
 	case p.responseStats <- stats:
 	case <-ctx.Done():
-		p.log.Printf("exiting, context is cancelled")
+		p.log.Debugf("exiting, context is cancelled")
 	}
 }
 

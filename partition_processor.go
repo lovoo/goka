@@ -3,7 +3,6 @@ package goka
 import (
 	"context"
 	"fmt"
-	"log"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -164,8 +163,8 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 
 	if pp.table != nil {
 		setupErrg.Go(func() error {
-			pp.log.Printf("catching up table")
-			defer pp.log.Printf("catching up table done")
+			pp.log.Debugf("catching up table")
+			defer pp.log.Debugf("catching up table done")
 			return pp.table.SetupAndRecover(setupCtx)
 		})
 	}
@@ -212,16 +211,17 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	pp.runnerGroup.Go(func() error {
 		err := pp.run(runnerCtx)
 		if err != nil {
-			pp.log.Printf("Run failed with erorr: %v", err)
+			pp.log.Printf("Run failed with error: %v", err)
 		}
 		return err
 	})
 	return nil
 }
 
+// Stop stops the partition processor
 func (pp *PartitionProcessor) Stop() error {
-	pp.log.Printf("Stopping")
-	defer pp.log.Printf("... Stopping done")
+	pp.log.Debugf("Stopping")
+	defer pp.log.Debugf("... Stopping done")
 	pp.state.SetState(PPStateStopping)
 	defer pp.state.SetState(PPStateIdle)
 	errs := new(multierr.Errors)
@@ -240,16 +240,13 @@ func (pp *PartitionProcessor) Stop() error {
 }
 
 func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
-	pp.log.Printf("starting")
-	defer pp.log.Printf("stopped")
+	pp.log.Debugf("starting")
+	defer pp.log.Debugf("stopped")
 
 	errs := new(multierr.Errors)
 	defer func() {
 		errs.Collect(rerr)
 		rerr = errs.NilOrError()
-		if rerr != nil {
-			log.Printf("partition processor stopped with errors. %#v", rerr)
-		}
 	}()
 
 	var (
@@ -272,8 +269,8 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 		// asyncFailer is called asynchronously from other goroutines, e.g.
 		// when the promise of a Emit (using a producer internally) fails
 		asyncFailer = func(err error) {
-			closeOnce.Do(func() { close(asyncErrs) })
 			errs.Collect(err)
+			closeOnce.Do(func() { close(asyncErrs) })
 		}
 
 		wg sync.WaitGroup
@@ -320,18 +317,18 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 			select {
 			case pp.responseStats <- stats:
 			case <-ctx.Done():
-				pp.log.Printf("exiting, context is cancelled")
+				pp.log.Debugf("exiting, context is cancelled")
 				return
 			}
 		case <-updateHwmStatsTicker.C:
 			pp.updateHwmStats()
 
 		case <-ctx.Done():
-			pp.log.Printf("exiting, context is cancelled")
+			pp.log.Debugf("exiting, context is cancelled")
 			return
 
 		case <-asyncErrs:
-			pp.log.Printf("Errors occurred asynchronously. Will exit partition processor")
+			pp.log.Debugf("Errors occurred asynchronously. Will exit partition processor")
 			return
 		}
 	}
