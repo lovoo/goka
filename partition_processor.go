@@ -418,7 +418,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 		partProcStats: pp.stats,
 		pviews:        pp.joins,
 		views:         pp.lookups,
-		cgSession:     pp.session,
+		commit:        func() { pp.session.MarkMessage(msg, "") },
 		wg:            wg,
 		msg:           msg,
 		syncFailer:    syncFailer,

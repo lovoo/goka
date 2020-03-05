@@ -63,6 +63,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	options = append(
 		// default options comes first
 		[]ProcessorOption{
+			WithClientID(fmt.Sprintf("goka-processor-%s", gg.Group())),
 			WithLogger(logger.Default()),
 			WithUpdateCallback(DefaultUpdate),
 			WithPartitionChannelSize(defaultPartitionChannelSize),

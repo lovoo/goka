@@ -22,7 +22,7 @@ func newEmitter(err error, done func(err error)) emitter {
 		if done != nil {
 			p.Then(done)
 		}
-		return p.finish(nil, err)
+		return p.Finish(nil, err)
 	}
 }
 
@@ -33,7 +33,7 @@ func newEmitterW(wg *sync.WaitGroup, err error, done func(err error)) emitter {
 		if done != nil {
 			p.Then(done)
 		}
-		return p.finish(nil, err)
+		return p.Finish(nil, err)
 	}
 }
 
@@ -97,7 +97,6 @@ func TestContext_EmitError(t *testing.T) {
 	// test error case
 	ctx := &cbContext{
 		graph:         DefineGroup(group, Persist(new(codec.String))),
-		commit:        func() { ack++ },
 		wg:            &sync.WaitGroup{},
 		partProcStats: newPartitionProcStats(nil, []string{"emit-topic"}),
 		syncFailer:    failer,
@@ -130,7 +129,10 @@ func TestContext_EmitToStateTopic(t *testing.T) {
 		group Group = "some-group"
 	)
 
-	ctx := &cbContext{graph: DefineGroup(group, Persist(c), Loop(c, cb))}
+	ctx := &cbContext{
+		graph:      DefineGroup(group, Persist(c), Loop(c, cb)),
+		syncFailer: func(err error) { panic(err) },
+	}
 	func() {
 		defer test.PanicAssertEqual(t, errors.New("cannot emit to table topic (use SetValue instead)"))
 		ctx.Emit(Stream(tableName(group)), "key", []byte("value"))
@@ -147,7 +149,11 @@ func TestContext_EmitToStateTopic(t *testing.T) {
 
 func TestContext_GetSetStateless(t *testing.T) {
 	// ctx stateless since no storage passed
-	ctx := &cbContext{graph: DefineGroup("group"), msg: new(sarama.ConsumerMessage)}
+	ctx := &cbContext{
+		graph:      DefineGroup("group"),
+		msg:        new(sarama.ConsumerMessage),
+		syncFailer: func(err error) { panic(err) },
+	}
 	func() {
 		defer test.PanicAssertStringContains(t, "stateless")
 		_ = ctx.Value()
@@ -172,6 +178,7 @@ func TestContext_Delete(t *testing.T) {
 			st: &storageProxy{
 				Storage: st,
 			},
+			stats: newTableStats(),
 		}
 	)
 
@@ -235,6 +242,7 @@ func TestContext_DeleteStorageError(t *testing.T) {
 			st: &storageProxy{
 				Storage: st,
 			},
+			stats: newTableStats(),
 		}
 		retErr = errors.New("storage error")
 	)
@@ -269,6 +277,7 @@ func TestContext_Set(t *testing.T) {
 			st: &storageProxy{
 				Storage: st,
 			},
+			stats: newTableStats(),
 		}
 	)
 	st.EXPECT().Set(key, []byte(value)).Return(nil)
@@ -314,6 +323,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 			st: &storageProxy{
 				Storage: st,
 			},
+			stats: newTableStats(),
 		}
 	)
 
@@ -333,7 +343,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 			test.AssertEqual(t, tp, graph.GroupTable().Topic())
 			test.AssertEqual(t, string(k), key)
 			test.AssertEqual(t, string(v), value)
-			return NewPromise().finish(nil, nil)
+			return NewPromise().Finish(nil, nil)
 		},
 	}
 
@@ -361,6 +371,7 @@ func TestContext_SetErrors(t *testing.T) {
 			st: &storageProxy{
 				Storage: st,
 			},
+			stats: newTableStats(),
 		}
 		failed error
 		_      = failed // make linter happy
@@ -404,7 +415,11 @@ func TestContext_SetErrors(t *testing.T) {
 
 func TestContext_LoopbackNoLoop(t *testing.T) {
 	// ctx has no loop set
-	ctx := &cbContext{graph: DefineGroup("group", Persist(c)), msg: &sarama.ConsumerMessage{}}
+	ctx := &cbContext{
+		graph:      DefineGroup("group", Persist(c)),
+		msg:        &sarama.ConsumerMessage{},
+		syncFailer: func(err error) { panic(err) },
+	}
 	func() {
 		defer test.PanicAssertStringContains(t, "loop")
 		ctx.Loopback("some-key", "whatever")
@@ -461,8 +476,10 @@ func TestContext_Join(t *testing.T) {
 				st: &storageProxy{
 					Storage: st,
 				},
+				stats: newTableStats(),
 			},
 		},
+		syncFailer: func(err error) { panic(err) },
 	}
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
@@ -513,10 +530,12 @@ func TestContext_Lookup(t *testing.T) {
 						st: &storageProxy{
 							Storage: st,
 						},
+						stats: newTableStats(),
 					},
 				},
 			},
 		},
+		syncFailer: func(err error) { panic(err) },
 	}
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
@@ -542,7 +561,11 @@ func TestContext_Lookup(t *testing.T) {
 }
 
 func TestContext_Fail(t *testing.T) {
-	ctx := new(cbContext)
+	ctx := &cbContext{
+		syncFailer: func(err error) {
+			panic(fmt.Errorf("%#v", err))
+		},
+	}
 
 	defer func() {
 		err := recover()

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"strings"
+
+	"github.com/Shopify/sarama"
 )
 
 var (
@@ -12,6 +14,13 @@ var (
 
 // Logger is the interface Goka and its subpackages use for logging.
 type Logger interface {
+
+	// Print will simply print the params
+	Print(...interface{})
+
+	// Print will simply print the params
+	Println(...interface{})
+
 	// Printf will be used for informational messages. These can be thought of
 	// having an 'Info'-level in a structured logger.
 	Printf(string, ...interface{})
@@ -34,6 +43,13 @@ type std struct {
 	debug      bool
 	prefixPath []string
 	prefix     string
+}
+
+func (s *std) Print(msgs ...interface{}) {
+	log.Print(msgs...)
+}
+func (s *std) Println(msgs ...interface{}) {
+	log.Print(msgs...)
 }
 
 func (s *std) Printf(msg string, args ...interface{}) {
@@ -60,8 +76,15 @@ func Default() Logger {
 }
 
 // Debug enables or disables debug logging using the global logger.
-func Debug(enabled bool) {
-	defaultLogger.debug = enabled
+func Debug(gokaDebug, saramaDebug bool) {
+	defaultLogger.debug = gokaDebug
+	if saramaDebug {
+		SetSaramaLogger(&std{debug: true})
+	}
+}
+
+func SetSaramaLogger(logger Logger) {
+	sarama.Logger = logger
 }
 
 // EmptyPrefixer encapsulates a prefixer that is initially without a prefix
@@ -97,5 +120,6 @@ func (s *std) StackPrefix(prefix string) Prefixer {
 	return &std{
 		prefixPath: prefPath,
 		prefix:     newPrefix,
+		debug:      s.debug,
 	}
 }

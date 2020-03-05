@@ -41,6 +41,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	options = append(
 		// default options comes first
 		[]ViewOption{
+			WithViewClientID(fmt.Sprintf("goka-view-%s", topic)),
 			WithViewLogger(logger.Default()),
 			WithViewCallback(DefaultUpdate),
 			WithViewStorageBuilder(storage.DefaultBuilder(DefaultViewStoragePath())),

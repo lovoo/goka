@@ -186,7 +186,7 @@ func (c *MockAutoConsumer) ExpectConsumePartition(topic string, partition int32,
 // PartitionConsumer mock type
 ///////////////////////////////////////////////////
 
-// PartitionConsumer implements sarama's PartitionConsumer interface for testing purposes.
+// MockAutoPartitionConsumer implements sarama's PartitionConsumer interface for testing purposes.
 // It is returned by the mock Consumers ConsumePartitionMethod, but only if it is
 // registered first using the Consumer's ExpectConsumePartition method. Before consuming the
 // Errors and Messages channel, you should specify what values will be provided on these
@@ -429,6 +429,7 @@ func (cgs *MockConsumerGroupSession) GenerationID() int32 {
 
 // MarkOffset marks the passed offset consumed in topic/partition
 func (cgs *MockConsumerGroupSession) MarkOffset(topic string, partition int32, offset int64, metadata string) {
+	panic("not implemented")
 }
 
 // ResetOffset resets the offset to be consumed from
@@ -446,7 +447,7 @@ func (cgs *MockConsumerGroupSession) Context() context.Context {
 	return cgs.ctx
 }
 
-// ConsumerGroup mocks the consumergroup
+// MockConsumerGroup mocks the consumergroup
 type MockConsumerGroup struct {
 	errs chan error
 

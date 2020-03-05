@@ -132,12 +132,12 @@ func (tt *Tester) EmitterProducerBuilder() goka.ProducerBuilder {
 // to handled topics or putting the emitted messages in the emitted-messages-list
 func (tt *Tester) handleEmit(topic string, key string, value []byte) *goka.Promise {
 	promise := goka.NewPromise()
-	tt.pushMessage(topic, key, value)
-	return promise.Finish(nil)
+	offset := tt.pushMessage(topic, key, value)
+	return promise.Finish(&sarama.ProducerMessage{Offset: offset}, nil)
 }
 
-func (tt *Tester) pushMessage(topic string, key string, data []byte) {
-	tt.getOrCreateQueue(topic).push(key, data)
+func (tt *Tester) pushMessage(topic string, key string, data []byte) int64 {
+	return tt.getOrCreateQueue(topic).push(key, data)
 }
 
 func (tt *Tester) ProducerBuilder() goka.ProducerBuilder {

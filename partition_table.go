@@ -18,7 +18,7 @@ const (
 	defaultStalledTimeout       = 2 * time.Minute
 
 	// internal offset we use to detect if the offset has never been stored locally
-	offsetNotStored = -3
+	offsetNotStored int64 = -3
 )
 
 // PartitionTable manages the usage of a table for one partition.

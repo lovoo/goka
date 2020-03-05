@@ -57,8 +57,8 @@ func (p *Promise) ThenWithMessage(callback func(msg *sarama.ProducerMessage, err
 	return p
 }
 
-// finishes the promise by executing all callbacks and saving the message/error for late subscribers
-func (p *Promise) finish(msg *sarama.ProducerMessage, err error) *Promise {
+// Finish finishes the promise by executing all callbacks and saving the message/error for late subscribers
+func (p *Promise) Finish(msg *sarama.ProducerMessage, err error) *Promise {
 	p.Lock()
 	defer p.Unlock()
 

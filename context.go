@@ -71,8 +71,8 @@ type Context interface {
 type cbContext struct {
 	ctx   context.Context
 	graph *GroupGraph
-	// ConsumerGroupSession from our current consumer group session
-	cgSession sarama.ConsumerGroupSession
+	// commit commits the message in the consumer session
+	commit func()
 
 	emitter     emitter
 	asyncFailer func(err error)
@@ -346,19 +346,6 @@ func (ctx *cbContext) tryCommit(err error) {
 	}
 
 	ctx.markDone()
-}
-
-func (ctx *cbContext) commit() {
-
-	// if ctx.counters.stores > 0 {
-	// 	err := ctx.table.IncrementOffsets(int64(ctx.counters.stores))
-	// 	if err != nil {
-	// 		ctx.asyncFailer(fmt.Errorf("error incrementing offset : %v", err))
-	// 	}
-	// }
-
-	// mark upstream offset as done
-	ctx.cgSession.MarkMessage(ctx.msg, "")
 }
 
 // markdone marks the context as done
