@@ -349,7 +349,7 @@ func (pp *PartitionProcessor) updateHwmStats() {
 	for input, inputStats := range pp.stats.Input {
 		hwm := hwms[input][pp.partition]
 		if hwm != 0 && inputStats.LastOffset != 0 {
-			inputStats.LastOffset = hwm - inputStats.LastOffset
+			inputStats.OffsetLag = hwm - inputStats.LastOffset
 		}
 	}
 }

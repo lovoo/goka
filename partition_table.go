@@ -247,6 +247,14 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		loadOffset = hwm
 	}
 
+	// initialize recovery stats here, in case we don't do the recovery because
+	// we're up to date already
+	if stopAfterCatchup {
+		p.stats.Recovery.StartTime = time.Now()
+		p.stats.Recovery.Hwm = hwm
+		p.stats.Recovery.Offset = loadOffset
+	}
+
 	// we are exactly where we're supposed to be
 	// AND we're here for catchup, so let's stop here
 	// and do not attempt to load anything
@@ -277,16 +285,8 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		partConsumer.AsyncClose()
 	}()
 
-	// reset stats after load
-	defer p.stats.reset()
-
 	// consume errors asynchronously
 	go p.handleConsumerErrors(ctx, errs, partConsumer)
-
-	if stopAfterCatchup {
-		p.stats.Recovery.StartTime = time.Now()
-		p.stats.Recovery.Hwm = hwm
-	}
 
 	// load messages and stop when you're at HWM
 	loadErr := p.loadMessages(ctx, partConsumer, hwm, stopAfterCatchup)
@@ -313,6 +313,7 @@ func (p *PartitionTable) markRecovered(ctx context.Context) error {
 	defer ticker.Stop()
 
 	p.state.SetState(State(PartitionPreparing))
+	p.stats.Recovery.RecoveryTime = time.Now()
 
 	go func() {
 		defer close(done)
