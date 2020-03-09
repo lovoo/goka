@@ -71,10 +71,12 @@ type Context interface {
 type cbContext struct {
 	ctx   context.Context
 	graph *GroupGraph
+	// commit commits the message in the consumer session
+	commit func()
 
-	commit  func()
-	emitter emitter
-	failer  func(err error)
+	emitter     emitter
+	asyncFailer func(err error)
+	syncFailer  func(err error)
 
 	table *PartitionTable
 	// joins
@@ -291,14 +293,14 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 
 	table := ctx.graph.GroupTable().Topic()
 	ctx.counters.emits++
-	ctx.emitter(table, key, encodedValue).Then(func(err error) {
+	ctx.emitter(table, key, encodedValue).ThenWithMessage(func(msg *sarama.ProducerMessage, err error) {
+		if err == nil && msg != nil {
+			err = ctx.table.storeNewestOffset(msg.Offset)
+		}
 		ctx.emitDone(err)
 	})
 
-	s := ctx.partProcStats.Output[table]
-	s.Count++
-	s.Bytes += len(encodedValue)
-	ctx.partProcStats.Output[table] = s
+	ctx.table.trackOutgoingMessage(len(encodedValue))
 
 	return nil
 }
@@ -338,12 +340,11 @@ func (ctx *cbContext) tryCommit(err error) {
 
 	// commit if no errors, otherwise fail context
 	if ctx.errors.HasErrors() {
-		ctx.failer(ctx.errors.NilOrError())
+		ctx.asyncFailer(ctx.errors.NilOrError())
 	} else {
 		ctx.commit()
 	}
 
-	// no further callback will be called from this context
 	ctx.markDone()
 }
 
@@ -354,7 +355,7 @@ func (ctx *cbContext) markDone() {
 
 // Fail stops execution and shuts down the processor
 func (ctx *cbContext) Fail(err error) {
-	panic(err)
+	ctx.syncFailer(err)
 }
 
 func (ctx *cbContext) Context() context.Context {

@@ -23,6 +23,9 @@ const (
 	defaultProducerMaxRetries = 10
 )
 
+// DefaultConfig creates a new config used by goka per default
+// Use it to modify and pass to `goka.ReplaceGlobalConifg(...)` to modify
+// goka's global config
 func DefaultConfig() *sarama.Config {
 	config := sarama.NewConfig()
 	config.Version = sarama.V2_0_0_0

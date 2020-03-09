@@ -33,6 +33,7 @@ type TopicManagerBuilder func(brokers []string) (TopicManager, error)
 // DefaultTopicManagerBuilder creates TopicManager using the Sarama library.
 func DefaultTopicManagerBuilder(brokers []string) (TopicManager, error) {
 	config := globalConfig
+	config.ClientID = "goka-topic-manager"
 	return NewTopicManager(brokers, &config, NewTopicManagerConfig())
 }
 
@@ -47,6 +48,7 @@ func TopicManagerBuilderWithConfig(config *sarama.Config, tmConfig *TopicManager
 func TopicManagerBuilderWithTopicManagerConfig(tmConfig *TopicManagerConfig) TopicManagerBuilder {
 	return func(brokers []string) (TopicManager, error) {
 		config := globalConfig
+		config.ClientID = "goka-topic-manager"
 		return NewTopicManager(brokers, &config, tmConfig)
 	}
 }

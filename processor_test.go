@@ -39,23 +39,20 @@ func createTestConsumerBuilder(t *testing.T) (SaramaConsumerBuilder, *MockAutoCo
 
 func expectCGEmit(bm *builderMock, table string, msgs []*sarama.ConsumerMessage) {
 	for _, msg := range msgs {
-		bm.producer.EXPECT().Emit(table, string(msg.Key), msg.Value).Return(NewPromise().Finish(nil))
+		bm.producer.EXPECT().Emit(table, string(msg.Key), msg.Value).Return(NewPromise().Finish(nil, nil))
 	}
 }
 
 func expectCGLoop(bm *builderMock, loop string, msgs []*sarama.ConsumerMessage) {
 	bm.tmgr.EXPECT().EnsureStreamExists(loop, 1).AnyTimes()
 	for _, msg := range msgs {
-		bm.producer.EXPECT().Emit(loop, string(msg.Key), gomock.Any()).Return(NewPromise().Finish(nil))
+		bm.producer.EXPECT().Emit(loop, string(msg.Key), gomock.Any()).Return(NewPromise().Finish(nil, nil))
 	}
 }
 
 func expectCGConsume(bm *builderMock, table string, msgs []*sarama.ConsumerMessage) {
 	var (
-		current int = 0
-
-		oldest int64 = sarama.OffsetOldest
-		newest int64 = sarama.OffsetNewest
+		current int64
 	)
 
 	bm.producer.EXPECT().Close().Return(nil).AnyTimes()
@@ -64,16 +61,13 @@ func expectCGConsume(bm *builderMock, table string, msgs []*sarama.ConsumerMessa
 	bm.tmgr.EXPECT().EnsureTableExists(table, gomock.Any()).Return(nil)
 	bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).AnyTimes()
 	bm.tmgr.EXPECT().GetOffset(table, gomock.Any(), sarama.OffsetNewest).Return(func() int64 {
-		help := newest + int64(current)
-		current++
-		return help
+		defer func() {
+			current++
+		}()
+		return current
 	}(), nil)
 	bm.tmgr.EXPECT().GetOffset(table, gomock.Any(), sarama.OffsetOldest).Return(func() int64 {
-		help := oldest
-		if oldest == sarama.OffsetOldest {
-			oldest = 0
-		}
-		return help
+		return 0
 	}(), nil)
 }
 
@@ -91,13 +85,13 @@ func accumulate(ctx Context, msg interface{}) {
 }
 
 func TestProcessor_Run(t *testing.T) {
+
 	t.Run("input-persist", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
-
 		var (
-			topic  string                    = "test-table"
-			toEmit []*sarama.ConsumerMessage = []*sarama.ConsumerMessage{
+			topic  = "test-table"
+			toEmit = []*sarama.ConsumerMessage{
 				&sarama.ConsumerMessage{Topic: "input",
 					Value: []byte(strconv.FormatInt(3, 10)),
 					Key:   []byte("test-key-1"),
@@ -122,7 +116,7 @@ func TestProcessor_Run(t *testing.T) {
 			Persist(new(codec.Int64)),
 		)
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
 		defer cancel()
 
 		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
@@ -169,9 +163,9 @@ func TestProcessor_Run(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			topic  string                    = "test-table"
-			loop   string                    = "test-loop"
-			toEmit []*sarama.ConsumerMessage = []*sarama.ConsumerMessage{
+			topic  = "test-table"
+			loop   = "test-loop"
+			toEmit = []*sarama.ConsumerMessage{
 				&sarama.ConsumerMessage{Topic: "input",
 					Value: []byte(strconv.FormatInt(23, 10)),
 					Key:   []byte("test-key"),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"sync"
 	"time"
@@ -132,6 +133,8 @@ func (s *Server) renderData(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(err.Error()))
 		return
 	}
+
+	log.Printf("Marshalled stats\n\n%s\n", string(marshalled))
 	w.Write(marshalled)
 }
 

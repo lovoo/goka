@@ -68,7 +68,7 @@ func TestEmitter_Emit(t *testing.T) {
 			data   []byte = []byte(strconv.FormatInt(intVal, 10))
 		)
 
-		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil))
+		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil, nil))
 		promise, err := emitter.Emit(key, intVal)
 		test.AssertNil(t, err)
 		test.AssertNotNil(t, promise)
@@ -84,7 +84,7 @@ func TestEmitter_Emit(t *testing.T) {
 			retErr error  = errors.New("some-error")
 		)
 
-		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(retErr))
+		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil, retErr))
 		promise, err := emitter.Emit(key, intVal)
 		test.AssertNil(t, err)
 		test.AssertEqual(t, promise.err, retErr)
@@ -129,7 +129,7 @@ func TestEmitter_EmitSync(t *testing.T) {
 			data   []byte = []byte(strconv.FormatInt(intVal, 10))
 		)
 
-		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil))
+		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil, nil))
 		err := emitter.EmitSync(key, intVal)
 		test.AssertNil(t, err)
 	})
@@ -144,7 +144,7 @@ func TestEmitter_EmitSync(t *testing.T) {
 			retErr error  = errors.New("some-error")
 		)
 
-		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(retErr))
+		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil, retErr))
 		err := emitter.EmitSync(key, intVal)
 		test.AssertEqual(t, err, retErr)
 	})
@@ -188,7 +188,7 @@ func TestEmitter_Finish(t *testing.T) {
 			msgCount int    = 200
 		)
 
-		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil)).MaxTimes(msgCount)
+		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil, nil)).MaxTimes(msgCount)
 		bm.producer.EXPECT().Close().Return(nil)
 
 		go func() {

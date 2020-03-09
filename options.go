@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"path/filepath"
 
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 )
@@ -231,6 +232,11 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	if opt.builders.storage == nil {
 		return fmt.Errorf("StorageBuilder not set")
 	}
+
+	if globalConfig.Producer.RequiredAcks == sarama.NoResponse {
+		return fmt.Errorf("Processors do not work with `Config.Producer.RequiredAcks==sarama.NoResponse`, as it uses the response's offset to store the value")
+	}
+
 	if opt.builders.producer == nil {
 		opt.builders.producer = DefaultProducerBuilder
 	}
@@ -262,13 +268,12 @@ func WithRebalanceCallback(cb RebalanceCallback) ProcessorOption {
 type ViewOption func(*voptions, Table, Codec)
 
 type voptions struct {
-	log                  logger.Logger
-	clientID             string
-	tableCodec           Codec
-	updateCallback       UpdateCallback
-	partitionChannelSize int
-	hasher               func() hash.Hash32
-	restartable          bool
+	log            logger.Logger
+	clientID       string
+	tableCodec     Codec
+	updateCallback UpdateCallback
+	hasher         func() hash.Hash32
+	restartable    bool
 
 	builders struct {
 		storage        storage.Builder
@@ -314,15 +319,6 @@ func WithViewTopicManagerBuilder(tmb TopicManagerBuilder) ViewOption {
 	}
 }
 
-// WithViewPartitionChannelSize replaces the default partition channel size.
-// This is mostly used for testing by setting it to 0 to have synchronous behavior
-// of goka.
-func WithViewPartitionChannelSize(size int) ViewOption {
-	return func(o *voptions, table Table, codec Codec) {
-		o.partitionChannelSize = size
-	}
-}
-
 // WithViewHasher sets the hash function that assigns keys to partitions.
 func WithViewHasher(hasher func() hash.Hash32) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
@@ -352,7 +348,6 @@ func WithViewTester(t Tester) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
 		o.builders.storage = t.StorageBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
-		o.partitionChannelSize = 0
 		o.clientID = t.RegisterView(table, codec)
 	}
 }

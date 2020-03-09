@@ -209,6 +209,21 @@ func (mr *MockClientMockRecorder) Partitions(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Partitions", reflect.TypeOf((*MockClient)(nil).Partitions), arg0)
 }
 
+// RefreshController mocks base method
+func (m *MockClient) RefreshController() (*sarama.Broker, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshController")
+	ret0, _ := ret[0].(*sarama.Broker)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RefreshController indicates an expected call of RefreshController
+func (mr *MockClientMockRecorder) RefreshController() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshController", reflect.TypeOf((*MockClient)(nil).RefreshController))
+}
+
 // RefreshCoordinator mocks base method
 func (m *MockClient) RefreshCoordinator(arg0 string) error {
 	m.ctrl.T.Helper()

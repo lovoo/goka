@@ -16,6 +16,9 @@ const (
 	defaultPartitionChannelSize = 10
 	defaultStallPeriod          = 30 * time.Second
 	defaultStalledTimeout       = 2 * time.Minute
+
+	// internal offset we use to detect if the offset has never been stored locally
+	offsetNotStored int64 = -3
 )
 
 // PartitionTable manages the usage of a table for one partition.
@@ -77,55 +80,36 @@ func newPartitionTable(topic string,
 	}
 }
 
-func (p *PartitionTable) SetupAndCatchup(ctx context.Context) error {
+// SetupAndRecover sets up the partition storage and recovers to HWM
+func (p *PartitionTable) SetupAndRecover(ctx context.Context) error {
 	err := p.setup(ctx)
 	if err != nil {
 		return err
 	}
-	return p.catchupToHwm(ctx)
+	return p.load(ctx, true)
 }
 
-func (p *PartitionTable) SetupAndCatchupForever(ctx context.Context, restartOnError bool) (chan struct{}, chan error) {
-	errChan := make(chan error)
-	err := p.setup(ctx)
-	if err != nil {
-		go func() {
-			defer close(errChan)
-			errChan <- err
-		}()
-		return p.WaitRecovered(), errChan
-	}
-
+// CatchupForever starts catching the partition table forever (until the context is cancelled).
+// Option restartOnError allows the view to stay open/intact even in case of consumer errors
+func (p *PartitionTable) CatchupForever(ctx context.Context, restartOnError bool) error {
 	if restartOnError {
-		go func() {
-			errChanIn := make(chan error)
-			defer close(errChan)
-			defer close(errChanIn)
-			for {
-				cCtx, cancel := context.WithCancel(ctx)
-				defer cancel()
-				go func(ctx context.Context) {
-					errChanIn <- p.catchupForever(ctx)
-				}(cCtx)
-				select {
-				case <-ctx.Done():
-					return
-				case err, ok := <-errChanIn:
-					if ok {
-						p.log.Printf("Error while catching up, but we'll try to keep it running: %v", err)
-					}
-					cancel()
-				}
+		for {
+			err := p.load(ctx, false)
+			if err != nil {
+				p.log.Printf("Error while catching up, but we'll try to keep it running: %v", err)
 			}
-		}()
-	} else {
-		go func() {
-			defer close(errChan)
-			errChan <- p.catchupForever(ctx)
-		}()
-	}
 
-	return p.WaitRecovered(), errChan
+			select {
+			case <-ctx.Done():
+				return nil
+
+			case <-time.After(10 * time.Second):
+				// retry after some time
+				// TODO (frairon) add exponential backoff
+			}
+		}
+	}
+	return p.load(ctx, false)
 }
 
 // Setup creates the storage for the partition table
@@ -141,6 +125,7 @@ func (p *PartitionTable) setup(ctx context.Context) error {
 	return nil
 }
 
+// Close closes the partition table
 func (p *PartitionTable) Close() error {
 	if p.st != nil {
 		return p.st.Close()
@@ -170,7 +155,7 @@ WaitLoop:
 		case <-ticker.C:
 			p.log.Printf("creating storage for topic %s/%d for %.1f minutes ...", p.topic, p.partition, time.Since(start).Minutes())
 		case <-done:
-			p.log.Printf("finished building storage for topic %s/%d", p.topic, p.partition)
+			p.log.Printf("finished building storage for topic %s/%d in %.1f minutes", p.topic, p.partition, time.Since(start).Minutes())
 			if err != nil {
 				return nil, fmt.Errorf("error building storage: %v", err)
 			}
@@ -186,29 +171,13 @@ WaitLoop:
 
 }
 
-// start loads the table partition up to HWM and then consumes streams
-func (p *PartitionTable) catchupToHwm(ctx context.Context) error {
-	// catchup until hwm
-	return p.load(ctx, true)
-}
-
-// continue
-func (p *PartitionTable) catchupForever(ctx context.Context) error {
-	err := p.load(ctx, true)
-	if err != nil {
-		return fmt.Errorf("Error catching up: %v", err)
-	}
-
-	return p.load(ctx, false)
-}
-
 // TODO(jb): refactor comment
 // findOffsetToLoad returns the first and the last offset (hwm) to load.
-// If localOffset is sarama.OffsetOldest the oldest offset known to kafka is returned as first offset.
-// If localOffset is sarama.OffsetNewest the hwm is returned as first offset.
-// If localOffset is higher than the hwm, the hwm is returned as first offset.
-// If localOffset is lower than the oldest offset, the oldest offset is returned as first offset.
-func (p *PartitionTable) findOffsetToLoad(localOffset int64) (int64, int64, error) {
+// If storedOffset is sarama.OffsetOldest the oldest offset known to kafka is returned as first offset.
+// If storedOffset is sarama.OffsetNewest the hwm is returned as first offset.
+// If storedOffset is higher than the hwm, the hwm is returned as first offset.
+// If storedOffset is lower than the oldest offset, the oldest offset is returned as first offset.
+func (p *PartitionTable) findOffsetToLoad(storedOffset int64) (int64, int64, error) {
 	oldest, err := p.tmgr.GetOffset(p.topic, p.partition, sarama.OffsetOldest)
 	if err != nil {
 		return 0, 0, fmt.Errorf("Error getting oldest offset for topic/partition %s/%d: %v", p.topic, p.partition, err)
@@ -217,21 +186,18 @@ func (p *PartitionTable) findOffsetToLoad(localOffset int64) (int64, int64, erro
 	if err != nil {
 		return 0, 0, fmt.Errorf("Error getting newest offset for topic/partition %s/%d: %v", p.topic, p.partition, err)
 	}
+	p.log.Debugf("topic manager gives us oldest: %d, hwm: %d", oldest, hwm)
 
-	p.log.Printf("topic manager gives us oldest: %d, hwm: %d", oldest, hwm)
+	var start int64
 
-	start := localOffset
-
-	if localOffset == sarama.OffsetOldest {
+	if storedOffset == offsetNotStored {
 		start = oldest
-	} else if localOffset == sarama.OffsetNewest {
-		start = hwm
+	} else {
+		start = storedOffset + 1
 	}
 
-	// TODO(jb): check if thats not an error case (local > hwm)
-	if start > hwm {
-		start = hwm
-	}
+	// if kafka does not have the offset we're looking for, use the oldest kafka has
+	// This can happen when the log compaction removes offsets that we stored.
 	if start < oldest {
 		start = oldest
 	}
@@ -240,7 +206,7 @@ func (p *PartitionTable) findOffsetToLoad(localOffset int64) (int64, int64, erro
 
 func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr error) {
 	var (
-		localOffset  int64
+		storedOffset int64
 		partConsumer sarama.PartitionConsumer
 		err          error
 		errs         = new(multierr.Errors)
@@ -257,33 +223,53 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	}()
 
 	// fetch local offset
-	localOffset, err = p.st.GetOffset(sarama.OffsetOldest)
+	storedOffset, err = p.st.GetOffset(offsetNotStored)
 	if err != nil {
 		errs.Collect(fmt.Errorf("error reading local offset: %v", err))
 		return
 	}
 
-	loadOffset, hwm, err := p.findOffsetToLoad(localOffset)
+	loadOffset, hwm, err := p.findOffsetToLoad(storedOffset)
 	if err != nil {
 		errs.Collect(err)
 		return
 	}
 
-	if localOffset >= hwm {
-		errs.Collect(fmt.Errorf("local offset is higher than partition offset. topic %s, partition %d, hwm %d, local offset %d. probably the kafka topic was recreated but the processor still has it's old local cache", p.topic, p.partition, hwm, localOffset))
+	if storedOffset > 0 && hwm == 0 {
+		errs.Collect(fmt.Errorf("kafka tells us there's no message in the topic, but our cache has one. The table might be gone. Try to delete your local cache! Topic %s, partition %d, hwm %d, local offset %d", p.topic, p.partition, hwm, storedOffset))
 		return
+	}
+
+	if storedOffset >= hwm {
+		p.log.Printf("Error: local offset is higher than partition offset. topic %s, partition %d, hwm %d, local offset %d. This can have several reasons: \n(1) The kafka topic storing the table is gone --> delete the local cache and restart! \n(2) the processor crashed last time while writing to disk. \n(3) You found a bug!", p.topic, p.partition, hwm, storedOffset)
+
+		// we'll just pretend we were done so the partition looks recovered
+		loadOffset = hwm
+	}
+
+	// initialize recovery stats here, in case we don't do the recovery because
+	// we're up to date already
+	if stopAfterCatchup {
+		p.stats.Recovery.StartTime = time.Now()
+		p.stats.Recovery.Hwm = hwm
+		p.stats.Recovery.Offset = loadOffset
 	}
 
 	// we are exactly where we're supposed to be
 	// AND we're here for catchup, so let's stop here
 	// and do not attempt to load anything
-	if stopAfterCatchup && loadOffset >= hwm-1 {
+	if stopAfterCatchup && loadOffset >= hwm {
 		errs.Collect(p.markRecovered(ctx))
-		return nil
+		return
 	}
 
-	p.log.Printf("Loading partition table from %d (hwm=%d)", loadOffset, hwm)
-	defer p.log.Printf("... Loading done")
+	if stopAfterCatchup {
+		p.log.Debugf("Recovering from %d to hwm=%d; (local offset is %d)", loadOffset, hwm, storedOffset)
+	} else {
+		p.log.Debugf("Catching up from %d to hwm=%d; (local offset is %d)", loadOffset, hwm, storedOffset)
+	}
+
+	defer p.log.Debugf("... Loading done")
 
 	if stopAfterCatchup {
 		p.state.SetState(State(PartitionRecovering))
@@ -291,24 +277,16 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 
 	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, loadOffset)
 	if err != nil {
-		errs.Collect(fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, localOffset, err))
+		errs.Collect(fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, storedOffset, err))
 		return
 	}
 	// close the consumer
 	defer func() {
-		errs.Collect(partConsumer.Close())
+		partConsumer.AsyncClose()
 	}()
-
-	// reset stats after load
-	defer p.stats.reset()
 
 	// consume errors asynchronously
 	go p.handleConsumerErrors(ctx, errs, partConsumer)
-
-	if stopAfterCatchup {
-		p.stats.Recovery.StartTime = time.Now()
-		p.stats.Recovery.Hwm = hwm
-	}
 
 	// load messages and stop when you're at HWM
 	loadErr := p.loadMessages(ctx, partConsumer, hwm, stopAfterCatchup)
@@ -335,10 +313,14 @@ func (p *PartitionTable) markRecovered(ctx context.Context) error {
 	defer ticker.Stop()
 
 	p.state.SetState(State(PartitionPreparing))
+	p.stats.Recovery.RecoveryTime = time.Now()
 
 	go func() {
 		defer close(done)
-		done <- p.st.MarkRecovered()
+		err := p.st.MarkRecovered()
+		if err != nil {
+			done <- err
+		}
 	}()
 
 	for {
@@ -367,6 +349,8 @@ func (p *PartitionTable) handleConsumerErrors(ctx context.Context, errs *multier
 			err := fmt.Errorf("Consumer error: %v", consError)
 			p.log.Printf("%v", err)
 			errs.Collect(err)
+			// if there's an error, close the consumer
+			cons.AsyncClose()
 		case <-ctx.Done():
 			return
 		}
@@ -417,17 +401,17 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 				errs.Collect(fmt.Errorf("load: error updating storage: %v", err))
 				return
 			}
-			p.offset = msg.Offset
-
-			if stopAfterCatchup && msg.Offset >= partitionHwm-1 {
-				return
-			}
 
 			if stopAfterCatchup {
 				p.stats.Recovery.Offset = msg.Offset
 			}
 
-			p.updateStats(msg)
+			p.trackIncomingMessageStats(msg)
+
+			if stopAfterCatchup && msg.Offset >= partitionHwm-1 {
+				return
+			}
+
 		case now := <-stallTicker.C:
 			// only set to stalled, if the last message was earlier
 			// than the stalled timeout
@@ -436,14 +420,7 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 			}
 
 		case <-p.requestStats:
-			stats := p.stats.clone()
-			stats.Status = PartitionStatus(p.state.State())
-			select {
-			case p.responseStats <- stats:
-			case <-ctx.Done():
-				p.log.Printf("exiting, context is cancelled")
-				return nil
-			}
+			p.handleStatsRequest(ctx)
 
 		case <-updateHwmStatsTicker.C:
 			p.updateHwmStats()
@@ -454,11 +431,33 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 	}
 }
 
+func (p *PartitionTable) handleStatsRequests(ctx context.Context) {
+	for {
+		select {
+		case <-p.requestStats:
+			p.handleStatsRequest(ctx)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (p *PartitionTable) handleStatsRequest(ctx context.Context) {
+	stats := p.stats.clone()
+	stats.Status = PartitionStatus(p.state.State())
+	select {
+	case p.responseStats <- stats:
+	case <-ctx.Done():
+		p.log.Debugf("exiting, context is cancelled")
+	}
+}
+
 func (p *PartitionTable) fetchStats(ctx context.Context) *TableStats {
 	select {
 	case <-ctx.Done():
 		return nil
 	case <-time.After(fetchStatsTimeout):
+		p.log.Printf("requesting stats timed out")
 		return nil
 	case p.requestStats <- true:
 	}
@@ -468,13 +467,14 @@ func (p *PartitionTable) fetchStats(ctx context.Context) *TableStats {
 	case <-ctx.Done():
 		return nil
 	case <-time.After(fetchStatsTimeout):
+		p.log.Printf("fetching stats timed out")
 		return nil
 	case stats := <-p.responseStats:
 		return stats
 	}
 }
 
-func (p *PartitionTable) updateStats(msg *sarama.ConsumerMessage) {
+func (p *PartitionTable) trackIncomingMessageStats(msg *sarama.ConsumerMessage) {
 	ip := p.stats.Input
 	ip.Bytes += len(msg.Value)
 	ip.LastOffset = msg.Offset
@@ -483,6 +483,11 @@ func (p *PartitionTable) updateStats(msg *sarama.ConsumerMessage) {
 	}
 	ip.Count++
 	p.stats.Stalled = false
+}
+
+func (p *PartitionTable) trackOutgoingMessage(length int) {
+	p.stats.Output.Bytes += length
+	p.stats.Output.Count++
 }
 
 func (p *PartitionTable) updateHwmStats() {
@@ -505,38 +510,50 @@ func (p *PartitionTable) storeEvent(key string, value []byte, offset int64) erro
 	return nil
 }
 
+// IsRecovered returns whether the partition table is recovered
 func (p *PartitionTable) IsRecovered() bool {
 	return p.state.IsState(State(PartitionRunning))
 }
 
+// WaitRecovered returns a channel that closes when the partition table enters state `PartitionRunning`
 func (p *PartitionTable) WaitRecovered() chan struct{} {
 	return p.state.WaitForState(State(PartitionRunning))
 }
 
+// Get returns the value for passed key
 func (p *PartitionTable) Get(key string) ([]byte, error) {
 	return p.st.Get(key)
 }
+
+// Set sets a key value key in the partition table by modifying the underlying storage
 func (p *PartitionTable) Set(key string, value []byte) error {
 	return p.st.Set(key, value)
 }
+
+// Delete removes the passed key from the partition table by deleting from the underlying storage
 func (p *PartitionTable) Delete(key string) error {
 	return p.st.Delete(key)
 }
-func (p *PartitionTable) IncrementOffsets(increment int64) error {
+
+func (p *PartitionTable) storeNewestOffset(newOffset int64) error {
 	p.offsetM.Lock()
 	defer p.offsetM.Unlock()
 
-	offset, err := p.GetOffset(0)
+	oldOffset, err := p.GetOffset(offsetNotStored)
 	if err != nil {
 		return err
 	}
 
-	return p.SetOffset(offset + increment)
+	if offsetNotStored != oldOffset && oldOffset <= newOffset {
+		return p.SetOffset(newOffset)
+	}
+	return nil
 }
 
 func (p *PartitionTable) SetOffset(value int64) error {
 	return p.st.SetOffset(value)
 }
+
 func (p *PartitionTable) GetOffset(defValue int64) (int64, error) {
 	return p.st.GetOffset(defValue)
 }

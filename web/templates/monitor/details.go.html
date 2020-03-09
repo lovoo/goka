@@ -5,35 +5,88 @@
     <h1>{{.title}}</h1>
     <div class="panel panel-default">
       <div class="panel panel-heading">
-        <h3>Table statistics</h3>
+        <h3>Partition Table (State)</h3>
       </div>
       <div class="panel-body">
         <table class="table table-striped">
           <thead>
             <tr>
-              <th title="partition number" rowspan="2">Partition</th>
+              <th title="Partition" rowspan="2">Partition</th>
               <th title="Status of the processor" rowspan="2">State</th>
-              <th title="Number of messages lagging behind HWM" rowspan="2">Offset-Lag</th>
-              <th title="High water mark (offset of the next message being consumed)" rowspan="2">HWM</th>
-              <th rowspan="2">Write-Rate</th>
-              <th colspan="3">Input</th>
-              <th colspan="2">Output</th>
+              <th title="Stats during recovery" colspan="3">Recovery</th>
+              <th title="Stats during run time" colspan="2">Runtime</th>
             </tr>
             <tr>
-              <th>rate</th>
-              <th>bytes</th>
-              <th>delay</th>
-              <th>rate</th>
-              <th>bytes</th>
+              <th title="Time of passed recovery so far">Time</th>
+              <th title="Number of messages recovered per second">Rate</th>
+              <th title="Number of messages lagging behind HWM">Lag</th>
+              <th title="Number of messages updated per second">Rate</th>
+              <th title="Number of bytes updated per second">Bytes</th>
             </tr>
           </thead>
-          <tbody id="partitionView">
+          <tbody id="tableStatistics">
           </tbody>
         </table>
       </div>
     </div>
 
 {{if eq .renderType "processor"}}
+    <div class="panel panel-default">
+      <div class="panel panel-heading">
+        <h3>Input Traffic</h3>
+        <ul id="inputTopics">
+        </ul>
+
+      </div>
+      <div class="panel-body">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th title="Partition" rowspan="2">Partition</th>
+              <th title="Rate/Bytes of incoming events" colspan="3">Rate (events/bytes)</th>
+              <th title="Lag for offset and time" colspan="3">Lag (offset/time)</th>
+            </tr>
+            <tr>
+              <th title="Min number of events">Min</th>
+              <th title="Avg number of events">Avg</th>
+              <th title="Max number of events">Max</th>
+              <th title="Min Lag">Min</th>
+              <th title="Avg Lag">Avg</th>
+              <th title="Max Lag">Max</th>
+            </tr>
+          </thead>
+          <tbody id="inputStatistics">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel panel-default">
+      <div class="panel panel-heading">
+        <h3>Outgoing Traffic</h3>
+        <ul id="inputTopics">
+        </ul>
+
+      </div>
+      <div class="panel-body">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th title="Partition" rowspan="2">Partition</th>
+              <th title="Rate/Bytes of outgoing events" colspan="3">Rate (events/bytes)</th>
+            </tr>
+            <tr>
+              <th title="Min number of events">Min</th>
+              <th title="Avg number of events">Avg</th>
+              <th title="Max number of events">Max</th>
+            </tr>
+          </thead>
+          <tbody id="outputStatistics">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="panel panel-default">
       <div class="panel panel-heading">
         <h3>Co-Joined Tables</h3>
@@ -59,78 +112,67 @@
 
     <script type="text/javascript">
 
-      var lastPartition = d3.local();
+      var lastInputStats = d3.local();
+      var lastOutputStats = d3.local();
+      var lastTableStats = d3.local();
       var lastJoinStats = d3.local();
-      var statusMap = {0: "recovering", 1:"preparing", 2: "running"};
+      var statusMap = {0:"stopped", 1:"initializing", 2: "recovering", 3:"preparing", 4: "running"};
+
+      var secsToNano = 1000000000;
 
       var renderDetails = function(partitions){
 
-        var updatePartitionPanel = function(data){
+        if(partitions == null){
+          return;
+        }
+
+        var updateTableStatistics = function(data){
+
           var partitionId = data[0];
           var stats = data[1];
 
-          var status = statusMap[stats.Table.Status];
+          // stateless processors don't have table stats
+          if(stats.TableStats == null){
+            return;
+          }
 
-          if(stats.Table.Stalled){
+          var status = statusMap[stats.TableStats.Status];
+
+          if(stats.TableStats.Stalled){
             status = "stalled";
           }
-          var offsetLag = stats.Table.Hwm - stats.Table.Offset - 1;
+          var recEndTime = stats.TableStats.Recovery.RecoveryTime != "" ? stats.TableStats.Recovery.RecoveryTime : stats.Now;
+          var recoveryTime = (new Date(recEndTime) - new Date(stats.TableStats.Recovery.StartTime)) / 1000.0;
+          var recoveryRate = 0;
+          var recoveryLag = stats.TableStats.Recovery.Hwm - stats.TableStats.Recovery.Offset ;
 
-
-          // initialize them by default
-          var writeRate = 0;
-          var inputRate = 0;
-          var inputBytes = 0;
-          var outputRate = 0;
-          var outputBytes = 0;
-          var inputDelay = -1;
-          // start with a chained operation on the Input of stats.
-          var inputChain = _.chain(stats.Input);
-          // if we do have values to get the avg from, let's take it.
-          // if we tried on an empty list, it would create a NaN
-          if(inputChain.size().value() > 0){
-            inputDelay = inputChain.flatMap("Delay").mean().value() / 1000000;
-          }
-
+          var runningRate = 0;
+          var runningBytes = 0;
 
           // let's check if we have a previous dataset and set them to their
           // correct values
-          var lastStats = lastPartition.get(this);
+          var lastStats = lastTableStats.get(this);
 
           if(lastStats){
-            // copy the stats to avoid modifying it inplace
-            var curStats = JSON.parse(JSON.stringify(stats));
             // diff to previous stats in seconds
-            var timeDiff = (new Date(curStats.Now) - new Date(lastStats.Now)) / 1000.0;
-            writeRate = (curStats.Table.Offset - lastStats.Table.Offset) / timeDiff;
+            var timeDiff = (new Date(stats.Now) - new Date(lastStats.Now)) / 1000.0;
 
-            function valueDiff(objValue, srcValue) {
-              return {
-                Count: objValue.Count - srcValue.Count,
-                Bytes: objValue.Bytes - srcValue.Bytes,
-              };
+            if(status == "recovering"){
+              recoveryRate = (stats.TableStats.Recovery.Offset - lastStats.TableStats.Recovery.Offset)/timeDiff;
             }
 
-            var groupedInput = _.mergeWith(curStats.Input, lastStats.Input, valueDiff);
-            inputRate = _.chain(groupedInput).flatMap("Count").sum().value() / timeDiff;
-            inputBytes = _.chain(groupedInput).flatMap("Bytes").sum().value() / timeDiff;
-
-            var groupedOutput = _.mergeWith(curStats.Output, lastStats.Output, valueDiff);
-            outputRate = _.chain(groupedOutput).flatMap("Count").sum().value() / timeDiff;
-            outputBytes = _.chain(groupedOutput).flatMap("Bytes").sum().value() / timeDiff;
+            runningRate = (stats.TableStats.Output.Count - lastStats.TableStats.Output.Count)/timeDiff;
+            runningBytes = (stats.TableStats.Output.Bytes - lastStats.TableStats.Output.Bytes)/timeDiff;
           }
-          lastPartition.set(this, stats);
+          lastTableStats.set(this, JSON.parse(JSON.stringify(stats)));
 
           return '<td>'+partitionId+'</td>\n'+
             '<td>'+status+'</td>\n'+
-            '<td>'+offsetLag+'</td>\n'+
-            '<td>'+stats.Table.Hwm+'</td>\n'+
-            '<td>'+writeRate.toFixed(2)+'</td>\n'+
-            '<td>'+inputRate.toFixed(2)+'</td>\n'+
-            '<td>'+inputBytes.toFixed(0)+'</td>\n'+
-            '<td>'+inputDelay.toFixed(2)+' ms</td>\n'+
-            '<td>'+outputRate.toFixed(2)+'</td>\n'+
-            '<td>'+outputBytes.toFixed(0)+'</td>\n';
+            '<td>'+recoveryTime+'s</td>\n'+
+            '<td>'+recoveryRate.toFixed(0)+'</td>\n'+
+            '<td>'+recoveryLag+'</td>\n'+
+            '<td>'+runningRate.toFixed(0)+'</td>\n'+
+            '<td>'+runningBytes.toFixed(0)+'</td>\n';
         };
 
         {{if eq .renderType "processor"}}
@@ -139,65 +181,155 @@
           var group = partitions.Partitions;
         {{end}}
 
-        // Group Table
-        var groupList = _.toPairs(group).sort(function(a,b){return parseInt(a[0]) - parseInt(b[0]);});
+        // sort all partitions
+        var partitionList = _.toPairs(group).sort(function(a,b){return parseInt(a[0]) - parseInt(b[0]);});
         // update, enter and remove data
-        var d = d3.select("#partitionView").selectAll(".partitionbox").data(groupList, function(d){ return d[0]; });
-        d.html(updatePartitionPanel);
-        d3.select("#partitionView").selectAll(".partitionbox").data(groupList, function(d){ return d[0]; }).enter().append("tr").classed("partitionbox", true).html(updatePartitionPanel);
+        var d = d3.select("#tableStatistics").selectAll(".partitionbox").data(partitionList, function(d){ return d[0]; });
+        d.html(updateTableStatistics);
+        d3.select("#tableStatistics").selectAll(".partitionbox").data(partitionList, function(d){ return d[0]; }).enter().append("tr").classed("partitionbox", true).html(updateTableStatistics);
         d.exit().remove()
 
 {{if eq .renderType "processor"}}
-        var updateJoinPanel = function(data){
+
+
+        var renderInput = function(data){
           var partitionId = data[0];
-          var stats = data[3];
-          var status = statusMap[stats.Table.Status];
+          var stats = data[1];
+          var input = stats.Input;
+          // extract the values for all topics for this partition in several lists and chain them
+          // so we can easier apply the min/max/avg operators on them.
+          var countsChain = _.chain(input).map(function(value){ return value.Count;});
+          var bytesChain = _.chain(input).map(function(value){ return value.Bytes;});
+          var lagChain = _.chain(input).map(function(value){ return value.OffsetLag;});
+          var delayChain = _.chain(input).map(function(value){ return value.Delay;});
 
-          if(stats.Table.Stalled){
-            status = "stalled";
-          }
-          var offsetLag = stats.Table.Hwm - stats.Table.Offset - 1;
+          // default values we're going to display.
+          // this object will be stored in lastInputStats to calculate rates as well
+          var values = {
+            "now":new Date(stats.Now),
+            "countMin" : countsChain.min().value(),
+            "countAvg" : countsChain.mean().value(),
+            "countMax" : countsChain.max().value(),
+            "bytesMin" : bytesChain.min().value(),
+            "bytesAvg" : bytesChain.mean().value(),
+            "bytesMax" : bytesChain.max().value(),
+          };
 
-          var writeRate = 0;
 
-          // let's check if we have a previous dataset and set them to their
-          // correct values
-          var lastStats = lastJoinStats.get(this);
+          var countRateMin = 0;
+          var countRateAvg = 0;
+          var countRateMax = 0;
+          var byteRateMin = 0;
+          var byteRateAvg = 0;
+          var byteRateMax = 0;
+
+          var offsetLagMin = lagChain.min().value();
+          var offsetLagAvg = lagChain.mean().value();
+          var offsetLagMax = lagChain.max().value();
+          var delayMin = delayChain.min().value();
+          var delayAvg = delayChain.mean().value();
+          var delayMax = delayChain.max().value();
+
+          var lastStats = lastInputStats.get(this);
 
           if(lastStats){
-            // copy the stats to avoid modifying it inplace
-            var curStats = JSON.parse(JSON.stringify(stats));
             // diff to previous stats in seconds
-            var timeDiff = (new Date(stats.Now) - new Date(lastStats.Now)) / 1000.0;
-            writeRate = (stats.Table.Offset - lastStats.Table.Offset) / timeDiff;
+            var timeDiff = (values.now - lastStats.now) / 1000.0;
+
+            if(timeDiff){
+              countRateMin = (values.countMin-lastStats.countMin)/timeDiff;
+              countRateAvg = (values.countAvg-lastStats.countAvg)/timeDiff;
+              countRateMax = (values.countMax-lastStats.countMax)/timeDiff;
+              byteRateMin = (values.bytesMin-lastStats.bytesMin)/timeDiff;
+              byteRateAvg = (values.bytesAvg-lastStats.bytesAvg)/timeDiff;
+              byteRateMax = (values.bytesMax-lastStats.bytesMax)/timeDiff;
+            }
           }
-          lastJoinStats.set(this, stats);
+          // add new values for the next round
+          lastInputStats.set(this, values);
 
           return '<td>'+partitionId+'</td>\n'+
-            '<td>'+data[1]+'</td>\n'+
-            '<td>'+status+'</td>\n'+
-            '<td>'+offsetLag+'</td>\n'+
-            '<td>'+stats.Table.Hwm+'</td>\n'+
-            '<td>'+writeRate.toFixed(2)+'</td>\n';
-        };
-        // CoJoined Partitions
-        var joinList = _.flatMap(_.toPairs(partitions.Joined), function(value) {
-          return _.map(value[1], function(innerValue, key) {
-            var idKey = new String(value[0]).concat(key);
-            return [parseInt(value[0]), key, idKey, innerValue];
-          });
-        }).sort(function(a, b) {
-          if(a[0] != b[0]) {
-            return a[0] - b[0];
-          }
-          return a[1].localeCompare(b[1]);
-        });
+          '<td>'+countRateMin.toFixed(0)+'/'+byteRateMin.toFixed(0)+'</td>\n'+
+          '<td>'+countRateAvg.toFixed(0)+'/'+byteRateAvg.toFixed(0)+'</td>\n'+
+          '<td>'+countRateMax.toFixed(0)+'/'+byteRateMax.toFixed(0)+'</td>\n'+
+          '<td>'+offsetLagMin.toFixed(0)+'/'+(delayMin/secsToNano).toFixed(2)+'s</td>\n'+
+          '<td>'+offsetLagAvg.toFixed(0)+'/'+(delayAvg/secsToNano).toFixed(2)+'s</td>\n'+
+          '<td>'+offsetLagMax.toFixed(0)+'/'+(delayMax/secsToNano).toFixed(2)+'s</td>\n';
 
-        // update, enter and remove data
-        var d = d3.select("#joinView").selectAll(".partitionbox").data(joinList, function(d){ return d[2]; });
-        d.html(updateJoinPanel);
-        d3.select("#joinView").selectAll(".partitionbox").data(joinList, function(d){ return d[2]; }).enter().append("tr").classed("partitionbox", true).html(updateJoinPanel);
-        d.exit().remove();
+        };
+
+        // render the input statistics in the input box
+        var d = d3.select("#inputStatistics").selectAll(".partitionbox").data(partitionList, function(d){ return d[0]; });
+        d.html(renderInput);
+        d3.select("#inputStatistics").selectAll(".partitionbox").data(partitionList, function(d){ return d[0]; }).enter().append("tr").classed("partitionbox", true).html(renderInput);
+        d.exit().remove()
+
+
+        var renderOutput = function(data){
+          var partitionId = data[0];
+          var stats = data[1];
+          var output = stats.Output;
+          // extract the values for all topics for this partition in several lists and chain them
+          // so we can easier apply the min/max/avg operators on them.
+          var countsChain = _.chain(output).map(function(value){ return value.Count;});
+          var bytesChain = _.chain(output).map(function(value){ return value.Bytes;});
+
+          // default values we're going to display.
+          // this object will be stored in lastInputStats to calculate rates as well
+          var values = {
+            "now":new Date(stats.Now),
+            "countMin" : countsChain.min().value(),
+            "countAvg" : countsChain.mean().value(),
+            "countMax" : countsChain.max().value(),
+            "bytesMin" : bytesChain.min().value(),
+            "bytesAvg" : bytesChain.mean().value(),
+            "bytesMax" : bytesChain.max().value(),
+          };
+
+
+          var countRateMin = 0;
+          var countRateAvg = 0;
+          var countRateMax = 0;
+          var byteRateMin = 0;
+          var byteRateAvg = 0;
+          var byteRateMax = 0;
+
+          var offsetLagMin = lagChain.min().value();
+          var offsetLagAvg = lagChain.mean().value();
+          var offsetLagMax = lagChain.max().value();
+          var delayMin = delayChain.min().value();
+          var delayAvg = delayChain.mean().value();
+          var delayMax = delayChain.max().value();
+
+          var lastStats = lastOutputStats.get(this);
+
+          if(lastStats){
+            // diff to previous stats in seconds
+            var timeDiff = (values.now - lastStats.now) / 1000.0;
+
+            if(timeDiff){
+              countRateMin = (values.countMin-lastStats.countMin)/timeDiff;
+              countRateAvg = (values.countAvg-lastStats.countAvg)/timeDiff;
+              countRateMax = (values.countMax-lastStats.countMax)/timeDiff;
+              byteRateMin = (values.bytesMin-lastStats.bytesMin)/timeDiff;
+              byteRateAvg = (values.bytesAvg-lastStats.bytesAvg)/timeDiff;
+              byteRateMax = (values.bytesMax-lastStats.bytesMax)/timeDiff;
+            }
+          }
+          // add new values for the next round
+          lastOutputStats.set(this, values);
+
+          return '<td>'+partitionId+'</td>\n'+
+          '<td>'+countRateMin.toFixed(0)+'/'+byteRateMin.toFixed(0)+'</td>\n'+
+          '<td>'+countRateAvg.toFixed(0)+'/'+byteRateAvg.toFixed(0)+'</td>\n'+
+          '<td>'+countRateMax.toFixed(0)+'/'+byteRateMax.toFixed(0)+'</td>\n';
+        };
+
+        // render the output statistics in the output box
+        var d = d3.select("#outputStatistics").selectAll(".partitionbox").data(partitionList, function(d){ return d[0]; });
+        d.html(renderInput);
+        d3.select("#outputStatistics").selectAll(".partitionbox").data(partitionList, function(d){ return d[0]; }).enter().append("tr").classed("partitionbox", true).html(renderInput);
+        d.exit().remove()
 
 {{end}} // go template end if the component is no processor
 

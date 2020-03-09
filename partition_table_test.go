@@ -210,9 +210,9 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
-		actualOldest, actualNewest, err := pt.findOffsetToLoad(local)
+		offsetToLoad, actualNewest, err := pt.findOffsetToLoad(local)
 		test.AssertNil(t, err)
-		test.AssertEqual(t, actualOldest, local)
+		test.AssertEqual(t, offsetToLoad, local+1)
 		test.AssertEqual(t, actualNewest, newest)
 	})
 	t.Run("too_new_local", func(t *testing.T) {
@@ -232,9 +232,9 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
-		actualOldest, actualNewest, err := pt.findOffsetToLoad(local)
+		offsetToLoad, actualNewest, err := pt.findOffsetToLoad(local)
 		test.AssertNil(t, err)
-		test.AssertEqual(t, actualOldest, newest)
+		test.AssertEqual(t, offsetToLoad, local+1)
 		test.AssertEqual(t, actualNewest, newest)
 	})
 	t.Run("sarama_oldest", func(t *testing.T) {
@@ -256,27 +256,6 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		actualOldest, actualNewest, err := pt.findOffsetToLoad(sarama.OffsetOldest)
 		test.AssertNil(t, err)
 		test.AssertEqual(t, actualOldest, oldest)
-		test.AssertEqual(t, actualNewest, newest)
-	})
-	t.Run("sarama_newest", func(t *testing.T) {
-		var (
-			oldest int64 = 161
-			newest int64 = 1312
-		)
-		pt, bm, ctrl := defaultPT(
-			t,
-			"some-topic",
-			0,
-			nil,
-			nil,
-		)
-		defer ctrl.Finish()
-		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
-		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
-
-		actualOldest, actualNewest, err := pt.findOffsetToLoad(sarama.OffsetNewest)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, actualOldest, newest)
 		test.AssertEqual(t, actualNewest, newest)
 	})
 	t.Run("fail_getoffset", func(t *testing.T) {
@@ -323,7 +302,7 @@ func TestPT_load(t *testing.T) {
 			oldest           int64 = 161
 			newest           int64 = 1312
 			local            int64 = 1311
-			stopAfterCatchup bool  = true
+			stopAfterCatchup       = true
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -333,7 +312,7 @@ func TestPT_load(t *testing.T) {
 			nil,
 		)
 		defer ctrl.Finish()
-		bm.mst.EXPECT().GetOffset(sarama.OffsetOldest).Return(local, nil)
+		bm.mst.EXPECT().GetOffset(offsetNotStored).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 		bm.mst.EXPECT().MarkRecovered().Return(nil)
@@ -346,12 +325,12 @@ func TestPT_load(t *testing.T) {
 		test.AssertNil(t, err)
 		test.AssertTrue(t, pt.state.IsState(State(PartitionRunning)))
 	})
-	t.Run("fail_local_offset_too_high_stopAfterCatchup", func(t *testing.T) {
+	t.Run("local_offset_too_high_stopAfterCatchup_no_error", func(t *testing.T) {
 		var (
 			oldest           int64 = 161
 			newest           int64 = 1312
 			local            int64 = 1314
-			stopAfterCatchup bool  = true
+			stopAfterCatchup       = true
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -361,28 +340,29 @@ func TestPT_load(t *testing.T) {
 			nil,
 		)
 		defer ctrl.Finish()
-		bm.mst.EXPECT().GetOffset(sarama.OffsetOldest).Return(local, nil)
+		bm.mst.EXPECT().GetOffset(offsetNotStored).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
+		bm.mst.EXPECT().MarkRecovered().Return(nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
 		test.AssertNil(t, err)
 		err = pt.load(ctx, stopAfterCatchup)
-		test.AssertNotNil(t, err)
+		test.AssertNil(t, err)
 	})
 	t.Run("consume", func(t *testing.T) {
 		var (
-			oldest           int64             = 161
-			newest           int64             = 1312
-			local            int64             = sarama.OffsetOldest
-			stopAfterCatchup bool              = false
-			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			topic            string            = "some-topic"
-			partition        int32             = 0
-			count            int32             = 0
-			updateCB         UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
+			oldest           int64 = 161
+			newest           int64 = 1312
+			local            int64 = sarama.OffsetOldest
+			stopAfterCatchup       = false
+			consumer               = defaultSaramaAutoConsumerMock(t)
+			topic                  = "some-topic"
+			partition        int32
+			count            int32
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
 			}
@@ -855,14 +835,14 @@ func TestPT_markRecovered(t *testing.T) {
 func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		var (
-			oldest    int64             = 161
-			newest    int64             = 1312
-			local     int64             = oldest
-			consumer  *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			topic     string            = "some-topic"
-			partition int32             = 0
-			count     int32             = 0
-			updateCB  UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
+			oldest    int64 = 0
+			newest    int64 = 5
+			local           = oldest
+			consumer        = defaultSaramaAutoConsumerMock(t)
+			topic           = "some-topic"
+			partition int32
+			count     int64
+			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
 			}
@@ -874,45 +854,35 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 			nil,
 			updateCB,
 		)
+		logger.Debug(true, false)
 		defer ctrl.Finish()
 		pt.consumer = consumer
 		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 		bm.mst.EXPECT().MarkRecovered().Return(nil)
-		partConsumer := consumer.ExpectConsumePartition(topic, partition, oldest)
+		partConsumer := consumer.ExpectConsumePartition(topic, partition, local+1)
 		partConsumer.ExpectMessagesDrainedOnClose()
-		for i := 0; i < 10; i++ {
+
+		msgsToRecover := newest - local
+		for i := int64(0); i < msgsToRecover; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 			bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-				if count == 10 {
-					cancel()
-					return
-				}
-			}
-		}()
 
-		err := pt.SetupAndCatchup(ctx)
+		err := pt.SetupAndRecover(ctx)
 		test.AssertNil(t, err)
-		test.AssertTrue(t, count == 10)
+		test.AssertTrue(t, count == msgsToRecover)
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
-			consumer  *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			topic     string            = "some-topic"
-			partition int32             = 0
-			retErr    error             = fmt.Errorf("offset-error")
+			consumer  = defaultSaramaAutoConsumerMock(t)
+			topic     = "some-topic"
+			partition int32
+			retErr    = fmt.Errorf("offset-error")
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -927,7 +897,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
-		err := pt.SetupAndCatchup(ctx)
+		err := pt.SetupAndRecover(ctx)
 		test.AssertNotNil(t, err)
 	})
 }
@@ -938,15 +908,14 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 			oldest int64 = 0
 			newest int64 = 10
 			// local     int64          = oldest
-			consumer  *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			topic     string            = "some-topic"
-			partition int32             = 0
-			count     int64             = 0
-			updateCB  UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
+			consumer                 = defaultSaramaAutoConsumerMock(t)
+			topic                    = "some-topic"
+			partition int32          = 0
+			count     int64          = 0
+			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
 			}
-			restartOnError bool = false
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -982,24 +951,16 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 			}
 		}()
 
-		recovered, errChan := pt.SetupAndCatchupForever(ctx, restartOnError)
-		var isRecovered bool
-		select {
-		case <-recovered:
-			isRecovered = true
-			cancel()
-		case <-ctx.Done():
-		}
-		test.AssertNil(t, <-errChan)
-		test.AssertTrue(t, isRecovered)
+		err := pt.SetupAndRecover(ctx)
+		test.AssertNil(t, err)
+		cancel()
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
-			consumer       *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			topic          string            = "some-topic"
-			partition      int32             = 0
-			retErr         error             = fmt.Errorf("offset-error")
-			restartOnError bool              = false
+			consumer        = defaultSaramaAutoConsumerMock(t)
+			topic           = "some-topic"
+			partition int32 = 0
+			retErr          = fmt.Errorf("offset-error")
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -1014,11 +975,8 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
-		recoveredCh, errCh := pt.SetupAndCatchupForever(ctx, restartOnError)
-		select {
-		case <-recoveredCh:
-		case <-ctx.Done():
-		}
-		test.AssertNotNil(t, <-errCh)
+		err := pt.SetupAndRecover(ctx)
+		test.AssertNotNil(t, err)
+		cancel()
 	})
 }

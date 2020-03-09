@@ -32,15 +32,17 @@ func (q *queue) Hwm() int64 {
 	return hwm
 }
 
-func (q *queue) push(key string, value []byte) {
+func (q *queue) push(key string, value []byte) int64 {
 	q.Lock()
 	defer q.Unlock()
+	offset := q.hwm
 	q.messages = append(q.messages, &message{
-		offset: q.hwm,
+		offset: offset,
 		key:    key,
 		value:  value,
 	})
 	q.hwm++
+	return offset
 }
 
 func (q *queue) message(offset int) *message {

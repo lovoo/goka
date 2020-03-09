@@ -41,9 +41,9 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	options = append(
 		// default options comes first
 		[]ViewOption{
+			WithViewClientID(fmt.Sprintf("goka-view-%s", topic)),
 			WithViewLogger(logger.Default()),
 			WithViewCallback(DefaultUpdate),
-			WithViewPartitionChannelSize(defaultPartitionChannelSize),
 			WithViewStorageBuilder(storage.DefaultBuilder(DefaultViewStoragePath())),
 		},
 
@@ -121,7 +121,7 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 			v.tmgr,
 			v.opts.updateCallback,
 			v.opts.builders.storage,
-			v.log.Prefix(fmt.Sprintf("PartTable [%d]", partID)),
+			v.log.Prefix(fmt.Sprintf("PartTable-%d", partID)),
 		))
 	}
 
@@ -130,38 +130,11 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 
 // Run starts consuming the view's topic.
 func (v *View) Run(ctx context.Context) (rerr error) {
-	v.log.Printf("starting")
-	defer v.log.Printf("stopped")
+	v.log.Debugf("starting")
+	defer v.log.Debugf("stopped")
 
 	v.state.SetState(ViewStateCatchUp)
-
-	errg, ctx := multierr.NewErrGroup(ctx)
-
-	multiWait := multierr.NewMultiWait(ctx, len(v.partitions))
-	go func() {
-		if multiWait.Wait() {
-			v.state.SetState(ViewStateRunning)
-		}
-	}()
-
-	for _, partition := range v.partitions {
-		partition := partition
-		errg.Go(func() error {
-			catchupChan, errChan := partition.SetupAndCatchupForever(ctx, v.opts.restartable)
-
-			multiWait.Add(catchupChan)
-
-			select {
-			case <-ctx.Done():
-				return nil
-			case err, ok := <-errChan:
-				if ok && err != nil {
-					return fmt.Errorf("Error while setup/catching up/recovering: %v", err)
-				}
-			}
-			return nil
-		})
-	}
+	defer v.state.SetState(ViewStateIdle)
 
 	// close the view after running
 	defer func() {
@@ -171,8 +144,35 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 		rerr = errs.NilOrError()
 	}()
 
-	// wait for all partitions to finish up (or be terminated)
-	rerr = errg.Wait().NilOrError()
+	recoverErrg, recoverCtx := multierr.NewErrGroup(ctx)
+
+	for _, partition := range v.partitions {
+		partition := partition
+		recoverErrg.Go(func() error {
+			return partition.SetupAndRecover(recoverCtx)
+		})
+	}
+
+	err := recoverErrg.Wait().NilOrError()
+	if err != nil {
+		rerr = fmt.Errorf("Error recovering partitions for view %s: %v", v.Topic(), err)
+		return
+	}
+	v.state.SetState(ViewStateRunning)
+
+	catchupErrg, catchupCtx := multierr.NewErrGroup(ctx)
+
+	for _, partition := range v.partitions {
+		partition := partition
+		catchupErrg.Go(func() error {
+			return partition.CatchupForever(catchupCtx, v.opts.restartable)
+		})
+	}
+
+	err = catchupErrg.Wait().NilOrError()
+	if err != nil {
+		rerr = fmt.Errorf("Error catching up partitions for view %s: %v", v.Topic(), err)
+	}
 	return
 }
 

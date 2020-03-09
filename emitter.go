@@ -25,7 +25,9 @@ type Emitter struct {
 func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterOption) (*Emitter, error) {
 	options = append(
 		// default options comes first
-		[]EmitterOption{},
+		[]EmitterOption{
+			WithEmitterClientID(fmt.Sprintf("goka-emitter-%s", topic)),
+		},
 
 		// user-defined options (may overwrite default ones)
 		options...,
@@ -52,7 +54,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
 	select {
 	case <-e.done:
-		return NewPromise().Finish(ErrEmitterAlreadyClosed), nil
+		return NewPromise().Finish(nil, ErrEmitterAlreadyClosed), nil
 	default:
 	}
 
