@@ -179,6 +179,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 			pp.log.Prefix(fmt.Sprintf("Join %s", join.Topic())),
 		)
 		pp.joins[join.Topic()] = table
+
 		setupErrg.Go(func() error {
 			table.SetupAndRecover(setupCtx)
 			return nil

@@ -280,13 +280,15 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		errs.Collect(fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, storedOffset, err))
 		return
 	}
-	// close the consumer
-	defer func() {
-		partConsumer.AsyncClose()
-	}()
 
 	// consume errors asynchronously
 	go p.handleConsumerErrors(ctx, errs, partConsumer)
+
+	// close the consumer
+	defer func() {
+		partConsumer.AsyncClose()
+		p.drainConsumer(partConsumer, errs)
+	}()
 
 	// load messages and stop when you're at HWM
 	loadErr := p.loadMessages(ctx, partConsumer, hwm, stopAfterCatchup)
@@ -298,7 +300,6 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 
 	if stopAfterCatchup {
 		errs.Collect(p.markRecovered(ctx))
-
 		p.stats.Recovery.RecoveryTime = time.Now()
 	}
 	return
@@ -355,6 +356,49 @@ func (p *PartitionTable) handleConsumerErrors(ctx context.Context, errs *multier
 			return
 		}
 	}
+}
+
+func (p *PartitionTable) drainConsumer(cons sarama.PartitionConsumer, errs *multierr.Errors) {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	errg, ctx := multierr.NewErrGroup(ctx)
+
+	// drain errors channel
+	errg.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				p.log.Printf("draining errors channel timed out")
+				return nil
+			case err, ok := <-cons.Errors():
+				if !ok {
+					return nil
+				}
+				errs.Collect(err)
+			}
+			return nil
+		}
+	})
+
+	// drain message channel
+	errg.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				p.log.Printf("draining messages channel timed out")
+				return nil
+			case _, ok := <-cons.Messages():
+				if !ok {
+					return nil
+				}
+			}
+			return nil
+		}
+	})
+
+	errg.Wait()
 }
 
 func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.PartitionConsumer, partitionHwm int64, stopAfterCatchup bool) (rerr error) {
@@ -485,9 +529,9 @@ func (p *PartitionTable) trackIncomingMessageStats(msg *sarama.ConsumerMessage) 
 	p.stats.Stalled = false
 }
 
-func (p *PartitionTable) trackOutgoingMessage(length int) {
-	p.stats.Output.Bytes += length
-	p.stats.Output.Count++
+func (p *PartitionTable) trackMessageWrite(length int) {
+	p.stats.Writes.Bytes += length
+	p.stats.Writes.Count++
 }
 
 func (p *PartitionTable) updateHwmStats() {

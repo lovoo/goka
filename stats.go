@@ -76,7 +76,7 @@ type TableStats struct {
 	Recovery *RecoveryStats
 
 	Input  *InputStats
-	Output *OutputStats
+	Writes *OutputStats
 }
 
 func newInputStats() *InputStats {
@@ -151,20 +151,20 @@ func newPartitionProcStats(inputs []string, outputs []string) *PartitionProcStat
 func newTableStats() *TableStats {
 	return &TableStats{
 		Input:    newInputStats(),
-		Output:   newOutputStats(),
+		Writes:   newOutputStats(),
 		Recovery: newRecoveryStats(),
 	}
 }
 
 func (ts *TableStats) reset() {
 	ts.Input = newInputStats()
-	ts.Output = newOutputStats()
+	ts.Writes = newOutputStats()
 }
 
 func (ts *TableStats) clone() *TableStats {
 	return &TableStats{
 		Input:    ts.Input.clone(),
-		Output:   ts.Output.clone(),
+		Writes:   ts.Writes.clone(),
 		Recovery: ts.Recovery.clone(),
 		Stalled:  ts.Stalled,
 	}
@@ -180,13 +180,13 @@ func (s *PartitionProcStats) clone() *PartitionProcStats {
 	return pps
 }
 
-func (s *PartitionProcStats) trackOutput(topic string, value []byte) {
+func (s *PartitionProcStats) trackOutput(topic string, valueLen int) {
 	outStats := s.Output[topic]
 	if outStats == nil {
 		log.Printf("no out stats for topic %s", topic)
 	}
 	outStats.Count++
-	outStats.Bytes += len(value)
+	outStats.Bytes += valueLen
 }
 
 // ViewStats represents the metrics of all partitions of a view.
