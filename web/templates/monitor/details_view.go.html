@@ -1,0 +1,127 @@
+{{define "content"}}
+<div class="row">
+  <div class="container">
+    <div class="col-md-12">
+    <h1>View {{.title}}</h1>
+
+    <div class="panel panel-default">
+      <div class="panel panel-heading">
+        <h3>Table statistics</h3>
+      </div>
+
+      <div class="panel-body">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th title="Partition" rowspan="2">Partition</th>
+              <th title="Status of the processor" rowspan="2">State</th>
+              <th title="Stats during recovery" colspan="3">Recovery</th>
+              <th title="Stats during run time" colspan="4">Incoming Traffic</th>
+            </tr>
+            <tr>
+              <th title="Time of passed recovery so far">Time</th>
+              <th title="Number of messages recovered per second">Rate</th>
+              <th title="Number of messages lagging behind HWM">Lag</th>
+              <th title="Number of messages updated per second">Rate</th>
+              <th title="Number of bytes updated per second">Bytes</th>
+              <th title="number of offsets, the view is lagging">Offset Lag</th>
+              <th title="time delay, the view is lagging">Time Lag</th>
+            </tr>
+          </thead>
+          <tbody id="viewStatistics">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+
+      var lastViewStats = d3.local();
+      var statusMap = {0:"stopped", 1:"initializing", 2: "recovering", 3:"preparing", 4: "running"};
+
+      var secsToNano = 1000000000;
+
+      var renderDetails = function(partitions){
+
+        if(partitions == null){
+          return;
+        }
+
+        var updateViewStatistics = function(stats){
+
+          var status = statusMap[stats.Status];
+
+          if(stats.Stalled){
+            status = "stalled";
+          }
+          var recEndTime = stats.Recovery.RecoveryTime != "" ? stats.Recovery.RecoveryTime : stats.Now;
+          var recoveryTime = (new Date(recEndTime) - new Date(stats.Recovery.StartTime)) / 1000.0;
+          var recoveryRate = 0;
+          var recoveryLag = stats.Recovery.Hwm - stats.Recovery.Offset;
+
+          var countRate = 0;
+          var byteRate = 0;
+
+
+          // let's check if we have a previous dataset and set them to their
+          // correct values
+          var lastStats = lastViewStats.get(this);
+
+          if(lastStats){
+            // diff to previous stats in seconds
+            var timeDiff = (stats.Now - lastStats.Now) / 1000.0;
+
+            if(status == "recovering"){
+              recoveryRate = (stats.Recovery.Offset - lastStats.Recovery.Offset)/timeDiff;
+            }
+
+            countRate = (stats.Input.Count - lastStats.Input.Count)/timeDiff;
+            byteRate = (stats.Input.Bytes - lastStats.Input.Bytes)/timeDiff;
+          }
+          lastViewStats.set(this, stats);
+
+          var delay = (stats.Input.Delay)/secsToNano;
+
+          return '<td>'+stats.partition.toFixed(0)+'</td>\n'+
+            '<td>'+status+'</td>\n'+
+            '<td>'+recoveryTime+'s</td>\n'+
+            '<td>'+recoveryRate.toFixed(0)+'</td>\n'+
+            '<td>'+recoveryLag+'</td>\n'+
+            '<td>'+countRate.toFixed(0)+'</td>\n'+
+            '<td>'+byteRate.toFixed(0)+'</td>\n'+
+            '<td>'+stats.Input.OffsetLag.toFixed(0)+'</td>\n'+
+            '<td>'+delay.toFixed(2)+'s</td>\n';
+        };
+
+        var groupChain = _.chain(partitions.Partitions);
+        var partitionList = groupChain
+            .map(function(v, partId){
+                return _.assign(
+                  {},
+                  v,
+                  { 'Now': new Date(),
+                    'partition' : parseInt(partId),
+                  }
+                );
+            }).values().sortBy('partition').value();
+
+        // sort all partitions
+        // update, enter and remove data
+        var d = d3.select("#viewStatistics").selectAll(".partitionbox").data(partitionList);
+        d.html(updateViewStatistics);
+        d.enter().append("tr").classed("partitionbox", true).html(updateViewStatistics);
+        d.exit().remove()
+
+      };
+
+      window.setInterval(function() {
+        d3.json("{{.base_path}}/data/view/{{.vars.idx}}", renderDetails);
+      }, 2000);
+
+      // call it initially
+      d3.json("{{.base_path}}/data/view/{{.vars.idx}}", renderDetails);
+
+    </script>
+  </div>
+</div>
+{{end}}

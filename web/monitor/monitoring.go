@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
 	"sync"
 	"time"
@@ -134,13 +133,12 @@ func (s *Server) renderData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Marshalled stats\n\n%s\n", string(marshalled))
 	w.Write(marshalled)
 }
 
 // renders the processor page
 func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/details.go.html")...)
+	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/details_processor.go.html")...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -170,7 +168,7 @@ func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
 
 // renders the processor page
 func (s *Server) renderView(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/details.go.html")...)
+	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/details_view.go.html")...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

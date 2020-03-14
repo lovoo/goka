@@ -149,8 +149,7 @@ func (ctx *cbContext) emit(topic string, key string, value []byte) {
 		}
 		ctx.emitDone(err)
 	})
-
-	ctx.partProcStats.trackOutput(topic, value)
+	ctx.partProcStats.trackOutput(topic, len(value))
 }
 
 func (ctx *cbContext) Delete() {
@@ -300,7 +299,9 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 		ctx.emitDone(err)
 	})
 
-	ctx.table.trackOutgoingMessage(len(encodedValue))
+	// for a table write we're tracking both the diskwrites and the kafka output
+	ctx.partProcStats.trackOutput(table, len(encodedValue))
+	ctx.table.trackMessageWrite(len(encodedValue))
 
 	return nil
 }

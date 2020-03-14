@@ -134,6 +134,7 @@ func runJoinProcessor(ctx context.Context, monitor *monitor.Server) error {
 				u.Clicks++
 				ctx.SetValue(u)
 			}),
+		goka.Lookup(goka.GroupTable(group), new(userCodec)),
 		goka.Persist(new(userCodec)),
 	)
 	p, err := goka.NewProcessor(brokers, g)
