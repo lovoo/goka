@@ -82,6 +82,31 @@ func Test_2InputOutput(t *testing.T) {
 	test.AssertEqual(t, value, "forwarded: some-message")
 }
 
+func Test_SetTableValue(t *testing.T) {
+	var (
+		gkt = tester.New(t)
+	)
+
+	// create a new processor, registering the tester
+	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
+		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			ctx.SetValue(ctx.Value().(int64) + msg.(int64))
+		}),
+		goka.Persist(new(codec.Int64)),
+	),
+		goka.WithTester(gkt),
+	)
+
+	gkt.SetTableValue("group-table", "value", int64(10))
+	// start it
+	go proc.Run(context.Background())
+	gkt.Consume("input", "value", 2)
+
+	// make sure it's correctly persisted in the state
+	value := gkt.TableValue("group-table", "value")
+	test.AssertEqual(t, value, int64(12))
+}
+
 // Scenario (3)
 // Instead of an output we will persist the message
 func Test_3Persist(t *testing.T) {
