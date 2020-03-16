@@ -100,7 +100,7 @@ func Test_SetTableValue(t *testing.T) {
 	gkt.SetTableValue("group-table", "value", int64(10))
 	// start it
 	go proc.Run(context.Background())
-	gkt.Consume("input", "value", 2)
+	gkt.Consume("input", "value", int64(2))
 
 	// make sure it's correctly persisted in the state
 	value := gkt.TableValue("group-table", "value")

@@ -262,16 +262,12 @@ func (tt *Tester) TableValue(table goka.Table, key string) interface{} {
 
 // SetTableValue sets a value in a processor's or view's table direcly via storage
 func (tt *Tester) SetTableValue(table goka.Table, key string, value interface{}) {
-	tt.waitStartup()
-
 	logger.Printf("setting value is not implemented yet.")
 
 	topic := string(table)
-	tt.mStorages.Lock()
-	st, exists := tt.storages[topic]
-	tt.mStorages.Unlock()
-	if !exists {
-		panic(fmt.Errorf("storage for topic %s does not exist", topic))
+	st, err := tt.getOrCreateStorage(topic)
+	if err != nil {
+		panic(fmt.Errorf("error creating storage for topic %s: %v", topic, err))
 	}
 	data, err := tt.codecForTopic(topic).Encode(value)
 	if err != nil {
@@ -283,19 +279,22 @@ func (tt *Tester) SetTableValue(table goka.Table, key string, value interface{})
 		panic(fmt.Errorf("Error setting key %s in storage %s: %v", key, table, err))
 	}
 }
+func (tt *Tester) getOrCreateStorage(table string) (storage.Storage, error) {
+	tt.mStorages.Lock()
+	defer tt.mStorages.Unlock()
+
+	st := tt.storages[table]
+	if st == nil {
+		st = storage.NewMemory()
+		tt.storages[table] = st
+	}
+	return st, nil
+}
 
 // StorageBuilder builds inmemory storages
 func (tt *Tester) StorageBuilder() storage.Builder {
 	return func(topic string, partition int32) (storage.Storage, error) {
-		tt.mStorages.Lock()
-		defer tt.mStorages.Unlock()
-
-		st := tt.storages[topic]
-		if st == nil {
-			st = storage.NewMemory()
-			tt.storages[topic] = st
-		}
-		return st, nil
+		return tt.getOrCreateStorage(topic)
 	}
 }
 
