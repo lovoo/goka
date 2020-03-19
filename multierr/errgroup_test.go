@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/facebookgo/ensure"
+	"github.com/lovoo/goka/internal/test"
 )
 
 func TestErrGroup_Go(t *testing.T) {
@@ -16,19 +16,19 @@ func TestErrGroup_Go(t *testing.T) {
 	g.Go(func() error { return nil })
 	errs := g.Wait()
 	err := errs.NilOrError()
-	ensure.Nil(t, err)
-	ensure.NotNil(t, ctx.Err())
-	ensure.StringContains(t, ctx.Err().Error(), "context canceled")
+	test.AssertNil(t, err)
+	test.AssertNotNil(t, ctx.Err())
+	test.AssertStringContains(t, ctx.Err().Error(), "context canceled")
 
 	// with one error
 	g, ctx = NewErrGroup(bctx)
 	g.Go(func() error { return fmt.Errorf("some error") })
 	errs = g.Wait()
 	err = errs.NilOrError()
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "some error")
-	ensure.NotNil(t, ctx.Err())
-	ensure.StringContains(t, ctx.Err().Error(), "context canceled")
+	test.AssertNotNil(t, err)
+	test.AssertStringContains(t, err.Error(), "some error")
+	test.AssertNotNil(t, ctx.Err())
+	test.AssertStringContains(t, ctx.Err().Error(), "context canceled")
 
 	// with one error
 	g, ctx = NewErrGroup(bctx)
@@ -36,9 +36,9 @@ func TestErrGroup_Go(t *testing.T) {
 	g.Go(func() error { return fmt.Errorf("some error2") })
 	errs = g.Wait()
 	err = errs.NilOrError()
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "some error")
-	ensure.StringContains(t, err.Error(), "some error2")
-	ensure.NotNil(t, ctx.Err())
-	ensure.StringContains(t, ctx.Err().Error(), "context canceled")
+	test.AssertNotNil(t, err)
+	test.AssertStringContains(t, err.Error(), "some error")
+	test.AssertStringContains(t, err.Error(), "some error2")
+	test.AssertNotNil(t, ctx.Err())
+	test.AssertStringContains(t, ctx.Err().Error(), "context canceled")
 }

@@ -1,10 +1,12 @@
 package monitor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/logger"
@@ -116,7 +118,9 @@ func (s *Server) renderData(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		stats = s.views[idx].Stats()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		stats = s.views[idx].Stats(ctx)
 	default:
 		w.Write([]byte("Invalid render type"))
 		http.NotFound(w, r)
@@ -128,12 +132,13 @@ func (s *Server) renderData(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(err.Error()))
 		return
 	}
+
 	w.Write(marshalled)
 }
 
 // renders the processor page
 func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/details.go.html")...)
+	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/details_processor.go.html")...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -163,7 +168,7 @@ func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
 
 // renders the processor page
 func (s *Server) renderView(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/details.go.html")...)
+	tmpl, err := templates.LoadTemplates(append(baseTemplates, "web/templates/monitor/details_view.go.html")...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

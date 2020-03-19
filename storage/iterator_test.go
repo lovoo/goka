@@ -4,19 +4,18 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/facebookgo/ensure"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
 func TestIterator(t *testing.T) {
 	tmpdir, err := ioutil.TempDir("", "goka_storage_TestIterator")
-	ensure.Nil(t, err)
+	assertNil(t, err)
 
 	db, err := leveldb.OpenFile(tmpdir, nil)
-	ensure.Nil(t, err)
+	assertNil(t, err)
 
 	st, err := New(db)
-	ensure.Nil(t, err)
+	assertNil(t, err)
 
 	kv := map[string]string{
 		"key-1": "val-1",
@@ -25,20 +24,20 @@ func TestIterator(t *testing.T) {
 	}
 
 	for k, v := range kv {
-		ensure.Nil(t, st.Set(k, []byte(v)))
+		assertNil(t, st.Set(k, []byte(v)))
 	}
 
-	ensure.Nil(t, st.SetOffset(777))
+	assertNil(t, st.SetOffset(777))
 
 	iter, err := st.Iterator()
-	ensure.Nil(t, err)
+	assertNil(t, err)
 	defer iter.Release()
 	count := 0
 
 	// accessing iterator before Next should only return nils
 	val, err := iter.Value()
-	ensure.True(t, val == nil)
-	ensure.Nil(t, err)
+	assertTrue(t, val == nil)
+	assertNil(t, err)
 
 	for iter.Next() {
 		count++
@@ -49,8 +48,8 @@ func TestIterator(t *testing.T) {
 		}
 
 		val, err := iter.Value()
-		ensure.Nil(t, err)
-		ensure.DeepEqual(t, expected, string(val))
+		assertNil(t, err)
+		assertEqual(t, expected, string(val))
 	}
-	ensure.DeepEqual(t, count, len(kv))
+	assertEqual(t, count, len(kv))
 }

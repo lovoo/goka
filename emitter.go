@@ -1,27 +1,33 @@
 package goka
 
 import (
+	"errors"
 	"fmt"
 	"sync"
+)
 
-	"github.com/lovoo/goka/kafka"
+var (
+	ErrEmitterAlreadyClosed error = errors.New("emitter already closed")
 )
 
 // Emitter emits messages into a specific Kafka topic, first encoding the message with the given codec.
 type Emitter struct {
 	codec    Codec
-	producer kafka.Producer
+	producer Producer
 
 	topic string
 
-	wg sync.WaitGroup
+	wg   sync.WaitGroup
+	done chan struct{}
 }
 
 // NewEmitter creates a new emitter using passed brokers, topic, codec and possibly options.
 func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterOption) (*Emitter, error) {
 	options = append(
 		// default options comes first
-		[]EmitterOption{},
+		[]EmitterOption{
+			WithEmitterClientID(fmt.Sprintf("goka-emitter-%s", topic)),
+		},
 
 		// user-defined options (may overwrite default ones)
 		options...,
@@ -29,10 +35,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 
 	opts := new(eoptions)
 
-	err := opts.applyOptions(topic, codec, options...)
-	if err != nil {
-		return nil, fmt.Errorf(errApplyOptions, err)
-	}
+	opts.applyOptions(topic, codec, options...)
 
 	prod, err := opts.builders.producer(brokers, opts.clientID, opts.hasher)
 	if err != nil {
@@ -43,11 +46,18 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 		codec:    codec,
 		producer: prod,
 		topic:    string(topic),
+		done:     make(chan struct{}),
 	}, nil
 }
 
 // Emit sends a message for passed key using the emitter's codec.
-func (e *Emitter) Emit(key string, msg interface{}) (*kafka.Promise, error) {
+func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
+	select {
+	case <-e.done:
+		return NewPromise().Finish(nil, ErrEmitterAlreadyClosed), nil
+	default:
+	}
+
 	var (
 		err  error
 		data []byte
@@ -69,7 +79,7 @@ func (e *Emitter) Emit(key string, msg interface{}) (*kafka.Promise, error) {
 func (e *Emitter) EmitSync(key string, msg interface{}) error {
 	var (
 		err     error
-		promise *kafka.Promise
+		promise *Promise
 	)
 	promise, err = e.Emit(key, msg)
 
@@ -88,6 +98,7 @@ func (e *Emitter) EmitSync(key string, msg interface{}) error {
 
 // Finish waits until the emitter is finished producing all pending messages.
 func (e *Emitter) Finish() error {
+	close(e.done)
 	e.wg.Wait()
 	return e.producer.Close()
 }

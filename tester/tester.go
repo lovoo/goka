@@ -1,24 +1,16 @@
 package tester
 
 import (
-	"flag"
 	"fmt"
 	"hash"
-	"log"
-	"os"
 	"reflect"
 	"sync"
 
 	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/kafka"
 	"github.com/lovoo/goka/storage"
-)
 
-// Codec decodes and encodes from and to []byte
-type Codec interface {
-	Encode(value interface{}) (data []byte, err error)
-	Decode(data []byte) (value interface{}, err error)
-}
+	"github.com/Shopify/sarama"
+)
 
 type debugLogger interface {
 	Printf(s string, args ...interface{})
@@ -29,342 +21,257 @@ type nilLogger int
 func (*nilLogger) Printf(s string, args ...interface{}) {}
 
 var (
-	debug              = flag.Bool("tester-debug", false, "show debug prints of the tester.")
 	logger debugLogger = new(nilLogger)
 )
 
-// EmitHandler abstracts a function that allows to overwrite kafkamock's Emit function to
-// simulate producer errors
-type EmitHandler func(topic string, key string, value []byte) *kafka.Promise
-
-type queuedMessage struct {
-	topic string
-	key   string
-	value []byte
-}
-
-// Tester allows interacting with a test processor
-type Tester struct {
-	t T
-
-	producerMock *producerMock
-	topicMgrMock *topicMgrMock
-	emitHandler  EmitHandler
-	storages     map[string]storage.Storage
-
-	codecs      map[string]goka.Codec
-	topicQueues map[string]*queue
-	mQueues     sync.RWMutex
-	mStorages   sync.RWMutex
-
-	queuedMessages []*queuedMessage
-}
-
-func (km *Tester) queueForTopic(topic string) *queue {
-	km.mQueues.RLock()
-	defer km.mQueues.RUnlock()
-	q, exists := km.topicQueues[topic]
-	if !exists {
-		panic(fmt.Errorf("No queue for topic %s", topic))
-	}
-	return q
-}
-
-// NewQueueTracker creates a message tracker that starts tracking
-// the messages from the end of the current queues
-func (km *Tester) NewQueueTracker(topic string) *QueueTracker {
-	km.waitStartup()
-
-	mt := newQueueTracker(km, km.t, topic)
-	km.mQueues.RLock()
-	defer km.mQueues.RUnlock()
-	mt.Seek(mt.Hwm())
-	return mt
-}
-
-func (km *Tester) getOrCreateQueue(topic string) *queue {
-	km.mQueues.RLock()
-	_, exists := km.topicQueues[topic]
-	km.mQueues.RUnlock()
-	if !exists {
-		km.mQueues.Lock()
-		if _, exists = km.topicQueues[topic]; !exists {
-			km.topicQueues[topic] = newQueue(topic)
-		}
-		km.mQueues.Unlock()
-	}
-
-	km.mQueues.RLock()
-	defer km.mQueues.RUnlock()
-	return km.topicQueues[topic]
-}
-
 // T abstracts the interface we assume from the test case.
-// Will most likely be *testing.T
+// Will most likely be T
 type T interface {
 	Errorf(format string, args ...interface{})
 	Fatalf(format string, args ...interface{})
 	Fatal(a ...interface{})
 }
 
-// New returns a new Tester.
-// It should be passed as goka.WithTester to goka.NewProcessor.
+// Tester mimicks kafka for complex highlevel testing of single or multiple processors/views/emitters
+type Tester struct {
+	t        T
+	producer *producerMock
+	tmgr     goka.TopicManager
+
+	mClients sync.RWMutex
+	clients  map[string]*client
+
+	codecs      map[string]goka.Codec
+	mQueues     sync.Mutex
+	topicQueues map[string]*queue
+
+	mStorages sync.Mutex
+	storages  map[string]storage.Storage
+}
+
+// New creates a new tester instance
 func New(t T) *Tester {
 
-	// activate the logger if debug is turned on
-	if *debug {
-		logger = log.New(os.Stderr, "<Tester> ", 0)
-	}
+	tt := &Tester{
+		t: t,
 
-	tester := &Tester{
-		t:           t,
+		clients: make(map[string]*client),
+
 		codecs:      make(map[string]goka.Codec),
 		topicQueues: make(map[string]*queue),
 		storages:    make(map[string]storage.Storage),
 	}
-	tester.producerMock = newProducerMock(tester.handleEmit)
-	tester.topicMgrMock = newTopicMgrMock(tester)
-	return tester
+	tt.tmgr = NewMockTopicManager(tt, 1, 1)
+	tt.producer = newProducerMock(tt.handleEmit)
+
+	return tt
 }
 
-func (km *Tester) registerCodec(topic string, codec goka.Codec) {
-	if existingCodec, exists := km.codecs[topic]; exists {
-		if reflect.TypeOf(codec) != reflect.TypeOf(existingCodec) {
-			panic(fmt.Errorf("There are different codecs for the same topic. This is messed up (%#v, %#v)", codec, existingCodec))
+func (tt *Tester) nextClient() *client {
+	tt.mClients.Lock()
+	defer tt.mClients.Unlock()
+	c := &client{
+		clientID: fmt.Sprintf("client-%d", len(tt.clients)),
+		consumer: newConsumerMock(tt),
+	}
+	tt.clients[c.clientID] = c
+	return c
+}
+
+// ConsumerGroupBuilder builds a builder. The builder returns the consumergroup for passed client-ID
+// if it was expected by registering the processor to the Tester
+func (tt *Tester) ConsumerGroupBuilder() goka.ConsumerGroupBuilder {
+	return func(brokers []string, group, clientID string) (sarama.ConsumerGroup, error) {
+		tt.mClients.RLock()
+		defer tt.mClients.RUnlock()
+		client, exists := tt.clients[clientID]
+		if !exists {
+			return nil, fmt.Errorf("cannot create consumergroup because no client registered with ID: %s", clientID)
 		}
-	}
-	km.codecs[topic] = codec
-}
 
-func (km *Tester) codecForTopic(topic string) goka.Codec {
-	codec, exists := km.codecs[topic]
-	if !exists {
-		panic(fmt.Errorf("No codec for topic %s registered.", topic))
-	}
-	return codec
-}
+		if client.consumerGroup == nil {
+			return nil, fmt.Errorf("Did not expect a group graph")
+		}
 
-// RegisterGroupGraph is called by a processor when the tester is passed via
-// `WithTester(..)`.
-// This will setup the tester with the neccessary consumer structure
-func (km *Tester) RegisterGroupGraph(gg *goka.GroupGraph) {
-	if gg.GroupTable() != nil {
-		km.getOrCreateQueue(gg.GroupTable().Topic()).expectSimpleConsumer()
-		km.registerCodec(gg.GroupTable().Topic(), gg.GroupTable().Codec())
-	}
-
-	for _, input := range gg.InputStreams() {
-		km.getOrCreateQueue(input.Topic()).expectGroupConsumer()
-		km.registerCodec(input.Topic(), input.Codec())
-	}
-
-	for _, output := range gg.OutputStreams() {
-		km.registerCodec(output.Topic(), output.Codec())
-		km.getOrCreateQueue(output.Topic())
-	}
-	for _, join := range gg.JointTables() {
-		km.getOrCreateQueue(join.Topic()).expectSimpleConsumer()
-		km.registerCodec(join.Topic(), join.Codec())
-	}
-
-	if loop := gg.LoopStream(); loop != nil {
-		km.getOrCreateQueue(loop.Topic()).expectGroupConsumer()
-		km.registerCodec(loop.Topic(), loop.Codec())
-	}
-
-	for _, lookup := range gg.LookupTables() {
-		km.getOrCreateQueue(lookup.Topic()).expectSimpleConsumer()
-		km.registerCodec(lookup.Topic(), lookup.Codec())
-	}
-
-}
-
-// RegisterView registers a view to be working with the tester.
-func (km *Tester) RegisterView(table goka.Table, c goka.Codec) {
-	km.getOrCreateQueue(string(table)).expectSimpleConsumer()
-	km.registerCodec(string(table), c)
-}
-
-// RegisterEmitter registers an emitter to be working with the tester.
-func (km *Tester) RegisterEmitter(topic goka.Stream, codec goka.Codec) {
-	km.registerCodec(string(topic), codec)
-	km.getOrCreateQueue(string(topic))
-}
-
-// TopicManagerBuilder returns the topicmanager builder when this tester is used as an option
-// to a processor
-func (km *Tester) TopicManagerBuilder() kafka.TopicManagerBuilder {
-	return func(brokers []string) (kafka.TopicManager, error) {
-		return km.topicMgrMock, nil
+		return client.consumerGroup, nil
 	}
 }
 
-// ConsumerBuilder returns the consumer builder when this tester is used as an option
-// to a processor
-func (km *Tester) ConsumerBuilder() kafka.ConsumerBuilder {
-	return func(b []string, group, clientID string) (kafka.Consumer, error) {
-		return newConsumer(km), nil
-	}
-}
+// ConsumerBuilder creates a consumerbuilder that builds consumers for passed clientID
+func (tt *Tester) ConsumerBuilder() goka.SaramaConsumerBuilder {
+	return func(brokers []string, clientID string) (sarama.Consumer, error) {
+		tt.mClients.RLock()
+		defer tt.mClients.RUnlock()
 
-// ProducerBuilder returns the producer builder when this tester is used as an option
-// to a processor
-func (km *Tester) ProducerBuilder() kafka.ProducerBuilder {
-	return func(b []string, cid string, hasher func() hash.Hash32) (kafka.Producer, error) {
-		return km.producerMock, nil
+		client, exists := tt.clients[clientID]
+		if !exists {
+			return nil, fmt.Errorf("cannot create sarama consumer because no client registered with ID: %s", clientID)
+		}
+
+		return client.consumer, nil
 	}
 }
 
 // EmitterProducerBuilder creates a producer builder used for Emitters.
 // Emitters need to flush when emitting messages.
-func (km *Tester) EmitterProducerBuilder() kafka.ProducerBuilder {
-	builder := km.ProducerBuilder()
-	return func(b []string, cid string, hasher func() hash.Hash32) (kafka.Producer, error) {
+func (tt *Tester) EmitterProducerBuilder() goka.ProducerBuilder {
+	builder := tt.ProducerBuilder()
+	return func(b []string, cid string, hasher func() hash.Hash32) (goka.Producer, error) {
 		prod, err := builder(b, cid, hasher)
 		return &flushingProducer{
-			tester:   km,
+			tester:   tt,
 			producer: prod,
 		}, err
 	}
 }
 
-// StorageBuilder returns the storage builder when this tester is used as an option
-// to a processor
-func (km *Tester) StorageBuilder() storage.Builder {
-	return func(topic string, partition int32) (storage.Storage, error) {
-		km.mStorages.RLock()
-		if st, exists := km.storages[topic]; exists {
-			km.mStorages.RUnlock()
-			return st, nil
-		}
-		km.mStorages.RUnlock()
-		st := storage.NewMemory()
-		km.mStorages.Lock()
-		km.storages[topic] = st
-		km.mStorages.Unlock()
-		return st, nil
-	}
-}
-
-func (km *Tester) waitForConsumers() {
-
-	logger.Printf("waiting for consumers")
-	for {
-		if len(km.queuedMessages) == 0 {
-			break
-		}
-		next := km.queuedMessages[0]
-		km.queuedMessages = km.queuedMessages[1:]
-
-		km.getOrCreateQueue(next.topic).push(next.key, next.value)
-
-		km.mQueues.RLock()
-		for {
-			var messagesConsumed int
-			for _, queue := range km.topicQueues {
-				messagesConsumed += queue.waitForConsumers()
-			}
-			if messagesConsumed == 0 {
-				break
-			}
-		}
-		km.mQueues.RUnlock()
-	}
-
-	logger.Printf("waiting for consumers done")
-}
-
-func (km *Tester) waitStartup() {
-	logger.Printf("Waiting for startup")
-	km.mQueues.RLock()
-	defer km.mQueues.RUnlock()
-	for _, queue := range km.topicQueues {
-		queue.waitConsumersInit()
-	}
-	logger.Printf("Waiting for startup done")
-}
-
-// Consume a message using the topic's configured codec
-func (km *Tester) Consume(topic string, key string, msg interface{}) {
-	km.waitStartup()
-
-	// if the user wants to send a nil for some reason,
-	// just let her. Goka should handle it accordingly :)
-	value := reflect.ValueOf(msg)
-	if msg == nil || (value.Kind() == reflect.Ptr && value.IsNil()) {
-		km.pushMessage(topic, key, nil)
-	} else {
-		data, err := km.codecForTopic(topic).Encode(msg)
-		if err != nil {
-			panic(fmt.Errorf("Error encoding value %v: %v", msg, err))
-		}
-		km.pushMessage(topic, key, data)
-	}
-
-	km.waitForConsumers()
-}
-
-// ConsumeData pushes a marshalled byte slice to a topic and a key
-func (km *Tester) ConsumeData(topic string, key string, data []byte) {
-	km.waitStartup()
-	km.pushMessage(topic, key, data)
-	km.waitForConsumers()
-}
-
-func (km *Tester) pushMessage(topic string, key string, data []byte) {
-	km.queuedMessages = append(km.queuedMessages, &queuedMessage{topic: topic, key: key, value: data})
-}
-
 // handleEmit handles an Emit-call on the producerMock.
 // This takes care of queueing calls
 // to handled topics or putting the emitted messages in the emitted-messages-list
-func (km *Tester) handleEmit(topic string, key string, value []byte) *kafka.Promise {
-	promise := kafka.NewPromise()
-	km.pushMessage(topic, key, value)
-	return promise.Finish(nil)
+func (tt *Tester) handleEmit(topic string, key string, value []byte) *goka.Promise {
+	promise := goka.NewPromise()
+	offset := tt.pushMessage(topic, key, value)
+	return promise.Finish(&sarama.ProducerMessage{Offset: offset}, nil)
 }
 
-// TableValue attempts to get a value from any table that is used in the kafka mock.
-func (km *Tester) TableValue(table goka.Table, key string) interface{} {
-	km.waitStartup()
+func (tt *Tester) pushMessage(topic string, key string, data []byte) int64 {
+	return tt.getOrCreateQueue(topic).push(key, data)
+}
+
+func (tt *Tester) ProducerBuilder() goka.ProducerBuilder {
+	return func(b []string, cid string, hasher func() hash.Hash32) (goka.Producer, error) {
+		return tt.producer, nil
+	}
+}
+
+func (tt *Tester) TopicManagerBuilder() goka.TopicManagerBuilder {
+	return func(brokers []string) (goka.TopicManager, error) {
+		return tt.tmgr, nil
+	}
+}
+
+// RegisterGroupGraph is called by a processor when the tester is passed via
+// `WithTester(..)`.
+// This will setup the tester with the neccessary consumer structure
+func (tt *Tester) RegisterGroupGraph(gg *goka.GroupGraph) string {
+
+	client := tt.nextClient()
+	// we need to expect a consumer group so we're creating one in the client
+	if gg.GroupTable() != nil || len(gg.InputStreams()) > 0 {
+		client.consumerGroup = newConsumerGroup(tt.t, tt)
+	}
+
+	// register codecs
+	if gg.GroupTable() != nil {
+		tt.registerCodec(gg.GroupTable().Topic(), gg.GroupTable().Codec())
+	}
+
+	for _, input := range gg.InputStreams() {
+		tt.registerCodec(input.Topic(), input.Codec())
+	}
+
+	for _, output := range gg.OutputStreams() {
+		tt.registerCodec(output.Topic(), output.Codec())
+	}
+
+	for _, join := range gg.JointTables() {
+		tt.registerCodec(join.Topic(), join.Codec())
+	}
+
+	if loop := gg.LoopStream(); loop != nil {
+		tt.registerCodec(loop.Topic(), loop.Codec())
+	}
+
+	for _, lookup := range gg.LookupTables() {
+		tt.registerCodec(lookup.Topic(), lookup.Codec())
+	}
+
+	return client.clientID
+}
+
+// RegisterView registers a new view to the tester
+func (tt *Tester) RegisterView(table goka.Table, c goka.Codec) string {
+	tt.registerCodec(string(table), c)
+	client := tt.nextClient()
+	client.requireConsumer(string(table))
+	return client.clientID
+}
+
+// RegisterEmitter registers an emitter to be working with the tester.
+func (tt *Tester) RegisterEmitter(topic goka.Stream, codec goka.Codec) {
+	tt.registerCodec(string(topic), codec)
+}
+
+func (tt *Tester) getOrCreateQueue(topic string) *queue {
+	tt.mQueues.Lock()
+	defer tt.mQueues.Unlock()
+	queue, exists := tt.topicQueues[topic]
+	if !exists {
+		queue = newQueue(topic)
+		tt.topicQueues[topic] = queue
+	}
+	return queue
+}
+
+func (tt *Tester) codecForTopic(topic string) goka.Codec {
+	codec, exists := tt.codecs[topic]
+	if !exists {
+		panic(fmt.Errorf("no codec for topic %s registered", topic))
+	}
+	return codec
+}
+
+func (tt *Tester) registerCodec(topic string, codec goka.Codec) {
+	// create a queue, we're going to need it anyway
+	tt.getOrCreateQueue(topic)
+
+	if existingCodec, exists := tt.codecs[topic]; exists {
+		if reflect.TypeOf(codec) != reflect.TypeOf(existingCodec) {
+			panic(fmt.Errorf("There are different codecs for the same topic. This is messed up (%#v, %#v)", codec, existingCodec))
+		}
+	}
+	tt.codecs[topic] = codec
+}
+
+// TableValue attempts to get a value from any table that is used in the tester
+func (tt *Tester) TableValue(table goka.Table, key string) interface{} {
+	tt.waitStartup()
 
 	topic := string(table)
-	km.mStorages.RLock()
-	st, exists := km.storages[topic]
-	km.mStorages.RUnlock()
+	tt.mStorages.Lock()
+	st, exists := tt.storages[topic]
+	tt.mStorages.Unlock()
 	if !exists {
 		panic(fmt.Errorf("topic %s does not exist", topic))
 	}
 	item, err := st.Get(key)
 	if err != nil {
-		km.t.Fatalf("Error getting table value from storage (table=%s, key=%s): %v", table, key, err)
+		tt.t.Fatalf("Error getting table value from storage (table=%s, key=%s): %v", table, key, err)
 	}
 	if item == nil {
 		return nil
 	}
-	value, err := km.codecForTopic(topic).Decode(item)
+	value, err := tt.codecForTopic(topic).Decode(item)
 	if err != nil {
-		km.t.Fatalf("error decoding value from storage (table=%s, key=%s, value=%v): %v", table, key, item, err)
+		tt.t.Fatalf("error decoding value from storage (table=%s, key=%s, value=%v): %v", table, key, item, err)
 	}
 	return value
 }
 
 // SetTableValue sets a value in a processor's or view's table direcly via storage
-func (km *Tester) SetTableValue(table goka.Table, key string, value interface{}) {
-	km.waitStartup()
-
-	logger.Printf("setting value is not implemented yet.")
+// This method blocks until all expected clients are running, so make sure
+// to call it *after* you have started all processors/views, otherwise it'll deadlock.
+func (tt *Tester) SetTableValue(table goka.Table, key string, value interface{}) {
+	tt.waitStartup()
 
 	topic := string(table)
-	km.mStorages.RLock()
-	st, exists := km.storages[topic]
-	km.mStorages.RUnlock()
-	if !exists {
-		panic(fmt.Errorf("storage for topic %s does not exist", topic))
-	}
-	data, err := km.codecForTopic(topic).Encode(value)
+	st, err := tt.getOrCreateStorage(topic)
 	if err != nil {
-		km.t.Fatalf("error decoding value from storage (table=%s, key=%s, value=%v): %v", table, key, value, err)
+		panic(fmt.Errorf("error creating storage for topic %s: %v", topic, err))
+	}
+	data, err := tt.codecForTopic(topic).Encode(value)
+	if err != nil {
+		tt.t.Fatalf("error decoding value from storage (table=%s, key=%s, value=%v): %v", table, key, value, err)
 	}
 
 	err = st.Set(key, data)
@@ -372,101 +279,87 @@ func (km *Tester) SetTableValue(table goka.Table, key string, value interface{})
 		panic(fmt.Errorf("Error setting key %s in storage %s: %v", key, table, err))
 	}
 }
+func (tt *Tester) getOrCreateStorage(table string) (storage.Storage, error) {
+	tt.mStorages.Lock()
+	defer tt.mStorages.Unlock()
 
-// ReplaceEmitHandler replaces the emitter.
-func (km *Tester) ReplaceEmitHandler(emitter EmitHandler) {
-	km.producerMock.emitter = emitter
+	st := tt.storages[table]
+	if st == nil {
+		st = storage.NewMemory()
+		tt.storages[table] = st
+	}
+	return st, nil
 }
 
-// ClearValues resets all table values
-func (km *Tester) ClearValues() {
-	km.mStorages.Lock()
-	for topic, st := range km.storages {
+// StorageBuilder builds inmemory storages
+func (tt *Tester) StorageBuilder() storage.Builder {
+	return func(topic string, partition int32) (storage.Storage, error) {
+		return tt.getOrCreateStorage(topic)
+	}
+}
+
+// ClearValues clears all table values in all storages
+func (tt *Tester) ClearValues() {
+	tt.mStorages.Lock()
+	defer tt.mStorages.Unlock()
+	for topic, st := range tt.storages {
 		logger.Printf("clearing all values from storage for topic %s", topic)
 		it, _ := st.Iterator()
 		for it.Next() {
 			st.Delete(string(it.Key()))
 		}
 	}
-	km.mStorages.Unlock()
+
 }
 
-type topicMgrMock struct {
-	tester *Tester
+// NewQueueTracker creates a new queue tracker
+func (tt *Tester) NewQueueTracker(topic string) *QueueTracker {
+	return newQueueTracker(tt, tt.t, topic)
 }
 
-// EnsureTableExists checks that a table (log-compacted topic) exists, or create one if possible
-func (tm *topicMgrMock) EnsureTableExists(topic string, npar int) error {
-	return nil
-}
+func (tt *Tester) waitStartup() {
+	tt.mClients.RLock()
+	defer tt.mClients.RUnlock()
 
-// EnsureStreamExists checks that a stream topic exists, or create one if possible
-func (tm *topicMgrMock) EnsureStreamExists(topic string, npar int) error {
-	return nil
-}
-
-// EnsureTopicExists checks that a stream exists, or create one if possible
-func (tm *topicMgrMock) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
-	return nil
-}
-
-// Partitions returns the number of partitions of a topic, that are assigned to the running
-// instance, i.e. it doesn't represent all partitions of a topic.
-func (tm *topicMgrMock) Partitions(topic string) ([]int32, error) {
-	return []int32{0}, nil
-}
-
-// Close closes the topic manager.
-// No action required in the mock.
-func (tm *topicMgrMock) Close() error {
-	return nil
-}
-
-func newTopicMgrMock(tester *Tester) *topicMgrMock {
-	return &topicMgrMock{
-		tester: tester,
+	for _, client := range tt.clients {
+		client.waitStartup()
 	}
 }
 
-type producerMock struct {
-	emitter EmitHandler
-}
+func (tt *Tester) waitForClients() {
+	logger.Printf("waiting for consumers")
 
-func newProducerMock(emitter EmitHandler) *producerMock {
-	return &producerMock{
-		emitter: emitter,
+	tt.mClients.RLock()
+	defer tt.mClients.RUnlock()
+	for {
+		var totalCatchup int
+		for _, client := range tt.clients {
+			totalCatchup += client.catchup()
+		}
+
+		if totalCatchup == 0 {
+			break
+		}
 	}
+
+	logger.Printf("waiting for consumers done")
 }
 
-// Emit emits messages to arbitrary topics.
-// The mock simply forwards the emit to the KafkaMock which takes care of queueing calls
-// to handled topics or putting the emitted messages in the emitted-messages-list
-func (p *producerMock) Emit(topic string, key string, value []byte) *kafka.Promise {
-	return p.emitter(topic, key, value)
-}
+// Consume pushes a message for topic/key to be consumed by all processors/views
+// whoever is using it being registered to the Tester
+func (tt *Tester) Consume(topic string, key string, msg interface{}) {
+	tt.waitStartup()
 
-// Close closes the producer mock
-// No action required in the mock.
-func (p *producerMock) Close() error {
-	logger.Printf("Closing producer mock")
-	return nil
-}
+	value := reflect.ValueOf(msg)
+	if msg == nil || (value.Kind() == reflect.Ptr && value.IsNil()) {
+		tt.pushMessage(topic, key, nil)
+	} else {
+		data, err := tt.codecForTopic(topic).Encode(msg)
+		if err != nil {
+			panic(fmt.Errorf("Error encoding value %v: %v", msg, err))
+		}
+		tt.pushMessage(topic, key, data)
+	}
 
-// flushingProducer wraps the producer and
-// waits for all consumers after the Emit.
-type flushingProducer struct {
-	tester   *Tester
-	producer kafka.Producer
-}
-
-// Emit using the underlying producer
-func (e *flushingProducer) Emit(topic string, key string, value []byte) *kafka.Promise {
-	prom := e.producer.Emit(topic, key, value)
-	e.tester.waitForConsumers()
-	return prom
-}
-
-// Close using the underlying producer
-func (e *flushingProducer) Close() error {
-	return e.producer.Close()
+	tt.waitForClients()
 }
