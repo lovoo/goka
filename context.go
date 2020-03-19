@@ -319,7 +319,7 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 
 	// for a table write we're tracking both the diskwrites and the kafka output
 	ctx.partProcStats.trackOutput(table, len(encodedValue))
-	ctx.table.trackMessageWrite(len(encodedValue))
+	ctx.table.TrackMessageWrite(ctx.ctx, len(encodedValue))
 
 	return nil
 }

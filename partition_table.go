@@ -35,9 +35,11 @@ type PartitionTable struct {
 	tmgr           TopicManager
 	updateCallback UpdateCallback
 
-	stats         *TableStats
-	requestStats  chan bool
-	responseStats chan *TableStats
+	stats           *TableStats
+	cancelStatsLoop context.CancelFunc
+	requestStats    chan bool
+	responseStats   chan *TableStats
+	updateStats     chan func()
 
 	offsetM sync.Mutex
 	// current offset
@@ -56,7 +58,10 @@ func newPartitionTable(topic string,
 	updateCallback UpdateCallback,
 	builder storage.Builder,
 	log logger.Logger) *PartitionTable {
-	return &PartitionTable{
+
+	statsLoopCtx, cancel := context.WithCancel(context.Background())
+
+	pt := &PartitionTable{
 		partition: partition,
 		state: NewSignal(
 			State(PartitionStopped),
@@ -74,10 +79,16 @@ func newPartitionTable(topic string,
 		stallPeriod:    defaultStallPeriod,
 		stalledTimeout: defaultStalledTimeout,
 
-		stats:         newTableStats(),
-		requestStats:  make(chan bool),
-		responseStats: make(chan *TableStats, 1),
+		stats:           newTableStats(),
+		requestStats:    make(chan bool),
+		responseStats:   make(chan *TableStats, 1),
+		updateStats:     make(chan func(), 10),
+		cancelStatsLoop: cancel,
 	}
+
+	go pt.runStatsLoop(statsLoopCtx)
+
+	return pt
 }
 
 // SetupAndRecover sets up the partition storage and recovers to HWM
@@ -259,9 +270,11 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	// initialize recovery stats here, in case we don't do the recovery because
 	// we're up to date already
 	if stopAfterCatchup {
-		p.stats.Recovery.StartTime = time.Now()
-		p.stats.Recovery.Hwm = hwm
-		p.stats.Recovery.Offset = loadOffset
+		p.enqueueStatsUpdate(ctx, func() {
+			p.stats.Recovery.StartTime = time.Now()
+			p.stats.Recovery.Hwm = hwm
+			p.stats.Recovery.Offset = loadOffset
+		})
 	}
 
 	// we are exactly where we're supposed to be
@@ -309,7 +322,9 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 
 	if stopAfterCatchup {
 		errs.Collect(p.markRecovered(ctx))
-		p.stats.Recovery.RecoveryTime = time.Now()
+
+		now := time.Now()
+		p.enqueueStatsUpdate(ctx, func() { p.stats.Recovery.RecoveryTime = now })
 	}
 	return
 }
@@ -323,7 +338,8 @@ func (p *PartitionTable) markRecovered(ctx context.Context) error {
 	defer ticker.Stop()
 
 	p.state.SetState(State(PartitionPreparing))
-	p.stats.Recovery.RecoveryTime = time.Now()
+	now := time.Now()
+	p.enqueueStatsUpdate(ctx, func() { p.stats.Recovery.RecoveryTime = now })
 
 	go func() {
 		defer close(done)
@@ -424,9 +440,6 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 	stallTicker := time.NewTicker(p.stallPeriod)
 	defer stallTicker.Stop()
 
-	updateHwmStatsTicker := time.NewTicker(statsHwmUpdateInterval)
-	defer updateHwmStatsTicker.Stop()
-
 	lastMessage := time.Now()
 
 	for {
@@ -456,10 +469,10 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 			}
 
 			if stopAfterCatchup {
-				p.stats.Recovery.Offset = msg.Offset
+				p.enqueueStatsUpdate(ctx, func() { p.stats.Recovery.Offset = msg.Offset })
 			}
 
-			p.trackIncomingMessageStats(msg)
+			p.enqueueStatsUpdate(ctx, func() { p.trackIncomingMessageStats(msg) })
 
 			if stopAfterCatchup && msg.Offset >= partitionHwm-1 {
 				return
@@ -469,14 +482,8 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 			// only set to stalled, if the last message was earlier
 			// than the stalled timeout
 			if now.Sub(lastMessage) > p.stalledTimeout {
-				p.stats.Stalled = true
+				p.enqueueStatsUpdate(ctx, func() { p.stats.Stalled = true })
 			}
-
-		case <-p.requestStats:
-			p.handleStatsRequest(ctx)
-
-		case <-updateHwmStatsTicker.C:
-			p.updateHwmStats()
 
 		case <-ctx.Done():
 			return
@@ -484,11 +491,25 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 	}
 }
 
-func (p *PartitionTable) handleStatsRequests(ctx context.Context) {
+func (p *PartitionTable) enqueueStatsUpdate(ctx context.Context, updater func()) {
+	select {
+	case p.updateStats <- updater:
+	case <-ctx.Done():
+	}
+}
+
+func (p *PartitionTable) runStatsLoop(ctx context.Context) {
+
+	updateHwmStatsTicker := time.NewTicker(statsHwmUpdateInterval)
+	defer updateHwmStatsTicker.Stop()
 	for {
 		select {
 		case <-p.requestStats:
 			p.handleStatsRequest(ctx)
+		case update := <-p.updateStats:
+			update()
+		case <-updateHwmStatsTicker.C:
+			p.updateHwmStats()
 		case <-ctx.Done():
 			return
 		}
@@ -538,9 +559,12 @@ func (p *PartitionTable) trackIncomingMessageStats(msg *sarama.ConsumerMessage) 
 	p.stats.Stalled = false
 }
 
-func (p *PartitionTable) trackMessageWrite(length int) {
-	p.stats.Writes.Bytes += length
-	p.stats.Writes.Count++
+// TrackMessageWrite updates the write stats to passed length
+func (p *PartitionTable) TrackMessageWrite(ctx context.Context, length int) {
+	p.enqueueStatsUpdate(ctx, func() {
+		p.stats.Writes.Bytes += length
+		p.stats.Writes.Count++
+	})
 }
 
 func (p *PartitionTable) updateHwmStats() {

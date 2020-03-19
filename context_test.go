@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -277,7 +278,8 @@ func TestContext_Set(t *testing.T) {
 			st: &storageProxy{
 				Storage: st,
 			},
-			stats: newTableStats(),
+			stats:       newTableStats(),
+			updateStats: make(chan func(), 10),
 		}
 	)
 	st.EXPECT().Set(key, []byte(value)).Return(nil)
@@ -289,6 +291,7 @@ func TestContext_Set(t *testing.T) {
 		partProcStats: newPartitionProcStats(nil, []string{string(GroupTable(group))}),
 		msg:           &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
 		table:         pt,
+		ctx:           context.Background(),
 	}
 
 	ctx.emitter = newEmitter(nil, nil)
@@ -323,7 +326,8 @@ func TestContext_GetSetStateful(t *testing.T) {
 			st: &storageProxy{
 				Storage: st,
 			},
-			stats: newTableStats(),
+			stats:       newTableStats(),
+			updateStats: make(chan func(), 10),
 		}
 	)
 
@@ -345,6 +349,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 			test.AssertEqual(t, string(v), value)
 			return NewPromise().Finish(nil, nil)
 		},
+		ctx: context.Background(),
 	}
 
 	val := ctx.Value()

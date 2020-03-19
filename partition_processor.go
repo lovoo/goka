@@ -44,10 +44,12 @@ type PartitionProcessor struct {
 
 	consumer sarama.Consumer
 	tmgr     TopicManager
-	stats    *PartitionProcStats
 
-	requestStats  chan bool
-	responseStats chan *PartitionProcStats
+	stats           *PartitionProcStats
+	requestStats    chan bool
+	responseStats   chan *PartitionProcStats
+	updateStats     chan func()
+	cancelStatsLoop context.CancelFunc
 
 	session  sarama.ConsumerGroupSession
 	producer Producer
@@ -96,25 +98,31 @@ func newPartitionProcessor(partition int32,
 
 	log := logger.Prefix(fmt.Sprintf("PartitionProcessor (%d)", partition))
 
+	statsLoopCtx, cancel := context.WithCancel(context.Background())
+
 	partProc := &PartitionProcessor{
-		log:           log,
-		opts:          opts,
-		partition:     partition,
-		state:         NewSignal(PPStateIdle, PPStateRecovering, PPStateRunning, PPStateStopping).SetState(PPStateIdle),
-		callbacks:     callbacks,
-		lookups:       lookupTables,
-		consumer:      consumer,
-		producer:      producer,
-		tmgr:          tmgr,
-		joins:         make(map[string]*PartitionTable),
-		input:         make(chan *sarama.ConsumerMessage, opts.partitionChannelSize),
-		inputTopics:   topicList,
-		graph:         graph,
-		stats:         newPartitionProcStats(topicList, outputList),
-		requestStats:  make(chan bool),
-		responseStats: make(chan *PartitionProcStats, 1),
-		session:       session,
+		log:             log,
+		opts:            opts,
+		partition:       partition,
+		state:           NewSignal(PPStateIdle, PPStateRecovering, PPStateRunning, PPStateStopping).SetState(PPStateIdle),
+		callbacks:       callbacks,
+		lookups:         lookupTables,
+		consumer:        consumer,
+		producer:        producer,
+		tmgr:            tmgr,
+		joins:           make(map[string]*PartitionTable),
+		input:           make(chan *sarama.ConsumerMessage, opts.partitionChannelSize),
+		inputTopics:     topicList,
+		graph:           graph,
+		stats:           newPartitionProcStats(topicList, outputList),
+		requestStats:    make(chan bool),
+		responseStats:   make(chan *PartitionProcStats, 1),
+		updateStats:     make(chan func(), 10),
+		cancelStatsLoop: cancel,
+		session:         session,
 	}
+
+	go partProc.runStatsLoop(statsLoopCtx)
 
 	if graph.GroupTable() != nil {
 		partProc.table = newPartitionTable(graph.GroupTable().Topic(),
@@ -197,15 +205,6 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	default:
 	}
 
-	// as the table is now recovered, we have to start handling stats requests
-	// separately during running
-	if pp.table != nil {
-		pp.runnerGroup.Go(func() error {
-			pp.table.handleStatsRequests(runnerCtx)
-			return nil
-		})
-	}
-
 	for _, join := range pp.joins {
 		join := join
 		pp.runnerGroup.Go(func() error {
@@ -238,6 +237,9 @@ func (pp *PartitionProcessor) Stop() error {
 	if pp.runnerGroup != nil {
 		errs.Collect(pp.runnerGroup.Wait().NilOrError())
 	}
+
+	// stop the stats updating/serving loop
+	pp.cancelStatsLoop()
 
 	errg, _ := multierr.NewErrGroup(context.Background())
 	for _, join := range pp.joins {
@@ -313,9 +315,6 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 		}
 	}()
 
-	updateHwmStatsTicker := time.NewTicker(statsHwmUpdateInterval)
-	defer updateHwmStatsTicker.Stop()
-
 	for {
 		select {
 		case ev, isOpen := <-pp.input:
@@ -328,18 +327,7 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 				return fmt.Errorf("error processing message: from %s %v", ev.Value, err)
 			}
 
-			pp.updateStats(ev)
-
-		case <-pp.requestStats:
-			stats := pp.collectStats(ctx)
-			select {
-			case pp.responseStats <- stats:
-			case <-ctx.Done():
-				pp.log.Debugf("exiting, context is cancelled")
-				return
-			}
-		case <-updateHwmStatsTicker.C:
-			pp.updateHwmStats()
+			pp.enqueueStatsUpdate(ctx, func() { pp.updateStatsWithMessage(ev) })
 
 		case <-ctx.Done():
 			pp.log.Debugf("exiting, context is cancelled")
@@ -352,7 +340,38 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 	}
 }
 
-func (pp *PartitionProcessor) updateStats(ev *sarama.ConsumerMessage) {
+func (pp *PartitionProcessor) enqueueStatsUpdate(ctx context.Context, updater func()) {
+	select {
+	case pp.updateStats <- updater:
+	case <-ctx.Done():
+	}
+}
+
+func (pp *PartitionProcessor) runStatsLoop(ctx context.Context) {
+
+	updateHwmStatsTicker := time.NewTicker(statsHwmUpdateInterval)
+	defer updateHwmStatsTicker.Stop()
+	for {
+		select {
+		case <-pp.requestStats:
+			stats := pp.collectStats(ctx)
+			select {
+			case pp.responseStats <- stats:
+			case <-ctx.Done():
+				pp.log.Debugf("exiting, context is cancelled")
+				return
+			}
+		case update := <-pp.updateStats:
+			update()
+		case <-updateHwmStatsTicker.C:
+			pp.updateHwmStats()
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (pp *PartitionProcessor) updateStatsWithMessage(ev *sarama.ConsumerMessage) {
 	ip := pp.stats.Input[ev.Topic]
 	ip.Bytes += len(ev.Value)
 	ip.LastOffset = ev.Offset

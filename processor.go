@@ -410,7 +410,7 @@ func (g *Processor) assignmentFromSession(session sarama.ConsumerGroupSession) A
 func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	g.state.SetState(ProcStateSetup)
 	defer g.state.SetState(ProcStateRunning)
-	g.log.Printf("setup generation %d", session.GenerationID())
+	g.log.Printf("setup generation %d, claims=%#v", session.GenerationID(), session.Claims())
 	defer g.log.Printf("setup generation %d ... done", session.GenerationID())
 
 	assignment := g.assignmentFromSession(session)
