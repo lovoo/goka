@@ -158,6 +158,13 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 		rerr = fmt.Errorf("Error recovering partitions for view %s: %v", v.Topic(), err)
 		return
 	}
+
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+
 	v.state.SetState(ViewStateRunning)
 
 	catchupErrg, catchupCtx := multierr.NewErrGroup(ctx)

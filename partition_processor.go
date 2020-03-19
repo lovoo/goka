@@ -181,8 +181,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 		pp.joins[join.Topic()] = table
 
 		setupErrg.Go(func() error {
-			table.SetupAndRecover(setupCtx)
-			return nil
+			return table.SetupAndRecover(setupCtx)
 		})
 	}
 
@@ -190,6 +189,12 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	err := setupErrg.Wait().NilOrError()
 	if err != nil {
 		return fmt.Errorf("Setup failed. Cannot start processor for partition %d: %v", pp.partition, err)
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
 	}
 
 	// as the table is now recovered, we have to start handling stats requests
@@ -233,9 +238,21 @@ func (pp *PartitionProcessor) Stop() error {
 	if pp.runnerGroup != nil {
 		errs.Collect(pp.runnerGroup.Wait().NilOrError())
 	}
-	if pp.table != nil {
-		errs.Collect(pp.table.Close())
+
+	errg, _ := multierr.NewErrGroup(context.Background())
+	for _, join := range pp.joins {
+		join := join
+		errg.Go(func() error {
+			return join.Close()
+		})
 	}
+
+	if pp.table != nil {
+		errg.Go(func() error {
+			return pp.table.Close()
+		})
+	}
+	errs.Collect(errg.Wait().NilOrError())
 
 	return errs.NilOrError()
 }
