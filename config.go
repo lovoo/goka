@@ -36,6 +36,7 @@ func DefaultConfig() *sarama.Config {
 	// this configures the initial offset for streams. Tables are always
 	// consumed from OffsetOldest.
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
+	config.Consumer.Group.Rebalance.Strategy = CopartitioningStrategy
 	// producer configuration
 	config.Producer.RequiredAcks = sarama.WaitForLocal
 	config.Producer.Compression = sarama.CompressionSnappy

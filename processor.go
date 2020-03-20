@@ -391,19 +391,39 @@ func (g *Processor) Recovered() bool {
 	return g.state.IsState(ProcStateRunning)
 }
 
-func (g *Processor) assignmentFromSession(session sarama.ConsumerGroupSession) Assignment {
-	assignment := Assignment{}
+func (g *Processor) assignmentFromSession(session sarama.ConsumerGroupSession) (Assignment, error) {
+	var (
+		assignment Assignment
+	)
 
 	// get the partitions this processor is assigned to.
-	// Since we're copartitioned, we can stop after the first
+	// We use that loop to verify copartitioning and fail otherwise
 	for _, claim := range session.Claims() {
-		for _, part := range claim {
-			assignment[part] = sarama.OffsetNewest
+
+		// for first claim, generate the assignment
+		if assignment == nil {
+			assignment = Assignment{}
+			for _, part := range claim {
+				assignment[part] = sarama.OffsetNewest
+			}
+		} else {
+			// for all others, verify the assignment is the same
+
+			// first check length
+			if len(claim) != len(assignment) {
+				return nil, fmt.Errorf("session claims are not copartitioned: %#v", session.Claims())
+			}
+
+			// then check the partitions are exactly the same
+			for _, part := range claim {
+				if _, exists := assignment[part]; !exists {
+					return nil, fmt.Errorf("session claims are not copartitioned: %#v", session.Claims())
+				}
+			}
 		}
-		break
 	}
 
-	return assignment
+	return assignment, nil
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim.
@@ -413,7 +433,10 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	g.log.Printf("setup generation %d, claims=%#v", session.GenerationID(), session.Claims())
 	defer g.log.Printf("setup generation %d ... done", session.GenerationID())
 
-	assignment := g.assignmentFromSession(session)
+	assignment, err := g.assignmentFromSession(session)
+	if err != nil {
+		return fmt.Errorf("Error verifying assignment from session: %v", err)
+	}
 
 	if g.rebalanceCallback != nil {
 		g.rebalanceCallback(assignment)

@@ -27,9 +27,9 @@ func AssertNotNil(t Fataler, actual interface{}) {
 	}
 }
 
-func AssertTrue(t Fataler, value bool) {
+func AssertTrue(t Fataler, value bool, fields ...interface{}) {
 	if !value {
-		t.Fatalf("Expected value to be true, but was false in %s", string(debug.Stack()))
+		t.Fatalf("Expected value to be true, but was false in %s: %v", string(debug.Stack()), fields)
 	}
 }
 func AssertFalse(t Fataler, value bool) {
