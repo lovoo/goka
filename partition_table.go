@@ -142,7 +142,7 @@ func (p *PartitionTable) setup(ctx context.Context) error {
 	}
 
 	p.st = storage
-	return nil
+	return p.st.Open()
 }
 
 // Close closes the partition table
