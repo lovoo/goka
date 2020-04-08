@@ -59,6 +59,7 @@ type PartitionProcStats struct {
 	Output map[string]*OutputStats
 }
 
+// RecoveryStats groups statistics during recovery
 type RecoveryStats struct {
 	StartTime    time.Time
 	RecoveryTime time.Time
@@ -95,10 +96,10 @@ func (os *OutputStats) clone() *OutputStats {
 	return &(*os)
 }
 
-type InputStatsMap map[string]*InputStats
-type OutputStatsMap map[string]*OutputStats
+type inputStatsMap map[string]*InputStats
+type outputStatsMap map[string]*OutputStats
 
-func (isp InputStatsMap) clone() map[string]*InputStats {
+func (isp inputStatsMap) clone() map[string]*InputStats {
 	var c = map[string]*InputStats{}
 	if isp == nil {
 		return c
@@ -109,7 +110,7 @@ func (isp InputStatsMap) clone() map[string]*InputStats {
 	return c
 }
 
-func (osp OutputStatsMap) clone() map[string]*OutputStats {
+func (osp outputStatsMap) clone() map[string]*OutputStats {
 	var c = map[string]*OutputStats{}
 	if osp == nil {
 		return c
@@ -174,8 +175,8 @@ func (s *PartitionProcStats) clone() *PartitionProcStats {
 	pps := newPartitionProcStats(nil, nil)
 	pps.Now = time.Now()
 	pps.Joined = make(map[string]*TableStats)
-	pps.Input = InputStatsMap(s.Input).clone()
-	pps.Output = OutputStatsMap(s.Output).clone()
+	pps.Input = inputStatsMap(s.Input).clone()
+	pps.Output = outputStatsMap(s.Output).clone()
 
 	return pps
 }

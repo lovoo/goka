@@ -60,6 +60,8 @@ func TestPT_createStorage(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
+
+		bm.mst.EXPECT().Open().Return(nil)
 		sp, err := pt.createStorage(ctx)
 		test.AssertNil(t, err)
 		test.AssertEqual(t, sp.Storage, equalSP.Storage)
@@ -104,7 +106,7 @@ func TestPT_createStorage(t *testing.T) {
 
 func TestPT_setup(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
-		pt, _, ctrl := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
@@ -115,6 +117,7 @@ func TestPT_setup(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
+		bm.mst.EXPECT().Open().Return(nil)
 		err := pt.setup(ctx)
 		test.AssertNil(t, err)
 	})
@@ -147,7 +150,7 @@ func TestPT_close(t *testing.T) {
 		)
 		defer ctrl.Finish()
 		bm.mst.EXPECT().Close().AnyTimes()
-
+		bm.mst.EXPECT().Open().Return(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
@@ -185,6 +188,7 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 			nil,
 		)
 		defer ctrl.Finish()
+
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
@@ -312,6 +316,7 @@ func TestPT_load(t *testing.T) {
 			nil,
 		)
 		defer ctrl.Finish()
+		bm.mst.EXPECT().Open().Return(nil)
 		bm.mst.EXPECT().GetOffset(offsetNotStored).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
@@ -340,6 +345,7 @@ func TestPT_load(t *testing.T) {
 			nil,
 		)
 		defer ctrl.Finish()
+		bm.mst.EXPECT().Open().Return(nil)
 		bm.mst.EXPECT().GetOffset(offsetNotStored).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
@@ -376,10 +382,11 @@ func TestPT_load(t *testing.T) {
 		)
 		defer ctrl.Finish()
 		pt.consumer = consumer
+		bm.mst.EXPECT().Open().Return(nil)
 		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
-		partConsumer := consumer.ExpectConsumePartition(topic, partition, AnyOffset)
+		partConsumer := consumer.ExpectConsumePartition(topic, partition, anyOffset)
 		partConsumer.ExpectMessagesDrainedOnClose()
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
@@ -413,12 +420,12 @@ func TestPT_load(t *testing.T) {
 func TestPT_loadMessages(t *testing.T) {
 	t.Run("consume_till_hwm", func(t *testing.T) {
 		var (
-			localOffset      int64             = sarama.OffsetOldest
-			partitionHwm     int64             = 1
-			stopAfterCatchup bool              = true
-			topic            string            = "some-topic"
-			partition        int32             = 0
-			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			localOffset      int64 = sarama.OffsetOldest
+			partitionHwm     int64 = 1
+			stopAfterCatchup       = true
+			topic                  = "some-topic"
+			partition        int32
+			consumer         = defaultSaramaAutoConsumerMock(t)
 			recKey           string
 			recVal           []byte
 			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
@@ -426,8 +433,8 @@ func TestPT_loadMessages(t *testing.T) {
 				recVal = value
 				return nil
 			}
-			key   string = "some-key"
-			value []byte = []byte("some-vale")
+			key   = "some-key"
+			value = []byte("some-vale")
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -437,6 +444,7 @@ func TestPT_loadMessages(t *testing.T) {
 			updateCB,
 		)
 		defer ctrl.Finish()
+
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		partConsumer.YieldMessage(&sarama.ConsumerMessage{
 			Key:       []byte(key),
@@ -447,6 +455,7 @@ func TestPT_loadMessages(t *testing.T) {
 		})
 		partConsumer.ExpectMessagesDrainedOnClose()
 		bm.mst.EXPECT().SetOffset(int64(0)).Return(nil)
+		bm.mst.EXPECT().Open().Return(nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -459,13 +468,13 @@ func TestPT_loadMessages(t *testing.T) {
 	})
 	t.Run("consume_till_hwm_more_msgs", func(t *testing.T) {
 		var (
-			localOffset      int64             = 0
-			partitionHwm     int64             = 2
-			stopAfterCatchup bool              = true
-			topic            string            = "some-topic"
-			partition        int32             = 0
-			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			updateCB         UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
+			localOffset      int64
+			partitionHwm     int64 = 2
+			stopAfterCatchup       = true
+			topic                  = "some-topic"
+			partition        int32
+			consumer                        = defaultSaramaAutoConsumerMock(t)
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				return nil
 			}
 		)
@@ -491,6 +500,7 @@ func TestPT_loadMessages(t *testing.T) {
 		partConsumer.ExpectMessagesDrainedOnClose()
 		bm.mst.EXPECT().SetOffset(int64(0)).Return(nil)
 		bm.mst.EXPECT().SetOffset(int64(1)).Return(nil)
+		bm.mst.EXPECT().Open().Return(nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -501,14 +511,14 @@ func TestPT_loadMessages(t *testing.T) {
 	})
 	t.Run("consume_till_cancel", func(t *testing.T) {
 		var (
-			localOffset      int64             = 0
-			partitionHwm     int64             = 2
-			stopAfterCatchup bool              = false
-			topic            string            = "some-topic"
-			partition        int32             = 0
-			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			count            int32             = 0
-			updateCB         UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
+			localOffset      int64
+			partitionHwm     int64 = 2
+			stopAfterCatchup       = false
+			topic                  = "some-topic"
+			partition        int32
+			consumer         = defaultSaramaAutoConsumerMock(t)
+			count            int32
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
 			}
@@ -524,6 +534,7 @@ func TestPT_loadMessages(t *testing.T) {
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
+		bm.mst.EXPECT().Open().Return(nil)
 		err := pt.setup(ctx)
 		test.AssertNil(t, err)
 		go func(ctx context.Context) {
@@ -549,13 +560,13 @@ func TestPT_loadMessages(t *testing.T) {
 	})
 	t.Run("close_msg_chan", func(t *testing.T) {
 		var (
-			localOffset      int64             = 0
-			partitionHwm     int64             = 2
-			stopAfterCatchup bool              = false
-			topic            string            = "some-topic"
-			partition        int32             = 0
-			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			updateCB         UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
+			localOffset      int64
+			partitionHwm     int64 = 2
+			stopAfterCatchup       = false
+			topic                  = "some-topic"
+			partition        int32
+			consumer                        = defaultSaramaAutoConsumerMock(t)
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				return nil
 			}
 		)
@@ -569,6 +580,7 @@ func TestPT_loadMessages(t *testing.T) {
 		defer ctrl.Finish()
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		bm.mst.EXPECT().Open().Return(nil)
 		err := pt.setup(ctx)
 		test.AssertNil(t, err)
 		go func() {
@@ -603,14 +615,14 @@ func TestPT_loadMessages(t *testing.T) {
 	})
 	t.Run("stalled", func(t *testing.T) {
 		var (
-			localOffset      int64             = 0
-			partitionHwm     int64             = 2
-			stopAfterCatchup bool              = false
-			topic            string            = "some-topic"
-			partition        int32             = 0
-			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
+			localOffset      int64
+			partitionHwm     int64 = 2
+			stopAfterCatchup       = false
+			topic                  = "some-topic"
+			partition        int32
+			consumer         = defaultSaramaAutoConsumerMock(t)
 		)
-		pt, _, ctrl := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
@@ -621,6 +633,7 @@ func TestPT_loadMessages(t *testing.T) {
 		pt.stalledTimeout = time.Duration(0)
 		pt.stallPeriod = time.Nanosecond
 
+		bm.mst.EXPECT().Open().Return(nil)
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		err := pt.setup(ctx)
@@ -643,18 +656,18 @@ func TestPT_loadMessages(t *testing.T) {
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
-			localOffset      int64             = 0
-			partitionHwm     int64             = 2
-			stopAfterCatchup bool              = true
-			topic            string            = "some-topic"
-			partition        int32             = 0
-			consumer         *MockAutoConsumer = defaultSaramaAutoConsumerMock(t)
-			retErr           error             = fmt.Errorf("update error")
-			updateCB         UpdateCallback    = func(s storage.Storage, partition int32, key string, value []byte) error {
+			localOffset      int64
+			partitionHwm     int64 = 2
+			stopAfterCatchup       = true
+			topic                  = "some-topic"
+			partition        int32
+			consumer                        = defaultSaramaAutoConsumerMock(t)
+			retErr           error          = fmt.Errorf("update error")
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				return retErr
 			}
 		)
-		pt, _, ctrl := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			topic,
 			partition,
@@ -662,6 +675,7 @@ func TestPT_loadMessages(t *testing.T) {
 			updateCB,
 		)
 		defer ctrl.Finish()
+		bm.mst.EXPECT().Open().Return(nil)
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		partConsumer.YieldMessage(&sarama.ConsumerMessage{
 			Topic:     topic,
@@ -682,11 +696,11 @@ func TestPT_loadMessages(t *testing.T) {
 func TestPT_storeEvent(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		var (
-			localOffset int64  = 0
-			partition   int32  = 0
-			topic       string = "some-topic"
-			key         string = "some-key"
-			value       []byte = []byte("some-vale")
+			localOffset int64
+			partition   int32
+			topic       = "some-topic"
+			key         = "some-key"
+			value       = []byte("some-vale")
 			actualKey   string
 			actualValue []byte
 			updateCB    UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
@@ -703,6 +717,7 @@ func TestPT_storeEvent(t *testing.T) {
 			updateCB,
 		)
 		defer ctrl.Finish()
+		bm.mst.EXPECT().Open().Return(nil)
 		bm.mst.EXPECT().SetOffset(localOffset).Return(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -715,11 +730,11 @@ func TestPT_storeEvent(t *testing.T) {
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
-			localOffset int64          = 0
-			partition   int32          = 0
-			topic       string         = "some-topic"
-			key         string         = "some-key"
-			value       []byte         = []byte("some-vale")
+			localOffset int64
+			partition   int32
+			topic                      = "some-topic"
+			key                        = "some-key"
+			value                      = []byte("some-vale")
 			updateCB    UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				return nil
 			}
@@ -733,6 +748,7 @@ func TestPT_storeEvent(t *testing.T) {
 			updateCB,
 		)
 		defer ctrl.Finish()
+		bm.mst.EXPECT().Open().Return(nil)
 		bm.mst.EXPECT().SetOffset(localOffset).Return(retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -746,8 +762,8 @@ func TestPT_storeEvent(t *testing.T) {
 func TestPT_Close(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		var (
-			partition int32  = 0
-			topic     string = "some-topic"
+			partition int32
+			topic     = "some-topic"
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -758,6 +774,7 @@ func TestPT_Close(t *testing.T) {
 		)
 		defer ctrl.Finish()
 		bm.mst.EXPECT().Close().Return(nil)
+		bm.mst.EXPECT().Open().Return(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
@@ -767,8 +784,8 @@ func TestPT_Close(t *testing.T) {
 	})
 	t.Run("succeed2", func(t *testing.T) {
 		var (
-			partition int32  = 0
-			topic     string = "some-topic"
+			partition int32
+			topic     = "some-topic"
 		)
 		pt, _, ctrl := defaultPT(
 			t,
@@ -786,8 +803,8 @@ func TestPT_Close(t *testing.T) {
 func TestPT_markRecovered(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		var (
-			partition int32  = 0
-			topic     string = "some-topic"
+			partition int32
+			topic     = "some-topic"
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -797,6 +814,7 @@ func TestPT_markRecovered(t *testing.T) {
 			nil,
 		)
 		defer ctrl.Finish()
+		bm.mst.EXPECT().Open().Return(nil)
 		bm.mst.EXPECT().MarkRecovered().Return(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -809,9 +827,9 @@ func TestPT_markRecovered(t *testing.T) {
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
-			partition int32  = 0
-			topic     string = "some-topic"
-			retErr    error  = fmt.Errorf("store error")
+			partition int32
+			topic           = "some-topic"
+			retErr    error = fmt.Errorf("store error")
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -821,6 +839,7 @@ func TestPT_markRecovered(t *testing.T) {
 			nil,
 		)
 		defer ctrl.Finish()
+		bm.mst.EXPECT().Open().Return(nil)
 		bm.mst.EXPECT().MarkRecovered().Return(retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -835,7 +854,7 @@ func TestPT_markRecovered(t *testing.T) {
 func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		var (
-			oldest    int64 = 0
+			oldest    int64
 			newest    int64 = 5
 			local           = oldest
 			consumer        = defaultSaramaAutoConsumerMock(t)
@@ -857,6 +876,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 		logger.Debug(true, false)
 		defer ctrl.Finish()
 		pt.consumer = consumer
+		bm.mst.EXPECT().Open().Return(nil)
 		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(local, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil)
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
@@ -893,6 +913,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 		)
 		defer ctrl.Finish()
 		pt.consumer = consumer
+		bm.mst.EXPECT().Open().Return(nil)
 		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(int64(0), retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -905,13 +926,12 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 func TestPT_SetupAndCatchupForever(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		var (
-			oldest int64 = 0
-			newest int64 = 10
-			// local     int64          = oldest
-			consumer                 = defaultSaramaAutoConsumerMock(t)
-			topic                    = "some-topic"
-			partition int32          = 0
-			count     int64          = 0
+			oldest    int64
+			newest    int64 = 10
+			consumer        = defaultSaramaAutoConsumerMock(t)
+			topic           = "some-topic"
+			partition int32
+			count     int64
 			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
 				count++
 				return nil
@@ -929,7 +949,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 		pt.consumer = consumer
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil).AnyTimes()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil).AnyTimes()
-		partConsumer := consumer.ExpectConsumePartition(topic, partition, AnyOffset)
+		partConsumer := consumer.ExpectConsumePartition(topic, partition, anyOffset)
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 		}
@@ -957,10 +977,10 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
-			consumer        = defaultSaramaAutoConsumerMock(t)
-			topic           = "some-topic"
-			partition int32 = 0
-			retErr          = fmt.Errorf("offset-error")
+			consumer  = defaultSaramaAutoConsumerMock(t)
+			topic     = "some-topic"
+			partition int32
+			retErr    = fmt.Errorf("offset-error")
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -971,6 +991,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 		)
 		defer ctrl.Finish()
 		pt.consumer = consumer
+		bm.mst.EXPECT().Open().Return(nil)
 		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(int64(0), retErr)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()

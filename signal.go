@@ -69,6 +69,8 @@ func (s *Signal) State() State {
 	return s.state
 }
 
+// WaitForStateMin returns a channel that will be closed, when the signal enters passed
+// state or higher (states are ints, so we're just comparing ints here)
 func (s *Signal) WaitForStateMin(state State) chan struct{} {
 	s.m.Lock()
 	defer s.m.Unlock()

@@ -15,10 +15,15 @@ import (
 )
 
 const (
+	// ProcStateIdle indicates an idling partition processor (not started yet)
 	ProcStateIdle State = iota
+	// ProcStateStarting indicates a starting partition processor, i.e. before rebalance
 	ProcStateStarting
+	// ProcStateSetup indicates a partition processor during setup of a rebalance round
 	ProcStateSetup
+	// ProcStateRunning indicates a running partition processor
 	ProcStateRunning
+	// ProcStateStopping indicates a stopping partition processor
 	ProcStateStopping
 )
 
@@ -127,6 +132,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	return processor, nil
 }
 
+// Graph returns the group graph of the processor.
 func (g *Processor) Graph() *GroupGraph {
 	return g.graph
 }
@@ -208,6 +214,8 @@ func (g *Processor) hash(key string) (int32, error) {
 	return hash % int32(g.partitionCount), nil
 }
 
+// Run starts the processor using passed context.
+// The processor stops in case of errors or if the context is cancelled
 func (g *Processor) Run(ctx context.Context) (rerr error) {
 	g.log.Debugf("starting")
 	defer g.log.Debugf("stopped")

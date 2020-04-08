@@ -7,6 +7,7 @@ import (
 )
 
 var (
+	// ErrEmitterAlreadyClosed is returned when Emit is called after the emitter has been finished.
 	ErrEmitterAlreadyClosed error = errors.New("emitter already closed")
 )
 

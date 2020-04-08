@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	AnyOffset int64 = -1000
+	// TODO: what is this used for?
+	anyOffset int64 = -1000
 )
 
 var (
@@ -32,7 +33,7 @@ type MockAutoConsumer struct {
 	metadata           map[string][]int32
 }
 
-// NewAutoMockAutoConsumer returns a new mock Consumer instance. The t argument should
+// NewMockAutoConsumer returns a new mock Consumer instance. The t argument should
 // be the *testing.T instance of your test method. An error will be written to it if
 // an expectation is violated. The config argument can be set to nil.
 func NewMockAutoConsumer(t *testing.T, config *sarama.Config) *MockAutoConsumer {
@@ -69,7 +70,7 @@ func (c *MockAutoConsumer) ConsumePartition(topic string, partition int32, offse
 		return nil, sarama.ConfigurationError("The topic/partition is already being consumed")
 	}
 
-	if pc.offset != AnyOffset && pc.offset != offset {
+	if pc.offset != anyOffset && pc.offset != offset {
 		c.t.Errorf("Unexpected offset when calling ConsumePartition for %s/%d. Expected %d, got %d.", topic, partition, pc.offset, offset)
 	}
 
@@ -110,6 +111,7 @@ func (c *MockAutoConsumer) Partitions(topic string) ([]int32, error) {
 	return c.metadata[topic], nil
 }
 
+// HighWaterMarks returns a map of high watermarks for each topic/partition
 func (c *MockAutoConsumer) HighWaterMarks() map[string]map[int32]int64 {
 	c.l.Lock()
 	defer c.l.Unlock()
@@ -278,6 +280,7 @@ func (pc *MockAutoPartitionConsumer) Messages() <-chan *sarama.ConsumerMessage {
 	return pc.messages
 }
 
+// HighWaterMarkOffset returns the highwatermark for the partition
 func (pc *MockAutoPartitionConsumer) HighWaterMarkOffset() int64 {
 	return atomic.LoadInt64(&pc.highWaterMarkOffset)
 }
@@ -340,14 +343,14 @@ type MockConsumerGroupSession struct {
 	consumerGroup *MockConsumerGroup
 }
 
-// ConsumerGroupClaim mocks the claim...
+// MockConsumerGroupClaim mocks the consumergroupclaim
 type MockConsumerGroupClaim struct {
 	topic     string
 	partition int32
 	msgs      chan *sarama.ConsumerMessage
 }
 
-// NewConsumerGroupClaim creates a new mock
+// NewMockConsumerGroupClaim creates a new mocksconsumergroupclaim
 func NewMockConsumerGroupClaim(topic string, partition int32) *MockConsumerGroupClaim {
 	return &MockConsumerGroupClaim{
 		topic:     topic,
@@ -475,6 +478,7 @@ func NewMockConsumerGroup(t *testing.T) *MockConsumerGroup {
 	}
 }
 
+// FailOnConsume marks the consumer to fail on consume
 func (cg *MockConsumerGroup) FailOnConsume(err error) {
 	cg.failOnConsume = err
 }
