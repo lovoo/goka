@@ -91,7 +91,9 @@ type cbContext struct {
 	// lookup tables
 	views map[string]*View
 
-	partProcStats *PartitionProcStats
+	// helper function that is provided by the partition processor to allow
+	// tracking statistics for the output topic
+	trackOutputStats func(ctx context.Context, topic string, size int)
 
 	msg      *sarama.ConsumerMessage
 	done     bool
@@ -116,6 +118,10 @@ func (ctx *cbContext) Emit(topic Stream, key string, value interface{}) {
 	if tableName(ctx.graph.Group()) == string(topic) {
 		ctx.Fail(errors.New("cannot emit to table topic (use SetValue instead)"))
 	}
+	if !ctx.graph.isOutputTopic(topic) {
+		ctx.Fail(fmt.Errorf("topic %s is not configured for output. Did you specify goka.Output(..) when defining the processor?", topic))
+	}
+
 	c := ctx.graph.codec(string(topic))
 	if c == nil {
 		ctx.Fail(fmt.Errorf("no codec for topic %s", topic))
@@ -156,7 +162,7 @@ func (ctx *cbContext) emit(topic string, key string, value []byte) {
 		}
 		ctx.emitDone(err)
 	})
-	ctx.partProcStats.trackOutput(topic, len(value))
+	ctx.trackOutputStats(ctx.ctx, topic, len(value))
 }
 
 func (ctx *cbContext) Delete() {
@@ -318,7 +324,7 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}) error {
 	})
 
 	// for a table write we're tracking both the diskwrites and the kafka output
-	ctx.partProcStats.trackOutput(table, len(encodedValue))
+	ctx.trackOutputStats(ctx.ctx, table, len(encodedValue))
 	ctx.table.TrackMessageWrite(ctx.ctx, len(encodedValue))
 
 	return nil

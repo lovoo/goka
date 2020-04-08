@@ -43,6 +43,8 @@ type GroupGraph struct {
 	codecs    map[string]Codec
 	callbacks map[string]ProcessCallback
 
+	outputStreamTopics map[Stream]struct{}
+
 	joinCheck map[string]bool
 }
 
@@ -89,6 +91,12 @@ func (gg *GroupGraph) OutputStreams() Edges {
 	return gg.outputStreams
 }
 
+// returns whether the passed topic is a valid group output topic
+func (gg *GroupGraph) isOutputTopic(topic Stream) bool {
+	_, ok := gg.outputStreamTopics[topic]
+	return ok
+}
+
 // inputs returns all input topics (tables and streams)
 func (gg *GroupGraph) inputs() Edges {
 	return append(append(gg.inputStreams, gg.inputTables...), gg.crossTables...)
@@ -115,9 +123,10 @@ func (gg *GroupGraph) joint(topic string) bool {
 // edges.
 func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 	gg := GroupGraph{group: string(group),
-		codecs:    make(map[string]Codec),
-		callbacks: make(map[string]ProcessCallback),
-		joinCheck: make(map[string]bool),
+		codecs:             make(map[string]Codec),
+		callbacks:          make(map[string]ProcessCallback),
+		joinCheck:          make(map[string]bool),
+		outputStreamTopics: make(map[Stream]struct{}),
 	}
 
 	for _, e := range edges {
@@ -143,6 +152,7 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 		case *outputStream:
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.outputStreams = append(gg.outputStreams, e)
+			gg.outputStreamTopics[Stream(e.Topic())] = struct{}{}
 		case *inputTable:
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.inputTables = append(gg.inputTables, e)
@@ -156,6 +166,7 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 			gg.groupTable = append(gg.groupTable, e)
 		}
 	}
+
 	return &gg
 }
 

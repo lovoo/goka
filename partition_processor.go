@@ -379,6 +379,7 @@ func (pp *PartitionProcessor) runStatsLoop(ctx context.Context) {
 	}
 }
 
+// updateStatsWithMessage updates the stats with a received message
 func (pp *PartitionProcessor) updateStatsWithMessage(ev *sarama.ConsumerMessage) {
 	ip := pp.stats.Input[ev.Topic]
 	ip.Bytes += len(ev.Value)
@@ -389,6 +390,8 @@ func (pp *PartitionProcessor) updateStatsWithMessage(ev *sarama.ConsumerMessage)
 	ip.Count++
 }
 
+// updateHwmStats updates the offset lag for all input topics based on the
+// highwatermarks obtained by the consumer.
 func (pp *PartitionProcessor) updateHwmStats() {
 	hwms := pp.consumer.HighWaterMarks()
 	for input, inputStats := range pp.stats.Input {
@@ -455,21 +458,27 @@ func (pp *PartitionProcessor) fetchStats(ctx context.Context) *PartitionProcStat
 	}
 }
 
+func (pp *PartitionProcessor) enqueueTrackOutputStats(ctx context.Context, topic string, size int) {
+	pp.enqueueStatsUpdate(ctx, func() {
+		pp.stats.trackOutput(topic, size)
+	})
+}
+
 func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitGroup, msg *sarama.ConsumerMessage, syncFailer func(err error), asyncFailer func(err error)) error {
 	msgContext := &cbContext{
 		ctx:   ctx,
 		graph: pp.graph,
 
-		partProcStats: pp.stats,
-		pviews:        pp.joins,
-		views:         pp.lookups,
-		commit:        func() { pp.session.MarkMessage(msg, "") },
-		wg:            wg,
-		msg:           msg,
-		syncFailer:    syncFailer,
-		asyncFailer:   asyncFailer,
-		emitter:       pp.producer.Emit,
-		table:         pp.table,
+		trackOutputStats: pp.enqueueTrackOutputStats,
+		pviews:           pp.joins,
+		views:            pp.lookups,
+		commit:           func() { pp.session.MarkMessage(msg, "") },
+		wg:               wg,
+		msg:              msg,
+		syncFailer:       syncFailer,
+		asyncFailer:      asyncFailer,
+		emitter:          pp.producer.Emit,
+		table:            pp.table,
 	}
 
 	var (
