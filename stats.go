@@ -184,6 +184,7 @@ func (s *PartitionProcStats) trackOutput(topic string, valueLen int) {
 	outStats := s.Output[topic]
 	if outStats == nil {
 		log.Printf("no out stats for topic %s", topic)
+		return
 	}
 	outStats.Count++
 	outStats.Bytes += valueLen
