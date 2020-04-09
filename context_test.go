@@ -326,6 +326,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 			st: &storageProxy{
 				Storage: st,
 			},
+			state:       newPartitionTableState().SetState(State(PartitionRunning)),
 			stats:       newTableStats(),
 			updateStats: make(chan func(), 10),
 		}
@@ -535,6 +536,7 @@ func TestContext_Lookup(t *testing.T) {
 						st: &storageProxy{
 							Storage: st,
 						},
+						state: newPartitionTableState().SetState(State(PartitionRunning)),
 						stats: newTableStats(),
 					},
 				},

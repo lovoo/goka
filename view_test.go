@@ -132,12 +132,13 @@ func TestView_find(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key   string = "some-key"
-			proxy        = &storageProxy{}
+			key   = "some-key"
+			proxy = &storageProxy{}
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
-				st: proxy,
+				st:    proxy,
+				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
 		}
 		view.opts.hasher = func() hash.Hash32 {
@@ -147,7 +148,7 @@ func TestView_find(t *testing.T) {
 
 		st, err := view.find(key)
 		test.AssertNil(t, err)
-		test.AssertEqual(t, st, proxy)
+		test.AssertEqual(t, st, view.partitions[0])
 	})
 	t.Run("fail", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -180,12 +181,13 @@ func TestView_Get(t *testing.T) {
 					return nil
 				},
 			}
-			key   string = "some-key"
-			value int64  = 3
+			key         = "some-key"
+			value int64 = 3
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
-				st: proxy,
+				st:    proxy,
+				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
 		}
 		view.opts.tableCodec = &codec.Int64{}
@@ -208,11 +210,12 @@ func TestView_Get(t *testing.T) {
 					return nil
 				},
 			}
-			key string = "some-key"
+			key = "some-key"
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
-				st: proxy,
+				st:    proxy,
+				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
 		}
 		view.opts.tableCodec = &codec.Int64{}
@@ -235,16 +238,16 @@ func TestView_Get(t *testing.T) {
 					return nil
 				},
 			}
-			key    string = "some-key"
-			errRet error  = fmt.Errorf("get failed")
+			key          = "some-key"
+			errRet error = fmt.Errorf("get failed")
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
-				st: proxy,
+				st:    proxy,
+				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
 		}
 		view.opts.tableCodec = &codec.Int64{}
-
 		bm.mst.EXPECT().Get(key).Return(nil, errRet)
 
 		_, err := view.Get(key)
@@ -261,12 +264,13 @@ func TestView_Has(t *testing.T) {
 			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
-			key string = "some-key"
-			has bool   = true
+			key = "some-key"
+			has = true
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
-				st: proxy,
+				st:    proxy,
+				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
 		}
 		view.opts.hasher = func() hash.Hash32 {
@@ -288,12 +292,13 @@ func TestView_Has(t *testing.T) {
 			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
-			key string = "some-key"
-			has bool   = false
+			key = "some-key"
+			has = false
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
-				st: proxy,
+				st:    proxy,
+				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
 		}
 		view.opts.hasher = func() hash.Hash32 {
@@ -312,8 +317,8 @@ func TestView_Has(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key string = "some-key"
-			has bool   = false
+			key = "some-key"
+			has = false
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{},
@@ -336,8 +341,8 @@ func TestView_Evict(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key   string = "some-key"
-			proxy        = &storageProxy{
+			key   = "some-key"
+			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
 		)
@@ -587,7 +592,7 @@ func TestView_Run(t *testing.T) {
 
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil).AnyTimes()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil).AnyTimes()
-		partConsumer := consumer.ExpectConsumePartition(viewTestTopic, partition, AnyOffset)
+		partConsumer := consumer.ExpectConsumePartition(viewTestTopic, partition, anyOffset)
 		for i := 0; i < 10; i++ {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 		}

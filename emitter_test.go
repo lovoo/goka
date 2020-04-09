@@ -63,7 +63,7 @@ func TestEmitter_Emit(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key    string = "some-key"
+			key           = "some-key"
 			intVal int64  = 1312
 			data   []byte = []byte(strconv.FormatInt(intVal, 10))
 		)
@@ -78,7 +78,7 @@ func TestEmitter_Emit(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key    string = "some-key"
+			key           = "some-key"
 			intVal int64  = 1312
 			data   []byte = []byte(strconv.FormatInt(intVal, 10))
 			retErr error  = errors.New("some-error")
@@ -94,8 +94,8 @@ func TestEmitter_Emit(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key    string = "some-key"
-			intVal int64  = 1312
+			key          = "some-key"
+			intVal int64 = 1312
 		)
 
 		bm.producer.EXPECT().Close().Return(nil)
@@ -109,8 +109,8 @@ func TestEmitter_Emit(t *testing.T) {
 		emitter, _, _ := createEmitter(t)
 
 		var (
-			key    string = "some-key"
-			intVal string = "1312"
+			key    = "some-key"
+			intVal = "1312"
 		)
 
 		_, err := emitter.Emit(key, intVal)
@@ -124,7 +124,7 @@ func TestEmitter_EmitSync(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key    string = "some-key"
+			key           = "some-key"
 			intVal int64  = 1312
 			data   []byte = []byte(strconv.FormatInt(intVal, 10))
 		)
@@ -138,7 +138,7 @@ func TestEmitter_EmitSync(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key    string = "some-key"
+			key           = "some-key"
 			intVal int64  = 1312
 			data   []byte = []byte(strconv.FormatInt(intVal, 10))
 			retErr error  = errors.New("some-error")
@@ -153,8 +153,8 @@ func TestEmitter_EmitSync(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key    string = "some-key"
-			intVal int64  = 1312
+			key          = "some-key"
+			intVal int64 = 1312
 		)
 
 		bm.producer.EXPECT().Close().Return(nil)
@@ -167,8 +167,8 @@ func TestEmitter_EmitSync(t *testing.T) {
 		emitter, _, _ := createEmitter(t)
 
 		var (
-			key    string = "some-key"
-			intVal string = "1312"
+			key    = "some-key"
+			intVal = "1312"
 		)
 
 		err := emitter.EmitSync(key, intVal)
@@ -182,10 +182,10 @@ func TestEmitter_Finish(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			key      string = "some-key"
+			key             = "some-key"
 			intVal   int64  = 1312
 			data     []byte = []byte(strconv.FormatInt(intVal, 10))
-			msgCount int    = 200
+			msgCount        = 200
 		)
 
 		bm.producer.EXPECT().Emit(emitter.topic, key, data).Return(NewPromise().Finish(nil, nil)).MaxTimes(msgCount)

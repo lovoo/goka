@@ -435,6 +435,8 @@ func WithEmitterHasher(hasher func() hash.Hash32) EmitterOption {
 	}
 }
 
+// WithEmitterTester configures the emitter to use passed tester.
+// This is used for component tests
 func WithEmitterTester(t Tester) EmitterOption {
 	return func(o *eoptions, topic Stream, codec Codec) {
 		o.builders.producer = t.EmitterProducerBuilder()

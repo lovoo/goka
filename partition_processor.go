@@ -13,9 +13,13 @@ import (
 )
 
 const (
+	// PPStateIdle marks the partition processor as idling (not started yet)
 	PPStateIdle State = iota
+	// PPStateRecovering indicates a recovering partition processor
 	PPStateRecovering
+	// PPStateRunning indicates a running partition processor
 	PPStateRunning
+	// PPStateStopping indicates a stopped partition processor
 	PPStateStopping
 )
 
@@ -137,14 +141,17 @@ func newPartitionProcessor(partition int32,
 	return partProc
 }
 
+// EnqueueMessage enqueues a message in the partition processor's event channel for processing
 func (pp *PartitionProcessor) EnqueueMessage(msg *sarama.ConsumerMessage) {
 	pp.input <- msg
 }
 
+// Recovered returns whether the processor is running (i.e. all joins, lookups and the table is recovered and it's consuming messages)
 func (pp *PartitionProcessor) Recovered() bool {
 	return pp.state.IsState(PPStateRunning)
 }
 
+// Errors returns a channel or errors during consumption
 func (pp *PartitionProcessor) Errors() <-chan error {
 	errs := make(chan error)
 
@@ -158,6 +165,7 @@ func (pp *PartitionProcessor) Errors() <-chan error {
 	return errs
 }
 
+// Setup initializes the processor after a rebalance
 func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	ctx, pp.cancelRunnerGroup = context.WithCancel(ctx)
 

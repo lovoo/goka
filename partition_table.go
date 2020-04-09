@@ -51,6 +51,16 @@ type PartitionTable struct {
 	stalledTimeout time.Duration
 }
 
+func newPartitionTableState() *Signal {
+	return NewSignal(
+		State(PartitionStopped),
+		State(PartitionInitializing),
+		State(PartitionRecovering),
+		State(PartitionPreparing),
+		State(PartitionRunning),
+	).SetState(State(PartitionStopped))
+}
+
 func newPartitionTable(topic string,
 	partition int32,
 	consumer sarama.Consumer,
@@ -62,14 +72,8 @@ func newPartitionTable(topic string,
 	statsLoopCtx, cancel := context.WithCancel(context.Background())
 
 	pt := &PartitionTable{
-		partition: partition,
-		state: NewSignal(
-			State(PartitionStopped),
-			State(PartitionInitializing),
-			State(PartitionRecovering),
-			State(PartitionPreparing),
-			State(PartitionRunning),
-		).SetState(State(PartitionStopped)),
+		partition:      partition,
+		state:          newPartitionTableState(),
 		consumer:       consumer,
 		tmgr:           tmgr,
 		topic:          topic,
@@ -142,7 +146,7 @@ func (p *PartitionTable) setup(ctx context.Context) error {
 	}
 
 	p.st = storage
-	return p.st.Open()
+	return nil
 }
 
 // Close closes the partition table
@@ -165,6 +169,10 @@ func (p *PartitionTable) createStorage(ctx context.Context) (*storageProxy, erro
 	go func() {
 		defer close(done)
 		st, err = p.builder(p.topic, p.partition)
+		if err != nil {
+			return
+		}
+		err = st.Open()
 	}()
 
 WaitLoop:
@@ -599,7 +607,18 @@ func (p *PartitionTable) WaitRecovered() chan struct{} {
 
 // Get returns the value for passed key
 func (p *PartitionTable) Get(key string) ([]byte, error) {
+	if !p.state.IsState(State(PartitionRunning)) {
+		return nil, fmt.Errorf("Partition is not running so it's not safe to read values")
+	}
 	return p.st.Get(key)
+}
+
+// Has returns whether the storage contains passed key
+func (p *PartitionTable) Has(key string) (bool, error) {
+	if !p.state.IsState(State(PartitionRunning)) {
+		return false, fmt.Errorf("Partition is not running so it's not safe to read values")
+	}
+	return p.st.Has(key)
 }
 
 // Set sets a key value key in the partition table by modifying the underlying storage
@@ -627,10 +646,12 @@ func (p *PartitionTable) storeNewestOffset(newOffset int64) error {
 	return nil
 }
 
+// SetOffset sets the magic offset value in storage
 func (p *PartitionTable) SetOffset(value int64) error {
 	return p.st.SetOffset(value)
 }
 
+// GetOffset returns the magic offset value from storage
 func (p *PartitionTable) GetOffset(defValue int64) (int64, error) {
 	return p.st.GetOffset(defValue)
 }

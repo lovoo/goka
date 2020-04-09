@@ -53,6 +53,7 @@ func TopicManagerBuilderWithTopicManagerConfig(tmConfig *TopicManagerConfig) Top
 	}
 }
 
+// ConsumerGroupBuilder creates a `sarama.ConsumerGroup`
 type ConsumerGroupBuilder func(brokers []string, group, clientID string) (sarama.ConsumerGroup, error)
 
 // DefaultConsumerGroupBuilder creates a Kafka consumer using the Sarama library.
@@ -70,6 +71,7 @@ func ConsumerGroupBuilderWithConfig(config *sarama.Config) ConsumerGroupBuilder 
 	}
 }
 
+// SaramaConsumerBuilder creates a `sarama.Consumer`
 type SaramaConsumerBuilder func(brokers []string, clientID string) (sarama.Consumer, error)
 
 // DefaultSaramaConsumerBuilder creates a Kafka consumer using the Sarama library.
@@ -79,7 +81,7 @@ func DefaultSaramaConsumerBuilder(brokers []string, clientID string) (sarama.Con
 	return sarama.NewConsumer(brokers, &config)
 }
 
-// ConsumerBuilderWithConfig creates a sarama consumergroup using passed config
+// SaramaConsumerBuilderWithConfig creates a sarama consumer using passed config
 func SaramaConsumerBuilderWithConfig(config *sarama.Config) SaramaConsumerBuilder {
 	return func(brokers []string, clientID string) (sarama.Consumer, error) {
 		config.ClientID = clientID

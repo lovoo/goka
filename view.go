@@ -216,12 +216,12 @@ func (v *View) hash(key string) (int32, error) {
 	return hash % int32(len(v.partitions)), nil
 }
 
-func (v *View) find(key string) (storage.Storage, error) {
+func (v *View) find(key string) (*PartitionTable, error) {
 	h, err := v.hash(key)
 	if err != nil {
 		return nil, err
 	}
-	return v.partitions[h].st, nil
+	return v.partitions[h], nil
 }
 
 // Topic returns  the view's topic
@@ -234,13 +234,13 @@ func (v *View) Topic() string {
 // Get can only be called after Recovered returns true.
 func (v *View) Get(key string) (interface{}, error) {
 	// find partition where key is located
-	s, err := v.find(key)
+	partTable, err := v.find(key)
 	if err != nil {
 		return nil, err
 	}
 
 	// get key and return
-	data, err := s.Get(key)
+	data, err := partTable.Get(key)
 	if err != nil {
 		return nil, fmt.Errorf("error getting value (key %s): %v", key, err)
 	} else if data == nil {
@@ -260,12 +260,12 @@ func (v *View) Get(key string) (interface{}, error) {
 // Has checks whether a value for passed key exists in the view.
 func (v *View) Has(key string) (bool, error) {
 	// find partition where key is located
-	s, err := v.find(key)
+	partTable, err := v.find(key)
 	if err != nil {
 		return false, err
 	}
 
-	return s.Has(key)
+	return partTable.Has(key)
 }
 
 // Iterator returns an iterator that iterates over the state of the View.

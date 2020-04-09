@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	tmTestBrokers []string = []string{"0"}
+	tmTestBrokers = []string{"0"}
 )
 
 func trueCheckFunc(broker Broker, config *sarama.Config) error {
@@ -40,8 +40,8 @@ func TestTM_checkBroker(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			config    *sarama.Config = DefaultConfig()
-			connected bool           = true
+			config    = DefaultConfig()
+			connected = true
 		)
 		broker.EXPECT().Open(config).Return(nil)
 		broker.EXPECT().Connected().Return(connected, nil)
@@ -69,8 +69,8 @@ func TestTM_checkBroker(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			config    *sarama.Config = DefaultConfig()
-			connected bool           = false
+			config    = DefaultConfig()
+			connected = false
 		)
 		broker.EXPECT().Open(config).Return(nil)
 		broker.EXPECT().Connected().Return(connected, nil)
@@ -85,9 +85,9 @@ func TestTM_checkBroker(t *testing.T) {
 		defer ctrl.Finish()
 
 		var (
-			config    *sarama.Config = DefaultConfig()
-			connected bool           = false
-			errRet    error          = errors.New("some-error")
+			config    = DefaultConfig()
+			connected = false
+			errRet    = errors.New("some-error")
 		)
 		broker.EXPECT().Open(config).Return(nil)
 		broker.EXPECT().Connected().Return(connected, errRet)
@@ -169,7 +169,7 @@ func TestTM_Partitions(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic string = "some-topic"
+			topic = "some-topic"
 		)
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
 		_, err := tm.Partitions(topic)
@@ -179,7 +179,7 @@ func TestTM_Partitions(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic string = "some-topic"
+			topic = "some-topic"
 		)
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, errors.New("some-error"))
 		_, err := tm.Partitions(topic)
@@ -192,9 +192,9 @@ func TestTM_GetOffset(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic     string = "some-topic"
-			partition int32  = 0
-			offset    int64  = sarama.OffsetNewest
+			topic     = "some-topic"
+			partition int32
+			offset    = sarama.OffsetNewest
 		)
 		bm.client.EXPECT().GetOffset(topic, partition, offset).Return(sarama.OffsetNewest, nil)
 		_, err := tm.GetOffset(topic, partition, offset)
@@ -204,9 +204,9 @@ func TestTM_GetOffset(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic     string = "some-topic"
-			partition int32  = 0
-			offset    int64  = sarama.OffsetNewest
+			topic     = "some-topic"
+			partition int32
+			offset    = sarama.OffsetNewest
 		)
 		bm.client.EXPECT().GetOffset(topic, partition, offset).Return(sarama.OffsetNewest, errors.New("some-error"))
 		_, err := tm.GetOffset(topic, partition, offset)
@@ -219,8 +219,8 @@ func TestTM_checkTopicExistsWithPartitions(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic string = "some-topic"
-			npar  int    = 1
+			topic = "some-topic"
+			npar  = 1
 		)
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
 		correct, err := tm.checkTopicExistsWithPartitions(topic, npar)
@@ -231,8 +231,8 @@ func TestTM_checkTopicExistsWithPartitions(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic string = "some-topic"
-			npar  int    = 1
+			topic = "some-topic"
+			npar  = 1
 		)
 		bm.client.EXPECT().Partitions(topic).Return(nil, sarama.ErrUnknownTopicOrPartition)
 		correct, err := tm.checkTopicExistsWithPartitions(topic, npar)
@@ -243,9 +243,9 @@ func TestTM_checkTopicExistsWithPartitions(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic     string = "some-topic"
-			npar      int    = 1
-			falseNPar int    = 2
+			topic     = "some-topic"
+			npar      = 1
+			falseNPar = 2
 		)
 		bm.client.EXPECT().Partitions(topic).Return(nil, errors.New("some-error"))
 		correct, err := tm.checkTopicExistsWithPartitions(topic, npar)
@@ -263,8 +263,8 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic string = "some-topic"
-			npar  int    = 1
+			topic = "some-topic"
+			npar  = 1
 		)
 
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
@@ -276,9 +276,9 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic   string = "some-topic"
-			npar    int    = 1
-			rfactor int    = 1
+			topic   = "some-topic"
+			npar    = 1
+			rfactor = 1
 		)
 
 		tm.topicManagerConfig.Stream.Replication = rfactor
@@ -293,9 +293,9 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic  string = "some-topic"
-			npar   int    = 1
-			retErr error  = errors.New("some-error")
+			topic  = "some-topic"
+			npar   = 1
+			retErr = errors.New("some-error")
 		)
 
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, retErr)
@@ -310,10 +310,10 @@ func TestTM_createTopic(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic   string            = "some-topic"
-			npar    int               = 1
-			rfactor int               = 1
-			config  map[string]string = map[string]string{
+			topic   = "some-topic"
+			npar    = 1
+			rfactor = 1
+			config  = map[string]string{
 				"a": "a",
 			}
 		)
@@ -325,14 +325,14 @@ func TestTM_createTopic(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic   string            = "some-topic"
-			npar    int               = 1
-			rfactor int               = 1
-			config  map[string]string = map[string]string{
+			topic   = "some-topic"
+			npar    = 1
+			rfactor = 1
+			config  = map[string]string{
 				"a": "a",
 			}
-			retErr error  = errors.New("some-error")
-			errMsg string = "some-error-msg"
+			retErr error = errors.New("some-error")
+			errMsg       = "some-error-msg"
 		)
 		bm.broker.EXPECT().CreateTopics(gomock.Any()).Return(&sarama.CreateTopicsResponse{
 			TopicErrors: map[string]*sarama.TopicError{
@@ -352,10 +352,10 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic   string            = "some-topic"
-			npar    int               = 1
-			rfactor int               = 1
-			config  map[string]string = map[string]string{
+			topic   = "some-topic"
+			npar    = 1
+			rfactor = 1
+			config  = map[string]string{
 				"a": "a",
 			}
 		)
@@ -369,10 +369,10 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic   string            = "some-topic"
-			npar    int               = 1
-			rfactor int               = 1
-			config  map[string]string = map[string]string{
+			topic   = "some-topic"
+			npar    = 1
+			rfactor = 1
+			config  = map[string]string{
 				"a": "a",
 			}
 		)
@@ -387,10 +387,10 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
-			topic   string            = "some-topic"
-			npar    int               = 1
-			rfactor int               = 1
-			config  map[string]string = map[string]string{
+			topic   = "some-topic"
+			npar    = 1
+			rfactor = 1
+			config  = map[string]string{
 				"a": "a",
 			}
 			retErr error = errors.New("some-error")
