@@ -46,10 +46,10 @@ func TestContext_Emit(t *testing.T) {
 	)
 
 	ctx := &cbContext{
-		graph:         DefineGroup(group),
-		commit:        func() { ack++ },
-		wg:            &sync.WaitGroup{},
-		partProcStats: newPartitionProcStats(nil, []string{"emit-topic"}),
+		graph:            DefineGroup(group),
+		commit:           func() { ack++ },
+		wg:               &sync.WaitGroup{},
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 	}
 
 	// after that the message is processed
@@ -97,11 +97,11 @@ func TestContext_EmitError(t *testing.T) {
 
 	// test error case
 	ctx := &cbContext{
-		graph:         DefineGroup(group, Persist(new(codec.String))),
-		wg:            &sync.WaitGroup{},
-		partProcStats: newPartitionProcStats(nil, []string{"emit-topic"}),
-		syncFailer:    failer,
-		asyncFailer:   failer,
+		graph:            DefineGroup(group, Persist(new(codec.String))),
+		wg:               &sync.WaitGroup{},
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+		syncFailer:       failer,
+		asyncFailer:      failer,
 	}
 	ctx.emitter = newEmitter(errToEmit, func(err error) {
 		emitted++
@@ -285,13 +285,13 @@ func TestContext_Set(t *testing.T) {
 	st.EXPECT().Set(key, []byte(value)).Return(nil)
 
 	ctx := &cbContext{
-		graph:         DefineGroup(group, Persist(new(codec.String))),
-		wg:            new(sync.WaitGroup),
-		commit:        func() { ack++ },
-		partProcStats: newPartitionProcStats(nil, []string{string(GroupTable(group))}),
-		msg:           &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
-		table:         pt,
-		ctx:           context.Background(),
+		graph:            DefineGroup(group, Persist(new(codec.String))),
+		wg:               new(sync.WaitGroup),
+		commit:           func() { ack++ },
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
+		table:            pt,
+		ctx:              context.Background(),
 	}
 
 	ctx.emitter = newEmitter(nil, nil)
@@ -338,11 +338,11 @@ func TestContext_GetSetStateful(t *testing.T) {
 
 	graph := DefineGroup(group, Persist(new(codec.String)))
 	ctx := &cbContext{
-		table:         pt,
-		wg:            wg,
-		graph:         graph,
-		partProcStats: newPartitionProcStats(nil, []string{string(GroupTable(group))}),
-		msg:           &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
+		table:            pt,
+		wg:               wg,
+		graph:            graph,
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
 		emitter: func(tp string, k string, v []byte) *Promise {
 			wg.Add(1)
 			test.AssertEqual(t, tp, graph.GroupTable().Topic())
@@ -386,13 +386,13 @@ func TestContext_SetErrors(t *testing.T) {
 	failer := func(err error) { failed = err }
 
 	ctx := &cbContext{
-		table:         pt,
-		partProcStats: newPartitionProcStats(nil, nil),
-		wg:            wg,
-		graph:         DefineGroup(group, Persist(new(codec.String))),
-		msg:           &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
-		syncFailer:    failer,
-		asyncFailer:   failer,
+		table:            pt,
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+		wg:               wg,
+		graph:            DefineGroup(group, Persist(new(codec.String))),
+		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
+		syncFailer:       failer,
+		asyncFailer:      failer,
 	}
 
 	err := ctx.setValueForKey(key, nil)
@@ -445,9 +445,9 @@ func TestContext_Loopback(t *testing.T) {
 
 	graph := DefineGroup("group", Persist(c), Loop(c, cb))
 	ctx := &cbContext{
-		graph:         graph,
-		msg:           &sarama.ConsumerMessage{},
-		partProcStats: newPartitionProcStats([]string{"group-loop"}, []string{"group-loop"}),
+		graph:            graph,
+		msg:              &sarama.ConsumerMessage{},
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 		emitter: func(tp string, k string, v []byte) *Promise {
 			cnt++
 			test.AssertEqual(t, tp, graph.LoopStream().Topic())
