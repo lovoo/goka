@@ -607,7 +607,11 @@ func (g *Processor) createPartitionProcessor(ctx context.Context, partition int3
 		return fmt.Errorf("processor [%s]: partition %d already exists", g.graph.Group(), partition)
 	}
 
-	pproc := newPartitionProcessor(partition, g.graph, session, g.log, g.opts, g.lookupTables, g.saramaConsumer, g.producer, g.tmgr)
+	backoff, err := g.opts.builders.backoff()
+	if err != nil {
+		return fmt.Errorf("processor [%s]: could not build backoff handler: %v", g.graph.Group(), err)
+	}
+	pproc := newPartitionProcessor(partition, g.graph, session, g.log, g.opts, g.lookupTables, g.saramaConsumer, g.producer, g.tmgr, backoff, g.opts.backoffResetTime)
 
 	g.partitions[partition] = pproc
 	return nil

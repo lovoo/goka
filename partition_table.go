@@ -21,6 +21,13 @@ const (
 	offsetNotStored int64 = -3
 )
 
+// Backoff is used for adding backoff capabilities to the restarting
+// of failing partition tables.
+type Backoff interface {
+	Duration() time.Duration
+	Reset()
+}
+
 // PartitionTable manages the usage of a table for one partition.
 // It allows to setup and recover/catchup the table contents from kafka,
 // allow updates via Get/Set/Delete accessors
@@ -49,6 +56,9 @@ type PartitionTable struct {
 	// stall config
 	stallPeriod    time.Duration
 	stalledTimeout time.Duration
+
+	backoff             Backoff
+	backoffResetTimeout time.Duration
 }
 
 func newPartitionTableState() *Signal {
@@ -67,7 +77,9 @@ func newPartitionTable(topic string,
 	tmgr TopicManager,
 	updateCallback UpdateCallback,
 	builder storage.Builder,
-	log logger.Logger) *PartitionTable {
+	log logger.Logger,
+	backoff Backoff,
+	backoffResetTimeout time.Duration) *PartitionTable {
 
 	statsLoopCtx, cancel := context.WithCancel(context.Background())
 
@@ -88,6 +100,9 @@ func newPartitionTable(topic string,
 		responseStats:   make(chan *TableStats, 1),
 		updateStats:     make(chan func(), 10),
 		cancelStatsLoop: cancel,
+
+		backoff:             backoff,
+		backoffResetTimeout: backoffResetTimeout,
 	}
 
 	go pt.runStatsLoop(statsLoopCtx)
@@ -117,19 +132,23 @@ func (p *PartitionTable) SetupAndRecover(ctx context.Context) error {
 // Option restartOnError allows the view to stay open/intact even in case of consumer errors
 func (p *PartitionTable) CatchupForever(ctx context.Context, restartOnError bool) error {
 	if restartOnError {
+		var resetTimer *time.Timer
 		for {
 			err := p.load(ctx, false)
 			if err != nil {
 				p.log.Printf("Error while catching up, but we'll try to keep it running: %v", err)
+
+				if resetTimer != nil {
+					resetTimer.Stop()
+				}
+				resetTimer = time.AfterFunc(p.backoffResetTimeout, p.backoff.Reset)
 			}
 
 			select {
 			case <-ctx.Done():
 				return nil
 
-			case <-time.After(10 * time.Second):
-				// retry after some time
-				// TODO (frairon) add exponential backoff
+			case <-time.After(p.backoff.Duration()):
 			}
 		}
 	}
@@ -199,12 +218,7 @@ WaitLoop:
 
 }
 
-// TODO(jb): refactor comment
-// findOffsetToLoad returns the first and the last offset (hwm) to load.
-// If storedOffset is sarama.OffsetOldest the oldest offset known to kafka is returned as first offset.
-// If storedOffset is sarama.OffsetNewest the hwm is returned as first offset.
-// If storedOffset is higher than the hwm, the hwm is returned as first offset.
-// If storedOffset is lower than the oldest offset, the oldest offset is returned as first offset.
+// findOffsetToLoad returns the first offset to load and the high watermark.
 func (p *PartitionTable) findOffsetToLoad(storedOffset int64) (int64, int64, error) {
 	oldest, err := p.tmgr.GetOffset(p.topic, p.partition, sarama.OffsetOldest)
 	if err != nil {
@@ -218,6 +232,9 @@ func (p *PartitionTable) findOffsetToLoad(storedOffset int64) (int64, int64, err
 
 	var start int64
 
+	// if no offset is found in the local storage start with the oldest offset known
+	// to kafka.
+	// Otherwise start with the next element not stored locally.
 	if storedOffset == offsetNotStored {
 		start = oldest
 	} else {

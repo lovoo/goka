@@ -83,6 +83,7 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 	opts.builders.consumerSarama = func(brokers []string, clientID string) (sarama.Consumer, error) {
 		return consumer, nil
 	}
+	opts.builders.backoff = DefaultBackoffBuilder
 
 	view := &View{topic: viewTestTopic, opts: opts, log: opts.log}
 	return view, bm, ctrl
@@ -584,6 +585,8 @@ func TestView_Run(t *testing.T) {
 			updateCB,
 			bm.getStorageBuilder(),
 			logger.Default(),
+			NewSimpleBackoff(time.Second*10),
+			time.Minute,
 		)
 
 		pt.consumer = consumer
@@ -637,6 +640,8 @@ func TestView_Run(t *testing.T) {
 			updateCB,
 			bm.getStorageBuilder(),
 			logger.Default(),
+			NewSimpleBackoff(time.Second*10),
+			time.Minute,
 		)
 
 		pt.consumer = consumer
