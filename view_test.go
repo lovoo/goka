@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hash"
+	"log"
 	"strconv"
 	"testing"
 	"time"
@@ -750,4 +751,68 @@ func TestView_NewView(t *testing.T) {
 		test.AssertNotNil(t, err)
 		test.AssertNil(t, view)
 	})
+}
+
+// This example shows how views are typically created and used
+// in the most basic way.
+func ExampleView() {
+	// create a new view
+	view, err := NewView([]string{"localhost:9092"},
+		"input-topic",
+		new(codec.String))
+
+	if err != nil {
+		log.Fatalf("error creating view: %v", err)
+	}
+
+	// provide a cancelable
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// start the view
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		err := view.Run(ctx)
+		if err != nil {
+			log.Fatalf("Error running view: %v", err)
+		}
+	}()
+
+	// wait for the view to be recovered
+
+	// Option A: by polling
+	for !view.Recovered() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
+	}
+
+	// Option B: by waiting for the signal
+	<-view.WaitRunning()
+
+	// retrieve a value from the view
+	val, err := view.Get("some-key")
+	if err != nil {
+		log.Fatalf("Error getting item from view: %v", err)
+	}
+
+	if val != nil {
+		// cast it to string
+		// no need for type assertion, if it was not that type, the codec would've failed
+		log.Printf("got value %s", val.(string))
+	}
+
+	has, err := view.Has("some-key")
+	if err != nil {
+		log.Fatalf("Error getting item from view: %v", err)
+	}
+
+	_ = has
+
+	// stop the view and wait for it to shut down before returning
+	cancel()
+	<-done
 }
