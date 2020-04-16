@@ -115,6 +115,10 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 	}
 
 	for partID, p := range partitions {
+		backoff, err := v.opts.builders.backoff()
+		if err != nil {
+			return fmt.Errorf("Error creating backoff: %v", err)
+		}
 		v.partitions = append(v.partitions, newPartitionTable(v.topic,
 			p,
 			v.consumer,
@@ -122,6 +126,8 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 			v.opts.updateCallback,
 			v.opts.builders.storage,
 			v.log.Prefix(fmt.Sprintf("PartTable-%d", partID)),
+			backoff,
+			v.opts.backoffResetTime,
 		))
 	}
 

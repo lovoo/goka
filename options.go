@@ -5,6 +5,7 @@ import (
 	"hash"
 	"hash/fnv"
 	"path/filepath"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/logger"
@@ -25,6 +26,7 @@ type RebalanceCallback func(a Assignment)
 const (
 	defaultBaseStoragePath = "/tmp/goka"
 	defaultClientID        = "goka"
+	defaultBackoffRestTime = time.Minute
 )
 
 // DefaultProcessorStoragePath is the default path where processor state
@@ -80,6 +82,7 @@ type poptions struct {
 	partitionChannelSize int
 	hasher               func() hash.Hash32
 	nilHandling          NilHandling
+	backoffResetTime     time.Duration
 
 	builders struct {
 		storage        storage.Builder
@@ -87,6 +90,7 @@ type poptions struct {
 		consumerGroup  ConsumerGroupBuilder
 		producer       ProducerBuilder
 		topicmgr       TopicManagerBuilder
+		backoff        BackoffBuilder
 	}
 }
 
@@ -140,6 +144,13 @@ func WithProducerBuilder(pb ProducerBuilder) ProcessorOption {
 	}
 }
 
+// WithBackoffBuilder replaced the default backoff.
+func WithBackoffBuilder(bb BackoffBuilder) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.builders.backoff = bb
+	}
+}
+
 // WithPartitionChannelSize replaces the default partition channel size.
 // This is mostly used for testing by setting it to 0 to have synchronous behavior
 // of goka.
@@ -168,6 +179,14 @@ func WithHasher(hasher func() hash.Hash32) ProcessorOption {
 func WithGroupGraphHook(hook func(gg *GroupGraph)) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		hook(gg)
+	}
+}
+
+// WithBackoffResetTimeout defines the timeout when the backoff
+// will be reset.
+func WithBackoffResetTimeout(duration time.Duration) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.backoffResetTime = duration
 	}
 }
 
@@ -223,6 +242,7 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
 	opt.hasher = DefaultHasher()
+	opt.backoffResetTime = defaultBackoffRestTime
 
 	for _, o := range opts {
 		o(opt, gg)
@@ -240,15 +260,23 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	if opt.builders.producer == nil {
 		opt.builders.producer = DefaultProducerBuilder
 	}
+
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
+
 	if opt.builders.consumerGroup == nil {
 		opt.builders.consumerGroup = DefaultConsumerGroupBuilder
 	}
+
 	if opt.builders.consumerSarama == nil {
 		opt.builders.consumerSarama = DefaultSaramaConsumerBuilder
 	}
+
+	if opt.builders.backoff == nil {
+		opt.builders.backoff = DefaultBackoffBuilder
+	}
+
 	return nil
 }
 
@@ -268,17 +296,19 @@ func WithRebalanceCallback(cb RebalanceCallback) ProcessorOption {
 type ViewOption func(*voptions, Table, Codec)
 
 type voptions struct {
-	log            logger.Logger
-	clientID       string
-	tableCodec     Codec
-	updateCallback UpdateCallback
-	hasher         func() hash.Hash32
-	restartable    bool
+	log              logger.Logger
+	clientID         string
+	tableCodec       Codec
+	updateCallback   UpdateCallback
+	hasher           func() hash.Hash32
+	restartable      bool
+	backoffResetTime time.Duration
 
 	builders struct {
 		storage        storage.Builder
 		consumerSarama SaramaConsumerBuilder
 		topicmgr       TopicManagerBuilder
+		backoff        BackoffBuilder
 	}
 }
 
@@ -319,6 +349,13 @@ func WithViewTopicManagerBuilder(tmb TopicManagerBuilder) ViewOption {
 	}
 }
 
+// WithViewBackoffBuilder replaced the default backoff.
+func WithViewBackoffBuilder(bb BackoffBuilder) ViewOption {
+	return func(o *voptions, table Table, codec Codec) {
+		o.builders.backoff = bb
+	}
+}
+
 // WithViewHasher sets the hash function that assigns keys to partitions.
 func WithViewHasher(hasher func() hash.Hash32) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
@@ -342,6 +379,14 @@ func WithViewRestartable() ViewOption {
 	}
 }
 
+// WithViewBackoffResetTimeout defines the timeout when the backoff
+// will be reset.
+func WithViewBackoffResetTimeout(duration time.Duration) ViewOption {
+	return func(o *voptions, table Table, codec Codec) {
+		o.backoffResetTime = duration
+	}
+}
+
 // WithViewTester configures all external connections of a processor, ie, storage,
 // consumer and producer
 func WithViewTester(t Tester) ViewOption {
@@ -357,6 +402,7 @@ func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) 
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
 	opt.hasher = DefaultHasher()
+	opt.backoffResetTime = defaultBackoffRestTime
 
 	for _, o := range opts {
 		o(opt, topic, codec)
@@ -373,6 +419,10 @@ func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) 
 
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = DefaultTopicManagerBuilder
+	}
+
+	if opt.builders.backoff == nil {
+		opt.builders.backoff = DefaultBackoffBuilder
 	}
 
 	return nil

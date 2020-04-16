@@ -32,6 +32,8 @@ func defaultPT(
 		updateCallback,
 		bm.getStorageBuilder(),
 		logger.Default(),
+		NewSimpleBackoff(time.Second*10),
+		time.Minute,
 	), bm, ctrl
 }
 

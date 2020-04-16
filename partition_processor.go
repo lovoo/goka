@@ -69,7 +69,9 @@ func newPartitionProcessor(partition int32,
 	lookupTables map[string]*View,
 	consumer sarama.Consumer,
 	producer Producer,
-	tmgr TopicManager) *PartitionProcessor {
+	tmgr TopicManager,
+	backoff Backoff,
+	backoffResetTime time.Duration) *PartitionProcessor {
 
 	// collect all topics I am responsible for
 	topicMap := make(map[string]bool)
@@ -136,6 +138,8 @@ func newPartitionProcessor(partition int32,
 			opts.updateCallback,
 			opts.builders.storage,
 			log.Prefix("PartTable"),
+			backoff,
+			backoffResetTime,
 		)
 	}
 	return partProc
@@ -193,6 +197,8 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 			pp.opts.updateCallback,
 			pp.opts.builders.storage,
 			pp.log.Prefix(fmt.Sprintf("Join %s", join.Topic())),
+			NewSimpleBackoff(time.Second*10),
+			time.Minute,
 		)
 		pp.joins[join.Topic()] = table
 
