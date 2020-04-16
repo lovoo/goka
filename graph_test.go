@@ -157,3 +157,26 @@ func TestGroupGraph_Inputs(t *testing.T) {
 	test.AssertEqual(t, topics.Topic(), "a,b,c")
 	test.AssertTrue(t, strings.Contains(topics.String(), "a,b,c/*codec.String"))
 }
+
+func TestStringsToStreams(t *testing.T) {
+	inputTopics := []string{"input1",
+		"input2",
+	}
+
+	streams := StringsToStreams(inputTopics...)
+	test.AssertEqual(t, streams[0], Stream("input1"))
+	test.AssertEqual(t, streams[1], Stream("input2"))
+}
+
+func ExampleStringsToStreams() {
+	inputTopics := []string{"input1",
+		"input2",
+		"input3",
+	}
+
+	// use it, e.g. in the Inputs-Edge in the group graph
+	graph := DefineGroup("group",
+		Inputs(StringsToStreams(inputTopics...), new(codec.String), func(ctx Context, msg interface{}) {}),
+	)
+	_ = graph
+}

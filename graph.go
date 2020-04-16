@@ -384,3 +384,15 @@ func tableName(group Group) string {
 func loopName(group Group) string {
 	return string(group) + loopSuffix
 }
+
+// StringsToStreams is a simple cast/conversion functions that allows to pass a slice
+// of strings as a slice of Stream (Streams)
+// Avoids the boilerplate loop over the string array that would be necessary otherwise.
+func StringsToStreams(strings ...string) Streams {
+	streams := make(Streams, 0, len(strings))
+
+	for _, str := range strings {
+		streams = append(streams, Stream(str))
+	}
+	return streams
+}
