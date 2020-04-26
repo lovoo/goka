@@ -134,7 +134,13 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 	return nil
 }
 
-// Run starts consuming the view's topic.
+// Run starts consuming the view's topic and saving updates in the local persistent cache.
+//
+// The view will shutdown in case of errors or when the context is closed.
+// It can be initialized with autoreconnect
+//  view := NewView(..., WithViewAutoReconnect())
+// which makes the view internally reconnect in case of errors.
+// Then it will only stop by canceling the context (see example).
 func (v *View) Run(ctx context.Context) (rerr error) {
 	v.log.Debugf("starting")
 	defer v.log.Debugf("stopped")
@@ -178,7 +184,7 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 	for _, partition := range v.partitions {
 		partition := partition
 		catchupErrg.Go(func() error {
-			return partition.CatchupForever(catchupCtx, v.opts.restartable)
+			return partition.CatchupForever(catchupCtx, v.opts.autoreconnect)
 		})
 	}
 

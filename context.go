@@ -16,8 +16,28 @@ type emitter func(topic string, key string, value []byte) *Promise
 // Context provides access to the processor's table and emit capabilities to
 // arbitrary topics in kafka.
 // Upon arrival of a message from subscribed topics, the respective
-// ConsumeCallback is invoked with a context object along
-// with the input message.
+// ConsumeCallback is invoked with a context object along with the input message.
+// The context is only valid within the callback, do not store it or pass it to other goroutines.
+//
+// Error handling
+//
+// Most methods of the context can fail due to different reasons, which are handled in different ways:
+// Synchronous errors like
+// * wrong codec for topic (a message cannot be marshalled or unmarshalled)
+// * Emit to a topic without the Output definition in the group graph
+// * Value/SetValue without defining Persist in the group graph
+// * Join/Lookup without the definition in the group graph etc..
+// will result in a panic to stop the callback immediately and shutdown the processor.
+// This is necessary to preserve integrity of the processor and avoid further actions.
+// Do not recover from that panic, otherwise the goroutine will deadlock.
+//
+// Retrying synchronous errors must be implemented by restarting the processor.
+// If errors must be tolerated (which is not advisable because they're usually persistent), provide
+// fail-tolerant versions of the producer, storage or codec as needed.
+//
+// Asynchronous errors can occur when the callback has been finished, but e.g. sending a batched
+// message to kafka fails due to connection errors or leader election in the cluster.
+// Those errors still shutdown the processor but will not result in a panic in the callback.
 type Context interface {
 	// Topic returns the topic of input message.
 	Topic() Stream
@@ -32,17 +52,31 @@ type Context interface {
 	Offset() int64
 
 	// Value returns the value of the key in the group table.
+	//
+	// This method might panic to initiate an immediate shutdown of the processor
+	// to maintain data integrity. Do not recover from that panic or
+	// the processor might deadlock.
 	Value() interface{}
 
 	// Headers returns the headers of the input message
 	Headers() map[string][]byte
 
 	// SetValue updates the value of the key in the group table.
+	// It stores the value in the local cache and sends the
+	// update to the Kafka topic representing the group table.
+	//
+	// This method might panic to initiate an immediate shutdown of the processor
+	// to maintain data integrity. Do not recover from that panic or
+	// the processor might deadlock.
 	SetValue(value interface{})
 
 	// Delete deletes a value from the group table. IMPORTANT: this deletes the
 	// value associated with the key from both the local cache and the persisted
 	// table in Kafka.
+	//
+	// This method might panic to initiate an immediate shutdown of the processor
+	// to maintain data integrity. Do not recover from that panic or
+	// the processor might deadlock.
 	Delete()
 
 	// Timestamp returns the timestamp of the input message. If the timestamp is
@@ -50,20 +84,38 @@ type Context interface {
 	Timestamp() time.Time
 
 	// Join returns the value of key in the copartitioned table.
+	//
+	// This method might panic to initiate an immediate shutdown of the processor
+	// to maintain data integrity. Do not recover from that panic or
+	// the processor might deadlock.
 	Join(topic Table) interface{}
 
 	// Lookup returns the value of key in the view of table.
+	//
+	// This method might panic to initiate an immediate shutdown of the processor
+	// to maintain data integrity. Do not recover from that panic or
+	// the processor might deadlock.
 	Lookup(topic Table, key string) interface{}
 
 	// Emit asynchronously writes a message into a topic.
+	//
+	// This method might panic to initiate an immediate shutdown of the processor
+	// to maintain data integrity. Do not recover from that panic or
+	// the processor might deadlock.
 	Emit(topic Stream, key string, value interface{})
 
 	// Loopback asynchronously sends a message to another key of the group
 	// table. Value passed to loopback is encoded via the codec given in the
 	// Loop subscription.
+	//
+	// This method might panic to initiate an immediate shutdown of the processor
+	// to maintain data integrity. Do not recover from that panic or
+	// the processor might deadlock.
 	Loopback(key string, value interface{})
 
 	// Fail stops execution and shuts down the processor
+	// The callback is stopped immediately by panicking. Do not recover from that panic or
+	// the processor might deadlock.
 	Fail(err error)
 
 	// Context returns the underlying context used to start the processor or a

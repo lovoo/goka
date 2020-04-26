@@ -475,7 +475,7 @@ func TestView_Terminate(t *testing.T) {
 			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
-			isRestartable = true
+			isAutoReconnect = true
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
@@ -488,7 +488,7 @@ func TestView_Terminate(t *testing.T) {
 				st: proxy,
 			},
 		}
-		view.opts.restartable = isRestartable
+		view.opts.autoreconnect = isAutoReconnect
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
 		ret := view.close()
@@ -504,7 +504,7 @@ func TestView_Terminate(t *testing.T) {
 			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
-			isRestartable = true
+			isAutoReconnect = true
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
@@ -517,7 +517,7 @@ func TestView_Terminate(t *testing.T) {
 				st: proxy,
 			},
 		}
-		view.opts.restartable = isRestartable
+		view.opts.autoreconnect = isAutoReconnect
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
 		ret := view.close()
@@ -536,8 +536,8 @@ func TestView_Terminate(t *testing.T) {
 			proxy = &storageProxy{
 				Storage: bm.mst,
 			}
-			retErr        error = fmt.Errorf("some-error")
-			isRestartable       = true
+			retErr          error = fmt.Errorf("some-error")
+			isAutoReconnect       = true
 		)
 		view.partitions = []*PartitionTable{
 			&PartitionTable{
@@ -550,7 +550,7 @@ func TestView_Terminate(t *testing.T) {
 				st: proxy,
 			},
 		}
-		view.opts.restartable = isRestartable
+		view.opts.autoreconnect = isAutoReconnect
 		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
 
 		ret := view.close()
@@ -813,6 +813,49 @@ func ExampleView() {
 	_ = has
 
 	// stop the view and wait for it to shut down before returning
+	cancel()
+	<-done
+}
+
+func ExampleView_autoreconnect() {
+	// create a new view
+	view, err := NewView([]string{"localhost:9092"},
+		"input-topic",
+		new(codec.String),
+
+		// Automatically reconnect in case of errors. This is useful for services where availability
+		// is more important than the data being up to date in case of kafka connection issues.
+		WithViewAutoReconnect(),
+
+		// Reconnect uses a default backoff mechanism, that can be modified by providing
+		// a custom backoff builder using
+		// WithViewBackoffBuilder(customBackoffBuilder),
+
+		// When the view is running successfully for some time, the backoff is reset.
+		// This time range can be modified using
+		// WithViewBackoffResetTimeout(3*time.Second),
+	)
+
+	if err != nil {
+		log.Fatalf("error creating view: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// start the view
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		err := view.Run(ctx)
+		if err != nil {
+			log.Fatalf("Error running view: %v", err)
+		}
+	}()
+
+	<-view.WaitRunning()
+	// at this point we can safely use the view with Has/Get/Iterate,
+	// even if the kafka connection is lost
+
+	// Stop the view and wait for it to shutdown before returning
 	cancel()
 	<-done
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"log"
 	"path/filepath"
 	"time"
 
@@ -301,7 +302,7 @@ type voptions struct {
 	tableCodec       Codec
 	updateCallback   UpdateCallback
 	hasher           func() hash.Hash32
-	restartable      bool
+	autoreconnect    bool
 	backoffResetTime time.Duration
 
 	builders struct {
@@ -370,12 +371,19 @@ func WithViewClientID(clientID string) ViewOption {
 	}
 }
 
-// WithViewRestartable defines the view can be restarted, even when Run()
-// returns errors. If the view is restartable, the client must call Terminate()
-// to release all resources, ie, close the local storage.
+// WithViewRestartable is kept only for backwards compatibility.
+// DEPRECATED: since the behavior has changed, this name is misleading and should be replaced by
+// WithViewAutoReconnect().
 func WithViewRestartable() ViewOption {
+	log.Printf("Warning: this option is deprecated and will be removed. Replace with WithViewAutoReconnect, which is semantically equivalent")
+	return WithViewAutoReconnect()
+}
+
+// WithViewAutoReconnect defines the view is reconnecting internally, so Run() does not return
+// in case of connection errors. The view must be shutdown by cancelling the context passed to Run()
+func WithViewAutoReconnect() ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
-		o.restartable = true
+		o.autoreconnect = true
 	}
 }
 
