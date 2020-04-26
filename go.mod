@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/Shopify/sarama v1.26.1
+	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/golang/mock v1.4.0
 	github.com/gorilla/mux v1.7.3
 	github.com/syndtr/goleveldb v1.0.0
