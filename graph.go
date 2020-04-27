@@ -346,10 +346,16 @@ type groupTable struct {
 }
 
 // Persist represents the edge of the group table, which is log-compacted and
-// copartitioned with the input streams. This edge specifies the codec of the
+// copartitioned with the input streams.
+// Without Persist, calls to ctx.Value or ctx.SetValue in the consume callback will
+// fail and lead to shutdown of the processor.
+//
+// This edge specifies the codec of the
 // messages in the topic, ie, the codec of the values of the table.
 // The processing of input streams is blocked until all partitions of the group
 // table are recovered.
+//
+// The topic name is derived from the group name by appending "-table".
 func Persist(c Codec) Edge {
 	return &groupTable{&topicDef{codec: c}}
 }
