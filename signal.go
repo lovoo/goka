@@ -17,10 +17,11 @@ type waiter struct {
 // Signal allows synchronization on a state, waiting for that state and checking
 // the current state
 type Signal struct {
-	m             sync.Mutex
-	state         State
-	waiters       []*waiter
-	allowedStates map[State]bool
+	m                    sync.Mutex
+	state                State
+	waiters              []*waiter
+	stateChangeObservers []*StateChangeObserver
+	allowedStates        map[State]bool
 }
 
 // NewSignal creates a new Signal based on the states
@@ -55,6 +56,11 @@ func (s *Signal) SetState(state State) *Signal {
 		newWaiters = append(newWaiters, w)
 	}
 	s.waiters = newWaiters
+
+	// notify the state change observers
+	for _, obs := range s.stateChangeObservers {
+		obs.c <- struct{}{}
+	}
 
 	return s
 }
@@ -109,4 +115,59 @@ func (s *Signal) waitForWaiter(state State, w *waiter) chan struct{} {
 	}
 
 	return w.done
+}
+
+// StateChangeObserver wraps a channel that triggers when the signal's state changes
+type StateChangeObserver struct {
+	c    chan struct{}
+	stop func()
+	s    *Signal
+}
+
+// Stop stops the observer. Its update channel will be closed and
+func (s *StateChangeObserver) Stop() {
+	s.stop()
+}
+
+// C returns the channel to observer state changes
+func (s *StateChangeObserver) C() <-chan struct{} {
+	return s.c
+}
+
+// State returns the current state of the Signal
+func (s *StateChangeObserver) State() State {
+	return s.s.State()
+}
+
+// ObserveStateChange returns a channel that receives state changes.
+// Note that the caller must take care of consuming that channel, otherwise the Signal
+// will block upon state changes
+func (s *Signal) ObserveStateChange() *StateChangeObserver {
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	observer := &StateChangeObserver{
+		c: make(chan struct{}, 1),
+		s: s,
+	}
+
+	// the stop funtion stops the observer by closing its channel
+	// and removing it from the list of observers
+	observer.stop = func() {
+		s.m.Lock()
+		defer s.m.Unlock()
+
+		// iterate over all observers and close *this* one
+		for idx, obs := range s.stateChangeObservers {
+			if obs == observer {
+				copy(s.stateChangeObservers[idx:], s.stateChangeObservers[idx+1:])
+				s.stateChangeObservers[len(s.stateChangeObservers)-1] = nil
+				s.stateChangeObservers = s.stateChangeObservers[:len(s.stateChangeObservers)-1]
+			}
+		}
+		close(observer.c)
+	}
+
+	s.stateChangeObservers = append(s.stateChangeObservers, observer)
+	return observer
 }

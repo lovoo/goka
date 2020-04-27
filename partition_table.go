@@ -65,6 +65,7 @@ func newPartitionTableState() *Signal {
 	return NewSignal(
 		State(PartitionStopped),
 		State(PartitionInitializing),
+		State(PartitionConnecting),
 		State(PartitionRecovering),
 		State(PartitionPreparing),
 		State(PartitionRunning),
@@ -318,9 +319,7 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 
 	defer p.log.Debugf("... Loading done")
 
-	if stopAfterCatchup {
-		p.state.SetState(State(PartitionRecovering))
-	}
+	p.state.SetState(State(PartitionConnecting))
 
 	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, loadOffset)
 	if err != nil {
@@ -337,6 +336,12 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		p.drainConsumer(partConsumer, errs)
 	}()
 
+	if stopAfterCatchup {
+		p.state.SetState(State(PartitionRecovering))
+	} else {
+		p.state.SetState(State(PartitionRunning))
+	}
+
 	// load messages and stop when you're at HWM
 	loadErr := p.loadMessages(ctx, partConsumer, hwm, stopAfterCatchup)
 
@@ -352,6 +357,10 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		p.enqueueStatsUpdate(ctx, func() { p.stats.Recovery.RecoveryTime = now })
 	}
 	return
+}
+
+func (p *PartitionTable) observeStateChanges() *StateChangeObserver {
+	return p.state.ObserveStateChange()
 }
 
 func (p *PartitionTable) markRecovered(ctx context.Context) error {
@@ -615,6 +624,11 @@ func (p *PartitionTable) storeEvent(key string, value []byte, offset int64) erro
 // IsRecovered returns whether the partition table is recovered
 func (p *PartitionTable) IsRecovered() bool {
 	return p.state.IsState(State(PartitionRunning))
+}
+
+// CurrentState returns the partition's current status
+func (p *PartitionTable) CurrentState() PartitionStatus {
+	return PartitionStatus(p.state.State())
 }
 
 // WaitRecovered returns a channel that closes when the partition table enters state `PartitionRunning`

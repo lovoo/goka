@@ -12,14 +12,29 @@ import (
 	"github.com/lovoo/goka/storage"
 )
 
+// ViewState represents the state of the view
+type ViewState int
+
 const (
 	// ViewStateIdle  - the view is not started yet
-	ViewStateIdle State = iota
-	// ViewStateCatchUp - the view is still catching up
+	ViewStateIdle ViewState = iota
+	// ViewStateInitializing - the view (i.e. at least one partition) is initializing
+	ViewStateInitializing
+	// ViewStateConnecting - the view (i.e. at least one partition) is (re-)connecting
+	ViewStateConnecting
+	// ViewStateCatchUp - the view (i.e. at least one partition) is still catching up
 	ViewStateCatchUp
-	// ViewStateRunning - the view has caught up and is running
+	// ViewStateRunning - the view (i.e. all partitions) has caught up and is running
 	ViewStateRunning
 )
+
+func newViewSignal() *Signal {
+	return NewSignal(State(ViewStateIdle),
+		State(ViewStateInitializing),
+		State(ViewStateConnecting),
+		State(ViewStateCatchUp),
+		State(ViewStateRunning)).SetState(State(ViewStateIdle))
+}
 
 // Getter functions return a value for a key or an error. If no value exists for the key, nil is returned without errors.
 type Getter func(string) (interface{}, error)
@@ -75,7 +90,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 		log:      opts.log.Prefix(fmt.Sprintf("View %s", topic)),
 		consumer: consumer,
 		tmgr:     tmgr,
-		state:    NewSignal(ViewStateIdle, ViewStateCatchUp, ViewStateRunning).SetState(ViewStateIdle),
+		state:    newViewSignal(),
 	}
 
 	if err = v.createPartitions(brokers); err != nil {
@@ -87,7 +102,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 
 // WaitRunning returns a channel that will be closed when the view enters the running state
 func (v *View) WaitRunning() <-chan struct{} {
-	return v.state.WaitForState(ViewStateRunning)
+	return v.state.WaitForState(State(ViewStateRunning))
 }
 
 func (v *View) createPartitions(brokers []string) (rerr error) {
@@ -134,6 +149,62 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 	return nil
 }
 
+func (v *View) runStateMerger(ctx context.Context) {
+
+	// when the state of any partition updates,
+	// get the *lowest* state, which is the partition least running.
+	// Then translate that state to a view state.
+	updateViewState := func() {
+		var lowestState = PartitionStatus(-1)
+
+		for _, part := range v.partitions {
+			state := part.CurrentState()
+			if lowestState == -1 || state < lowestState {
+				lowestState = state
+			}
+		}
+
+		switch lowestState {
+		case PartitionStopped:
+			v.state.SetState(State(ViewStateIdle))
+		case PartitionInitializing:
+			v.state.SetState(State(ViewStateInitializing))
+		case PartitionConnecting:
+			v.state.SetState(State(ViewStateConnecting))
+		case PartitionRecovering:
+			v.state.SetState(State(ViewStateCatchUp))
+		case PartitionPreparing:
+			v.state.SetState(State(ViewStateCatchUp))
+		case PartitionRunning:
+			v.state.SetState(State(ViewStateRunning))
+		default:
+			v.log.Printf("State merger received unknown partition state: %v", lowestState)
+		}
+	}
+
+	// get a state change observer for all partitions
+	for _, partition := range v.partitions {
+		partition := partition
+		observer := partition.observeStateChanges()
+		// create a goroutine that updates the view state based all partition states
+		go func() {
+			for {
+				select {
+				case _, ok := <-observer.C():
+					if !ok {
+						return
+					}
+					// something has changed, so update the state
+					updateViewState()
+				case <-ctx.Done():
+					observer.Stop()
+					return
+				}
+			}
+		}()
+	}
+}
+
 // Run starts consuming the view's topic and saving updates in the local persistent cache.
 //
 // The view will shutdown in case of errors or when the context is closed.
@@ -145,8 +216,10 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 	v.log.Debugf("starting")
 	defer v.log.Debugf("stopped")
 
-	v.state.SetState(ViewStateCatchUp)
-	defer v.state.SetState(ViewStateIdle)
+	// update the view state asynchronously by observing
+	// the partition's state and translating that to the view
+	v.runStateMerger(ctx)
+	defer v.state.SetState(State(ViewStateIdle))
 
 	// close the view after running
 	defer func() {
@@ -176,8 +249,6 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 		return nil
 	default:
 	}
-
-	v.state.SetState(ViewStateRunning)
 
 	catchupErrg, catchupCtx := multierr.NewErrGroup(ctx)
 
@@ -346,6 +417,12 @@ func (v *View) Recovered() bool {
 	}
 
 	return true
+}
+
+// CurrentState returns the current ViewState of the view
+// This is useful for polling e.g. when implementing health checks or metrics
+func (v *View) CurrentState() ViewState {
+	return ViewState(v.state.State())
 }
 
 // Stats returns a set of performance metrics of the view.

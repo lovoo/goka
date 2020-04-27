@@ -14,6 +14,8 @@ const (
 	// PartitionInitializing indicates that the underlying storage is initializing (e.g. opening leveldb files),
 	// and has not actually started working yet.
 	PartitionInitializing
+	// PartitionConnecting indicates the partition trying to (re-)connect to Kafka
+	PartitionConnecting
 	// PartitionRecovering indicates the partition is recovering and the storage
 	// is writing updates in bulk-mode (if the storage implementation supports it).
 	PartitionRecovering
