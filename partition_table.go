@@ -42,11 +42,10 @@ type PartitionTable struct {
 	tmgr           TopicManager
 	updateCallback UpdateCallback
 
-	stats           *TableStats
-	cancelStatsLoop context.CancelFunc
-	requestStats    chan bool
-	responseStats   chan *TableStats
-	updateStats     chan func()
+	stats         *TableStats
+	requestStats  chan bool
+	responseStats chan *TableStats
+	updateStats   chan func()
 
 	offsetM sync.Mutex
 	// current offset
@@ -82,8 +81,6 @@ func newPartitionTable(topic string,
 	backoff Backoff,
 	backoffResetTimeout time.Duration) *PartitionTable {
 
-	statsLoopCtx, cancel := context.WithCancel(context.Background())
-
 	pt := &PartitionTable{
 		partition:      partition,
 		state:          newPartitionTableState(),
@@ -96,23 +93,21 @@ func newPartitionTable(topic string,
 		stallPeriod:    defaultStallPeriod,
 		stalledTimeout: defaultStalledTimeout,
 
-		stats:           newTableStats(),
-		requestStats:    make(chan bool),
-		responseStats:   make(chan *TableStats, 1),
-		updateStats:     make(chan func(), 10),
-		cancelStatsLoop: cancel,
+		stats:         newTableStats(),
+		requestStats:  make(chan bool),
+		responseStats: make(chan *TableStats, 1),
+		updateStats:   make(chan func(), 10),
 
 		backoff:             backoff,
 		backoffResetTimeout: backoffResetTimeout,
 	}
-
-	go pt.runStatsLoop(statsLoopCtx)
 
 	return pt
 }
 
 // SetupAndRecover sets up the partition storage and recovers to HWM
 func (p *PartitionTable) SetupAndRecover(ctx context.Context, restartOnError bool) error {
+
 	err := p.setup(ctx)
 	if err != nil {
 		return err
@@ -538,10 +533,17 @@ func (p *PartitionTable) enqueueStatsUpdate(ctx context.Context, updater func())
 	select {
 	case p.updateStats <- updater:
 	case <-ctx.Done():
+	default:
+		// going to default indicates the updateStats channel is not read, so so the stats
+		// loop is not actually running.
+		// We must not block here, so we'll skip the update
 	}
 }
 
-func (p *PartitionTable) runStatsLoop(ctx context.Context) {
+// RunStatsLoop starts the handler for stats requests. This loop runs detached from the
+// recover/catchup mechanism so clients can always request stats even if the partition table is not
+// running (like a processor table after it's recovered).
+func (p *PartitionTable) RunStatsLoop(ctx context.Context) {
 
 	updateHwmStatsTicker := time.NewTicker(statsHwmUpdateInterval)
 	defer updateHwmStatsTicker.Stop()

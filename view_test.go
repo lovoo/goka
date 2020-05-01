@@ -697,7 +697,7 @@ func TestView_WaitRunning(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
-		view.state = newViewSignal()
+		view.state = newViewSignal().SetState(State(ViewStateRunning))
 
 		var isRunning bool
 		select {

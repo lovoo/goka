@@ -237,6 +237,7 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 
 	for _, partition := range v.partitions {
 		partition := partition
+		go partition.RunStatsLoop(ctx)
 		recoverErrg.Go(func() error {
 			return partition.SetupAndRecover(recoverCtx, v.opts.autoreconnect)
 		})

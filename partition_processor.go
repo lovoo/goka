@@ -182,6 +182,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	defer pp.state.SetState(PPStateRunning)
 
 	if pp.table != nil {
+		go pp.table.RunStatsLoop(runnerCtx)
 		setupErrg.Go(func() error {
 			pp.log.Debugf("catching up table")
 			defer pp.log.Debugf("catching up table done")
@@ -202,6 +203,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 		)
 		pp.joins[join.Topic()] = table
 
+		go table.RunStatsLoop(runnerCtx)
 		setupErrg.Go(func() error {
 			return table.SetupAndRecover(setupCtx, false)
 		})
@@ -358,6 +360,10 @@ func (pp *PartitionProcessor) enqueueStatsUpdate(ctx context.Context, updater fu
 	select {
 	case pp.updateStats <- updater:
 	case <-ctx.Done():
+	default:
+		// going to default indicates the updateStats channel is not read, so so the stats
+		// loop is not actually running.
+		// We must not block here, so we'll skip the update
 	}
 }
 
