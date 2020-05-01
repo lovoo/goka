@@ -112,7 +112,7 @@ func newPartitionTable(topic string,
 }
 
 // SetupAndRecover sets up the partition storage and recovers to HWM
-func (p *PartitionTable) SetupAndRecover(ctx context.Context) error {
+func (p *PartitionTable) SetupAndRecover(ctx context.Context, restartOnError bool) error {
 	err := p.setup(ctx)
 	if err != nil {
 		return err
@@ -126,6 +126,9 @@ func (p *PartitionTable) SetupAndRecover(ctx context.Context) error {
 	default:
 	}
 
+	if restartOnError {
+		return p.loadRestarting(ctx, true)
+	}
 	return p.load(ctx, true)
 }
 
@@ -133,27 +136,33 @@ func (p *PartitionTable) SetupAndRecover(ctx context.Context) error {
 // Option restartOnError allows the view to stay open/intact even in case of consumer errors
 func (p *PartitionTable) CatchupForever(ctx context.Context, restartOnError bool) error {
 	if restartOnError {
-		var resetTimer *time.Timer
-		for {
-			err := p.load(ctx, false)
-			if err != nil {
-				p.log.Printf("Error while catching up, but we'll try to keep it running: %v", err)
-
-				if resetTimer != nil {
-					resetTimer.Stop()
-				}
-				resetTimer = time.AfterFunc(p.backoffResetTimeout, p.backoff.Reset)
-			}
-
-			select {
-			case <-ctx.Done():
-				return nil
-
-			case <-time.After(p.backoff.Duration()):
-			}
-		}
+		return p.loadRestarting(ctx, false)
 	}
 	return p.load(ctx, false)
+}
+
+func (p *PartitionTable) loadRestarting(ctx context.Context, stopAfterCatchup bool) error {
+	var resetTimer *time.Timer
+	for {
+		err := p.load(ctx, stopAfterCatchup)
+		if err != nil {
+			p.log.Printf("Error while catching up, but we'll try to keep it running: %v", err)
+
+			if resetTimer != nil {
+				resetTimer.Stop()
+			}
+			resetTimer = time.AfterFunc(p.backoffResetTimeout, p.backoff.Reset)
+		} else {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+
+		case <-time.After(p.backoff.Duration()):
+		}
+	}
 }
 
 // Setup creates the storage for the partition table

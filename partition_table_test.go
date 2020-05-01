@@ -895,7 +895,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
 
-		err := pt.SetupAndRecover(ctx)
+		err := pt.SetupAndRecover(ctx, false)
 		test.AssertNil(t, err)
 		test.AssertTrue(t, count == msgsToRecover)
 	})
@@ -920,7 +920,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
-		err := pt.SetupAndRecover(ctx)
+		err := pt.SetupAndRecover(ctx, false)
 		test.AssertNotNil(t, err)
 	})
 }
@@ -973,7 +973,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 			}
 		}()
 
-		err := pt.SetupAndRecover(ctx)
+		err := pt.SetupAndRecover(ctx, false)
 		test.AssertNil(t, err)
 		cancel()
 	})
@@ -998,7 +998,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
-		err := pt.SetupAndRecover(ctx)
+		err := pt.SetupAndRecover(ctx, false)
 		test.AssertNotNil(t, err)
 		cancel()
 	})

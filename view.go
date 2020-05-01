@@ -163,22 +163,26 @@ func (v *View) runStateMerger(ctx context.Context) {
 				lowestState = state
 			}
 		}
-
+		var newState = ViewState(-1)
 		switch lowestState {
 		case PartitionStopped:
-			v.state.SetState(State(ViewStateIdle))
+			newState = ViewStateIdle
 		case PartitionInitializing:
-			v.state.SetState(State(ViewStateInitializing))
+			newState = ViewStateInitializing
 		case PartitionConnecting:
-			v.state.SetState(State(ViewStateConnecting))
+			newState = ViewStateConnecting
 		case PartitionRecovering:
-			v.state.SetState(State(ViewStateCatchUp))
+			newState = ViewStateCatchUp
 		case PartitionPreparing:
-			v.state.SetState(State(ViewStateCatchUp))
+			newState = ViewStateCatchUp
 		case PartitionRunning:
-			v.state.SetState(State(ViewStateRunning))
+			newState = ViewStateRunning
 		default:
 			v.log.Printf("State merger received unknown partition state: %v", lowestState)
+		}
+
+		if newState != -1 {
+			v.state.SetState(State(newState))
 		}
 	}
 
@@ -234,7 +238,7 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 	for _, partition := range v.partitions {
 		partition := partition
 		recoverErrg.Go(func() error {
-			return partition.SetupAndRecover(recoverCtx)
+			return partition.SetupAndRecover(recoverCtx, v.opts.autoreconnect)
 		})
 	}
 

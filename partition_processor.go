@@ -185,7 +185,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 		setupErrg.Go(func() error {
 			pp.log.Debugf("catching up table")
 			defer pp.log.Debugf("catching up table done")
-			return pp.table.SetupAndRecover(setupCtx)
+			return pp.table.SetupAndRecover(setupCtx, false)
 		})
 	}
 
@@ -203,7 +203,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 		pp.joins[join.Topic()] = table
 
 		setupErrg.Go(func() error {
-			return table.SetupAndRecover(setupCtx)
+			return table.SetupAndRecover(setupCtx, false)
 		})
 	}
 
