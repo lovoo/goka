@@ -59,7 +59,7 @@ func (s *Signal) SetState(state State) *Signal {
 
 	// notify the state change observers
 	for _, obs := range s.stateChangeObservers {
-		obs.c <- struct{}{}
+		obs.notify(state)
 	}
 
 	return s
@@ -119,9 +119,12 @@ func (s *Signal) waitForWaiter(state State, w *waiter) chan struct{} {
 
 // StateChangeObserver wraps a channel that triggers when the signal's state changes
 type StateChangeObserver struct {
-	c    chan struct{}
+	// state notifier channel
+	c chan State
+	// closed is closed when the observer is closed to avoid sending to a closed channel
+	closed chan struct{}
+	// stop is a callback to stop the observer
 	stop func()
-	s    *Signal
 }
 
 // Stop stops the observer. Its update channel will be closed and
@@ -130,30 +133,36 @@ func (s *StateChangeObserver) Stop() {
 }
 
 // C returns the channel to observer state changes
-func (s *StateChangeObserver) C() <-chan struct{} {
+func (s *StateChangeObserver) C() <-chan State {
 	return s.c
 }
 
-// State returns the current state of the Signal
-func (s *StateChangeObserver) State() State {
-	return s.s.State()
+func (s *StateChangeObserver) notify(state State) {
+	select {
+	case <-s.closed:
+	case s.c <- state:
+	}
 }
 
 // ObserveStateChange returns a channel that receives state changes.
 // Note that the caller must take care of consuming that channel, otherwise the Signal
-// will block upon state changes
+// will block upon state changes.
 func (s *Signal) ObserveStateChange() *StateChangeObserver {
 	s.m.Lock()
 	defer s.m.Unlock()
 
 	observer := &StateChangeObserver{
-		c: make(chan struct{}, 1),
-		s: s,
+		c:      make(chan State, 1),
+		closed: make(chan struct{}),
 	}
+
+	// initialize the observer with the current state
+	observer.notify(s.State())
 
 	// the stop funtion stops the observer by closing its channel
 	// and removing it from the list of observers
 	observer.stop = func() {
+		close(observer.closed)
 		s.m.Lock()
 		defer s.m.Unlock()
 

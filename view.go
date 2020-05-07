@@ -151,16 +151,25 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 
 func (v *View) runStateMerger(ctx context.Context) {
 
-	// when the state of any partition updates,
-	// get the *lowest* state, which is the partition least running.
-	// Then translate that state to a view state.
-	updateViewState := func() {
+	var (
+		states = make(map[int]PartitionStatus)
+		m      sync.Mutex
+	)
+
+	// internal callback that will be called when the state of any
+	// partition changes.
+	// Then the "lowest" state of all partitions will be selected and
+	// translated into the respective ViewState
+	updateViewState := func(idx int, state State) {
+		m.Lock()
+		defer m.Unlock()
+		states[idx] = PartitionStatus(state)
+
 		var lowestState = PartitionStatus(-1)
 
-		for _, part := range v.partitions {
-			state := part.CurrentState()
-			if lowestState == -1 || state < lowestState {
-				lowestState = state
+		for _, partitionState := range states {
+			if lowestState == -1 || partitionState < lowestState {
+				lowestState = partitionState
 			}
 		}
 		var newState = ViewState(-1)
@@ -187,19 +196,21 @@ func (v *View) runStateMerger(ctx context.Context) {
 	}
 
 	// get a state change observer for all partitions
-	for _, partition := range v.partitions {
+	for idx, partition := range v.partitions {
+		idx := idx
 		partition := partition
+
 		observer := partition.observeStateChanges()
 		// create a goroutine that updates the view state based all partition states
 		go func() {
 			for {
 				select {
-				case _, ok := <-observer.C():
+				case newState, ok := <-observer.C():
 					if !ok {
 						return
 					}
 					// something has changed, so update the state
-					updateViewState()
+					updateViewState(idx, newState)
 				case <-ctx.Done():
 					observer.Stop()
 					return
@@ -428,6 +439,32 @@ func (v *View) Recovered() bool {
 // This is useful for polling e.g. when implementing health checks or metrics
 func (v *View) CurrentState() ViewState {
 	return ViewState(v.state.State())
+}
+
+// ObserveStateChanges returns a StateChangeObserver that allows to handle state changes of the view
+// by reading from a channel.
+// It is crucial to continuously read from that channel, otherwise the View might deadlock upon
+// state changes.
+// If the observer is not needed, the caller must call observer.Stop()
+//
+// Example
+//
+//  view := goka.NewView(...)
+//  go view.Run(ctx)
+//
+//  go func(){
+//    obs := view.ObserveStateChanges()
+//    defer obs.Stop()
+//    for {
+//      select{
+//        case state, ok := <-obs.C:
+//          // handle state (or closed channel)
+//        case <-ctx.Done():
+//      }
+//    }
+//  }()
+func (v *View) ObserveStateChanges() *StateChangeObserver {
+	return v.state.ObserveStateChange()
 }
 
 // Stats returns a set of performance metrics of the view.

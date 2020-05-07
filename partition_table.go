@@ -137,25 +137,35 @@ func (p *PartitionTable) CatchupForever(ctx context.Context, restartOnError bool
 }
 
 func (p *PartitionTable) loadRestarting(ctx context.Context, stopAfterCatchup bool) error {
-	var resetTimer *time.Timer
+	var (
+		resetTimer *time.Timer
+		retries    int
+	)
+
 	for {
 		err := p.load(ctx, stopAfterCatchup)
 		if err != nil {
-			p.log.Printf("Error while catching up, but we'll try to keep it running: %v", err)
+			p.log.Printf("Error while starting up: %v", err)
 
+			retries++
 			if resetTimer != nil {
 				resetTimer.Stop()
 			}
-			resetTimer = time.AfterFunc(p.backoffResetTimeout, p.backoff.Reset)
+			resetTimer = time.AfterFunc(p.backoffResetTimeout, func() {
+				p.backoff.Reset()
+				retries = 0
+			})
 		} else {
 			return nil
 		}
 
+		retryDuration := p.backoff.Duration()
+		p.log.Printf("Will retry in %.0f seconds (retried %d times so far)", retryDuration.Seconds(), retries)
 		select {
 		case <-ctx.Done():
 			return nil
 
-		case <-time.After(p.backoff.Duration()):
+		case <-time.After(retryDuration):
 		}
 	}
 }
