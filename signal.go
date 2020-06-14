@@ -17,7 +17,7 @@ type waiter struct {
 // Signal allows synchronization on a state, waiting for that state and checking
 // the current state
 type Signal struct {
-	m                    sync.Mutex
+	m                    sync.RWMutex
 	state                State
 	waiters              []*waiter
 	stateChangeObservers []*StateChangeObserver
@@ -45,8 +45,14 @@ func (s *Signal) SetState(state State) *Signal {
 		panic(fmt.Errorf("trying to set illegal state %v", state))
 	}
 
+	// if we're already in the state, do not notify anyone
+	if s.state == state {
+		return s
+	}
+
 	// set the state and notify all channels waiting for it.
 	s.state = state
+
 	var newWaiters []*waiter
 	for _, w := range s.waiters {
 		if w.state == state || (w.minState && state >= w.state) {
@@ -67,11 +73,15 @@ func (s *Signal) SetState(state State) *Signal {
 
 // IsState returns if the signal is in the requested state
 func (s *Signal) IsState(state State) bool {
+	s.m.RLock()
+	defer s.m.RUnlock()
 	return s.state == state
 }
 
 // State returns the current state
 func (s *Signal) State() State {
+	s.m.RLock()
+	defer s.m.RUnlock()
 	return s.state
 }
 
@@ -94,7 +104,7 @@ func (s *Signal) WaitForStateMin(state State) chan struct{} {
 // state.
 func (s *Signal) WaitForState(state State) chan struct{} {
 	s.m.Lock()
-	defer s.m.Unlock()
+	s.m.Unlock()
 
 	w := &waiter{
 		done:  make(chan struct{}),
@@ -108,7 +118,7 @@ func (s *Signal) waitForWaiter(state State, w *waiter) chan struct{} {
 
 	// if the signal is currently in that state (or in a higher state if minState is set)
 	// then close the waiter immediately
-	if curState := s.State(); state == curState || (w.minState && curState >= state) {
+	if curState := s.state; state == curState || (w.minState && curState >= state) {
 		close(w.done)
 	} else {
 		s.waiters = append(s.waiters, w)
@@ -157,7 +167,7 @@ func (s *Signal) ObserveStateChange() *StateChangeObserver {
 	}
 
 	// initialize the observer with the current state
-	observer.notify(s.State())
+	observer.notify(s.state)
 
 	// the stop funtion stops the observer by closing its channel
 	// and removing it from the list of observers

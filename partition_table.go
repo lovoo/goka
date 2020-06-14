@@ -217,7 +217,7 @@ WaitLoop:
 		case <-ticker.C:
 			p.log.Printf("creating storage for topic %s/%d for %.1f minutes ...", p.topic, p.partition, time.Since(start).Minutes())
 		case <-done:
-			p.log.Printf("finished building storage for topic %s/%d in %.1f minutes", p.topic, p.partition, time.Since(start).Minutes())
+			p.log.Debugf("finished building storage for topic %s/%d in %.1f minutes", p.topic, p.partition, time.Since(start).Minutes())
 			if err != nil {
 				return nil, fmt.Errorf("error building storage: %v", err)
 			}
@@ -282,6 +282,8 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		return
 	}()
 
+	p.state.SetState(State(PartitionConnecting))
+
 	// fetch local offset
 	storedOffset, err = p.st.GetOffset(offsetNotStored)
 	if err != nil {
@@ -332,8 +334,6 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	}
 
 	defer p.log.Debugf("... Loading done")
-
-	p.state.SetState(State(PartitionConnecting))
 
 	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, loadOffset)
 	if err != nil {

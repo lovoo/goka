@@ -438,8 +438,8 @@ func (g *Processor) assignmentFromSession(session sarama.ConsumerGroupSession) (
 func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	g.state.SetState(ProcStateSetup)
 	defer g.state.SetState(ProcStateRunning)
-	g.log.Printf("setup generation %d, claims=%#v", session.GenerationID(), session.Claims())
-	defer g.log.Printf("setup generation %d ... done", session.GenerationID())
+	g.log.Debugf("setup generation %d, claims=%#v", session.GenerationID(), session.Claims())
+	defer g.log.Debugf("setup generation %d ... done", session.GenerationID())
 
 	assignment, err := g.assignmentFromSession(session)
 	if err != nil {
@@ -479,8 +479,8 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 // Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
 // but before the offsets are committed for the very last time.
 func (g *Processor) Cleanup(session sarama.ConsumerGroupSession) error {
-	g.log.Printf("Cleaning up for %d", session.GenerationID())
-	defer g.log.Printf("Cleaning up for %d ... done", session.GenerationID())
+	g.log.Debugf("Cleaning up for %d", session.GenerationID())
+	defer g.log.Debugf("Cleaning up for %d ... done", session.GenerationID())
 
 	g.state.SetState(ProcStateStopping)
 	defer g.state.SetState(ProcStateIdle)
@@ -525,8 +525,8 @@ func (g *Processor) WaitForReady() {
 // Once the Messages() channel is closed, the Handler must finish its processing
 // loop and exit.
 func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	g.log.Printf("ConsumeClaim for topic/partition %s/%d, initialOffset=%d", claim.Topic(), claim.Partition(), claim.InitialOffset())
-	defer g.log.Printf("ConsumeClaim done for topic/partition %s/%d", claim.Topic(), claim.Partition())
+	g.log.Debugf("ConsumeClaim for topic/partition %s/%d, initialOffset=%d", claim.Topic(), claim.Partition(), claim.InitialOffset())
+	defer g.log.Debugf("ConsumeClaim done for topic/partition %s/%d", claim.Topic(), claim.Partition())
 	part, has := g.partitions[claim.Partition()]
 	if !has {
 		return fmt.Errorf("No partition (%d) to handle input in topic %s", claim.Partition(), claim.Topic())
