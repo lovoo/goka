@@ -29,7 +29,7 @@ Goka extends the concept of Kafka consumer groups by binding a state table to th
 ## Documentation
 
 This README provides a brief, high level overview of the ideas behind Goka.
-A more detailed introduction of the project can be found in this [blog post](https://tech.lovoo.com/2017/05/23/goka/).
+A more detailed introduction of the project can be found in this [blog post](https://lovoodotblog.wordpress.com/2017/05/23/goka/).
 
 Package API documentation is available at [GoDoc] and the [Wiki](https://github.com/lovoo/goka/wiki/Tips#configuring-log-compaction-for-table-topics) provides several tips for configuring, extending, and deploying Goka applications.
 
