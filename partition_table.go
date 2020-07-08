@@ -42,11 +42,10 @@ type PartitionTable struct {
 	tmgr           TopicManager
 	updateCallback UpdateCallback
 
-	stats           *TableStats
-	cancelStatsLoop context.CancelFunc
-	requestStats    chan bool
-	responseStats   chan *TableStats
-	updateStats     chan func()
+	stats         *TableStats
+	requestStats  chan bool
+	responseStats chan *TableStats
+	updateStats   chan func()
 
 	offsetM sync.Mutex
 	// current offset
@@ -65,6 +64,7 @@ func newPartitionTableState() *Signal {
 	return NewSignal(
 		State(PartitionStopped),
 		State(PartitionInitializing),
+		State(PartitionConnecting),
 		State(PartitionRecovering),
 		State(PartitionPreparing),
 		State(PartitionRunning),
@@ -81,8 +81,6 @@ func newPartitionTable(topic string,
 	backoff Backoff,
 	backoffResetTimeout time.Duration) *PartitionTable {
 
-	statsLoopCtx, cancel := context.WithCancel(context.Background())
-
 	pt := &PartitionTable{
 		partition:      partition,
 		state:          newPartitionTableState(),
@@ -95,23 +93,21 @@ func newPartitionTable(topic string,
 		stallPeriod:    defaultStallPeriod,
 		stalledTimeout: defaultStalledTimeout,
 
-		stats:           newTableStats(),
-		requestStats:    make(chan bool),
-		responseStats:   make(chan *TableStats, 1),
-		updateStats:     make(chan func(), 10),
-		cancelStatsLoop: cancel,
+		stats:         newTableStats(),
+		requestStats:  make(chan bool),
+		responseStats: make(chan *TableStats, 1),
+		updateStats:   make(chan func(), 10),
 
 		backoff:             backoff,
 		backoffResetTimeout: backoffResetTimeout,
 	}
 
-	go pt.runStatsLoop(statsLoopCtx)
-
 	return pt
 }
 
 // SetupAndRecover sets up the partition storage and recovers to HWM
-func (p *PartitionTable) SetupAndRecover(ctx context.Context) error {
+func (p *PartitionTable) SetupAndRecover(ctx context.Context, restartOnError bool) error {
+
 	err := p.setup(ctx)
 	if err != nil {
 		return err
@@ -125,6 +121,9 @@ func (p *PartitionTable) SetupAndRecover(ctx context.Context) error {
 	default:
 	}
 
+	if restartOnError {
+		return p.loadRestarting(ctx, true)
+	}
 	return p.load(ctx, true)
 }
 
@@ -132,27 +131,43 @@ func (p *PartitionTable) SetupAndRecover(ctx context.Context) error {
 // Option restartOnError allows the view to stay open/intact even in case of consumer errors
 func (p *PartitionTable) CatchupForever(ctx context.Context, restartOnError bool) error {
 	if restartOnError {
-		var resetTimer *time.Timer
-		for {
-			err := p.load(ctx, false)
-			if err != nil {
-				p.log.Printf("Error while catching up, but we'll try to keep it running: %v", err)
-
-				if resetTimer != nil {
-					resetTimer.Stop()
-				}
-				resetTimer = time.AfterFunc(p.backoffResetTimeout, p.backoff.Reset)
-			}
-
-			select {
-			case <-ctx.Done():
-				return nil
-
-			case <-time.After(p.backoff.Duration()):
-			}
-		}
+		return p.loadRestarting(ctx, false)
 	}
 	return p.load(ctx, false)
+}
+
+func (p *PartitionTable) loadRestarting(ctx context.Context, stopAfterCatchup bool) error {
+	var (
+		resetTimer *time.Timer
+		retries    int
+	)
+
+	for {
+		err := p.load(ctx, stopAfterCatchup)
+		if err != nil {
+			p.log.Printf("Error while starting up: %v", err)
+
+			retries++
+			if resetTimer != nil {
+				resetTimer.Stop()
+			}
+			resetTimer = time.AfterFunc(p.backoffResetTimeout, func() {
+				p.backoff.Reset()
+				retries = 0
+			})
+		} else {
+			return nil
+		}
+
+		retryDuration := p.backoff.Duration()
+		p.log.Printf("Will retry in %.0f seconds (retried %d times so far)", retryDuration.Seconds(), retries)
+		select {
+		case <-ctx.Done():
+			return nil
+
+		case <-time.After(retryDuration):
+		}
+	}
 }
 
 // Setup creates the storage for the partition table
@@ -202,7 +217,7 @@ WaitLoop:
 		case <-ticker.C:
 			p.log.Printf("creating storage for topic %s/%d for %.1f minutes ...", p.topic, p.partition, time.Since(start).Minutes())
 		case <-done:
-			p.log.Printf("finished building storage for topic %s/%d in %.1f minutes", p.topic, p.partition, time.Since(start).Minutes())
+			p.log.Debugf("finished building storage for topic %s/%d in %.1f minutes", p.topic, p.partition, time.Since(start).Minutes())
 			if err != nil {
 				return nil, fmt.Errorf("error building storage: %v", err)
 			}
@@ -267,6 +282,8 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		return
 	}()
 
+	p.state.SetState(State(PartitionConnecting))
+
 	// fetch local offset
 	storedOffset, err = p.st.GetOffset(offsetNotStored)
 	if err != nil {
@@ -318,10 +335,6 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 
 	defer p.log.Debugf("... Loading done")
 
-	if stopAfterCatchup {
-		p.state.SetState(State(PartitionRecovering))
-	}
-
 	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, loadOffset)
 	if err != nil {
 		errs.Collect(fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, storedOffset, err))
@@ -336,6 +349,12 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		partConsumer.AsyncClose()
 		p.drainConsumer(partConsumer, errs)
 	}()
+
+	if stopAfterCatchup {
+		p.state.SetState(State(PartitionRecovering))
+	} else {
+		p.state.SetState(State(PartitionRunning))
+	}
 
 	// load messages and stop when you're at HWM
 	loadErr := p.loadMessages(ctx, partConsumer, hwm, stopAfterCatchup)
@@ -352,6 +371,10 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		p.enqueueStatsUpdate(ctx, func() { p.stats.Recovery.RecoveryTime = now })
 	}
 	return
+}
+
+func (p *PartitionTable) observeStateChanges() *StateChangeObserver {
+	return p.state.ObserveStateChange()
 }
 
 func (p *PartitionTable) markRecovered(ctx context.Context) error {
@@ -520,10 +543,17 @@ func (p *PartitionTable) enqueueStatsUpdate(ctx context.Context, updater func())
 	select {
 	case p.updateStats <- updater:
 	case <-ctx.Done():
+	default:
+		// going to default indicates the updateStats channel is not read, so so the stats
+		// loop is not actually running.
+		// We must not block here, so we'll skip the update
 	}
 }
 
-func (p *PartitionTable) runStatsLoop(ctx context.Context) {
+// RunStatsLoop starts the handler for stats requests. This loop runs detached from the
+// recover/catchup mechanism so clients can always request stats even if the partition table is not
+// running (like a processor table after it's recovered).
+func (p *PartitionTable) RunStatsLoop(ctx context.Context) {
 
 	updateHwmStatsTicker := time.NewTicker(statsHwmUpdateInterval)
 	defer updateHwmStatsTicker.Stop()
@@ -615,6 +645,11 @@ func (p *PartitionTable) storeEvent(key string, value []byte, offset int64) erro
 // IsRecovered returns whether the partition table is recovered
 func (p *PartitionTable) IsRecovered() bool {
 	return p.state.IsState(State(PartitionRunning))
+}
+
+// CurrentState returns the partition's current status
+func (p *PartitionTable) CurrentState() PartitionStatus {
+	return PartitionStatus(p.state.State())
 }
 
 // WaitRecovered returns a channel that closes when the partition table enters state `PartitionRunning`

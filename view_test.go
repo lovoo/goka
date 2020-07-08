@@ -592,7 +592,7 @@ func TestView_Run(t *testing.T) {
 
 		pt.consumer = consumer
 		view.partitions = []*PartitionTable{pt}
-		view.state = NewSignal(State(ViewStateCatchUp), State(ViewStateRunning), State(ViewStateIdle)).SetState(State(ViewStateIdle))
+		view.state = newViewSignal()
 
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil).AnyTimes()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil).AnyTimes()
@@ -647,7 +647,7 @@ func TestView_Run(t *testing.T) {
 
 		pt.consumer = consumer
 		view.partitions = []*PartitionTable{pt}
-		view.state = NewSignal(State(ViewStateCatchUp), State(ViewStateRunning), State(ViewStateIdle)).SetState(State(ViewStateIdle))
+		view.state = newViewSignal()
 
 		bm.mst.EXPECT().GetOffset(gomock.Any()).Return(int64(0), retErr).AnyTimes()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(sarama.OffsetNewest, retErr).AnyTimes()
@@ -697,7 +697,7 @@ func TestView_WaitRunning(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
-		view.state = NewSignal(State(ViewStateCatchUp), State(ViewStateRunning), State(ViewStateIdle)).SetState(State(ViewStateRunning))
+		view.state = newViewSignal().SetState(State(ViewStateRunning))
 
 		var isRunning bool
 		select {
