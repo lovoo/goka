@@ -16,37 +16,69 @@ const (
 
 // Iterator provides iteration access to the stored values.
 type Iterator interface {
-	// Next advances the iterator to the next key.
+	// Next moves the iterator to the next key-value pair and whether such a pair
+	// exists. Caller should check for possible error by calling Error after Next
+	// returns false.
 	Next() bool
-	// Err should be called after Next returns false to check for possible
-	// iteration errors.
+	// Err returns the error that stopped the iteration if any.
 	Err() error
-	// Key gets the current key. If the iterator is exhausted, key will return
-	// nil.
+	// Key returns the current key. Caller should not keep references to the
+	// buffer or modify its contents.
 	Key() []byte
-	// Value gets the current value.
+	// Value returns the current value. Caller should not keep references to the
+	// buffer or modify its contents.
 	Value() ([]byte, error)
 	// Release releases the iterator. After release, the iterator is not usable
 	// anymore.
 	Release()
-	// Seek for a key in the iterator
+	// Seek moves the iterator to the begining of a key-value pair sequence that
+	// is greater or equal to the given key. It returns whether at least one of
+	// such key-value pairs exist. Next must be called after seeking to access
+	// the first pair.
 	Seek(key []byte) bool
 }
 
-// Storage abstracts the interface for a persistent local storage
+// Storage is the interface Goka expects from a storage implementation.
+// Implementations of this interface must be safe for any number of concurrent
+// readers with one writer.
 type Storage interface {
-	Has(string) (bool, error)
-	Get(string) ([]byte, error)
-	Set(string, []byte) error
-	Delete(string) error
-	SetOffset(value int64) error
-	GetOffset(defValue int64) (int64, error)
-	Iterator() (Iterator, error)
-	IteratorWithRange(start, limit []byte) (Iterator, error)
-	MarkRecovered() error
-	Recovered() bool
+
+	// Opens/Initialize the storage
 	Open() error
+
+	// Close closes the storage.
 	Close() error
+	// Has returns whether the given key exists in the database.
+	Has(key string) (bool, error)
+
+	// Get returns the value associated with the given key. If the key does not
+	// exist, a nil will be returned.
+	Get(key string) ([]byte, error)
+
+	// Set stores a key-value pair.
+	Set(key string, value []byte) error
+
+	// Delete deletes a key-value pair from the storage.
+	Delete(key string) error
+
+	// GetOffset gets the local offset of the storage.
+	GetOffset(def int64) (int64, error)
+
+	// SetOffset sets the local offset of the storage.
+	SetOffset(offset int64) error
+
+	// MarkRecovered marks the storage as recovered. Recovery message throughput
+	// can be a lot higher than during normal operation. This can be used to switch
+	// to a different configuration after the recovery is done.
+	MarkRecovered() error
+
+	// Iterator returns an iterator that traverses over a snapshot of the storage.
+	Iterator() (Iterator, error)
+
+	// Iterator returns a new iterator that iterates over the key-value
+	// pairs. Start and limit define a half-open range [start, limit). If either
+	// is nil, the range will be unbounded on the respective side.
+	IteratorWithRange(start, limit []byte) (Iterator, error)
 }
 
 // store is the common interface between a transaction and db instance
@@ -64,8 +96,6 @@ type storage struct {
 	db    *leveldb.DB
 	// tx is the transaction used for recovery
 	tx *leveldb.Transaction
-
-	currentOffset int64
 }
 
 // New creates a new Storage backed by LevelDB.
@@ -161,10 +191,6 @@ func (s *storage) Set(key string, value []byte) error {
 }
 
 func (s *storage) SetOffset(offset int64) error {
-	if offset > s.currentOffset {
-		s.currentOffset = offset
-	}
-
 	return s.Set(offsetKey, []byte(strconv.FormatInt(offset, 10)))
 }
 
@@ -190,6 +216,7 @@ func (s *storage) Recovered() bool {
 }
 
 func (s *storage) Open() error {
+	// we do the initialization during the building step, so no need to do anything here
 	return nil
 }
 

@@ -2,1528 +2,319 @@ package goka
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"hash"
-	"log"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/kafka"
-	"github.com/lovoo/goka/logger"
-	"github.com/lovoo/goka/mock"
-	"github.com/lovoo/goka/multierr"
-	"github.com/lovoo/goka/storage"
-
-	"github.com/facebookgo/ensure"
+	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/internal/test"
+	"github.com/lovoo/goka/storage"
 )
 
-var (
-	rawCodec = new(codec.Bytes)
-	emptyRebalanceCallback = func(a kafka.Assignment){}
-)
+func createMockBuilder(t *testing.T) (*gomock.Controller, *builderMock) {
+	ctrl := NewMockController(t)
+	bm := newBuilderMock(ctrl)
+	bm.st = storage.NewMemory()
+	return ctrl, bm
+}
 
-func nullStorageBuilder() storage.Builder {
-	return func(topic string, partition int32) (storage.Storage, error) {
-		return &storage.Null{}, nil
+func createTestConsumerGroupBuilder(t *testing.T) (ConsumerGroupBuilder, *MockConsumerGroup) {
+	mock := NewMockConsumerGroup(t)
+	return func(brokers []string, group, clientID string) (sarama.ConsumerGroup, error) {
+		return mock, nil
+	}, mock
+}
+
+func createTestConsumerBuilder(t *testing.T) (SaramaConsumerBuilder, *MockAutoConsumer) {
+	cons := NewMockAutoConsumer(t, nil)
+
+	return func(brokers []string, clientID string) (sarama.Consumer, error) {
+		return cons, nil
+	}, cons
+}
+
+func expectCGEmit(bm *builderMock, table string, msgs []*sarama.ConsumerMessage) {
+	for _, msg := range msgs {
+		bm.producer.EXPECT().Emit(table, string(msg.Key), msg.Value).Return(NewPromise().Finish(nil, nil))
 	}
 }
 
-func syncWith(t *testing.T, ch chan kafka.Event, p ...int32) error {
-	return doTimed(t, func() {
-		for _, par := range p {
-			ch <- &kafka.NOP{Partition: par}
-			ch <- &kafka.NOP{Partition: -1}
-			ch <- &kafka.NOP{Partition: par}
-			ch <- &kafka.NOP{Partition: -1}
-		}
-		ch <- &kafka.NOP{Partition: -1}
-	})
-}
-
-func createStorageBuilder(st storage.Storage) storage.Builder {
-	return func(topic string, partition int32) (storage.Storage, error) {
-		return st, nil
+func expectCGLoop(bm *builderMock, loop string, msgs []*sarama.ConsumerMessage) {
+	bm.tmgr.EXPECT().EnsureStreamExists(loop, 1).AnyTimes()
+	for _, msg := range msgs {
+		bm.producer.EXPECT().Emit(loop, string(msg.Key), gomock.Any()).Return(NewPromise().Finish(nil, nil))
 	}
 }
 
-func createConsumerBuilder(c kafka.Consumer) kafka.ConsumerBuilder {
-	return func(b []string, g, id string) (kafka.Consumer, error) {
-		return c, nil
-	}
-}
-
-func createFailedConsumerBuilder() kafka.ConsumerBuilder {
-	return func(b []string, g, id string) (kafka.Consumer, error) {
-		return nil, errors.New("failed creating consumer")
-	}
-}
-
-func createProducerBuilder(p kafka.Producer) kafka.ProducerBuilder {
-	return func(b []string, id string, hasher func() hash.Hash32) (kafka.Producer, error) {
-		return p, nil
-	}
-}
-
-func createFailedProducerBuilder() kafka.ProducerBuilder {
-	return func(b []string, id string, hasher func() hash.Hash32) (kafka.Producer, error) {
-		return nil, errors.New("failed creating producer")
-	}
-}
-
-func createTopicManagerBuilder(tm kafka.TopicManager) kafka.TopicManagerBuilder {
-	return func(b []string) (kafka.TopicManager, error) {
-		return tm, nil
-	}
-}
-
-func createFailedTopicManagerBuilder(tm kafka.TopicManager) kafka.TopicManagerBuilder {
-	return func(b []string) (kafka.TopicManager, error) {
-		return nil, errors.New("failed creating topic manager")
-	}
-}
-
-func createProcessorStateless(ctrl *gomock.Controller, consumer kafka.Consumer, producer kafka.Producer, npar int, rcb func(a kafka.Assignment)) *Processor {
-	tm := mock.NewMockTopicManager(ctrl)
-
-	var partitions []int32
-	for i := 0; i < npar; i++ {
-		partitions = append(partitions, int32(i))
-	}
-
-	// successfully create processor
-	tm.EXPECT().Partitions(topic).Return(partitions, nil)
-	tm.EXPECT().Partitions(topic2).Return(partitions, nil)
-	tm.EXPECT().EnsureStreamExists(loopName(group), len(partitions)).Return(nil)
-	tm.EXPECT().Close().Return(nil)
-	p, _ := NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Input(topic2, rawCodec, cb),
-			Loop(rawCodec, cb),
-		),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducerBuilder(createProducerBuilder(producer)),
-		WithPartitionChannelSize(0),
-		WithRebalanceCallback(rcb),
-	)
-	return p
-}
-
-func createProcessor(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb storage.Builder) *Processor {
-	tm := mock.NewMockTopicManager(ctrl)
-	producer := mock.NewMockProducer(ctrl)
-
-	var partitions []int32
-	for i := 0; i < npar; i++ {
-		partitions = append(partitions, int32(i))
-	}
-
-	// the prodcuer may be closed, but doesn't have to
-	producer.EXPECT().Close().Return(nil).AnyTimes()
-
-	// successfully create processor
-	tm.EXPECT().Partitions(topic).Return(partitions, nil)
-	tm.EXPECT().Partitions(topic2).Return(partitions, nil)
-	tm.EXPECT().EnsureStreamExists(loopName(group), len(partitions)).Return(nil)
-	tm.EXPECT().EnsureTableExists(tableName(group), len(partitions)).Return(nil)
-	tm.EXPECT().Close().Return(nil)
-	p, err := NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Input(topic2, rawCodec, cb),
-			Loop(rawCodec, cb),
-			Persist(new(codec.String)),
-		),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducerBuilder(createProducerBuilder(producer)),
-		WithStorageBuilder(sb),
-		WithPartitionChannelSize(0),
-	)
-	ensure.Nil(t, err)
-	return p
-}
-
-func createProcessorWithTable(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, producer kafka.Producer, npar int, sb storage.Builder) *Processor {
-	tm := mock.NewMockTopicManager(ctrl)
-
-	var partitions []int32
-	for i := 0; i < npar; i++ {
-		partitions = append(partitions, int32(i))
-	}
-
-	// successfully create processor
-	tm.EXPECT().Partitions(topic).Return(partitions, nil)
-	tm.EXPECT().Partitions(topic2).Return(partitions, nil)
-	tm.EXPECT().Partitions(table).Return(partitions, nil)
-	tm.EXPECT().EnsureStreamExists(loopName(group), len(partitions)).Return(nil)
-	tm.EXPECT().EnsureTableExists(tableName(group), len(partitions)).Return(nil)
-	tm.EXPECT().Close().Return(nil)
-	p, err := NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Input(topic2, rawCodec, cb),
-			Loop(rawCodec, cb),
-			Join(table, rawCodec),
-			Persist(rawCodec),
-		),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducerBuilder(createProducerBuilder(producer)),
-		WithStorageBuilder(sb),
-		WithPartitionChannelSize(0),
-	)
-	ensure.Nil(t, err)
-	return p
-}
-
-func createProcessorWithLookupTable(t *testing.T, ctrl *gomock.Controller, consumer kafka.Consumer, npar int, sb storage.Builder) *Processor {
-	tm := mock.NewMockTopicManager(ctrl)
-	producer := mock.NewMockProducer(ctrl)
-
-	var partitions []int32
-	for i := 0; i < npar; i++ {
-		partitions = append(partitions, int32(i))
-	}
-
-	// successfully create processor
-	tm.EXPECT().Partitions(topic).Return(partitions, nil)
-	tm.EXPECT().Partitions(table).Return(partitions, nil)
-	tm.EXPECT().Close().Return(nil).Times(2)
-	p, err := NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Lookup(table, rawCodec),
-		),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducerBuilder(createProducerBuilder(producer)),
-		WithStorageBuilder(sb),
-		WithPartitionChannelSize(0),
-	)
-	ensure.Nil(t, err)
-	return p
-}
-
-var (
-	topOff = map[string]int64{
-		topic:           -1,
-		loopName(group): -1,
-		topic2:          -1,
-	}
-	errSome = errors.New("some error")
-	cb      = func(ctx Context, msg interface{}) {}
-)
-
-const (
-	topic2 = "topic2"
-	table  = "table"
-	table2 = "table2"
-)
-
-func TestProcessor_process(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
+func expectCGConsume(bm *builderMock, table string, msgs []*sarama.ConsumerMessage) {
 	var (
-		wg       sync.WaitGroup
-		st       = mock.NewMockStorage(ctrl)
-		consumer = mock.NewMockConsumer(ctrl)
-		producer = mock.NewMockProducer(ctrl)
-		pstats   = newPartitionStats()
+		current int64
 	)
 
-	p := &Processor{
-		graph: DefineGroup(group,
-			Persist(new(codec.String)),
-			Loop(c, cb),
-			Input("sometopic", rawCodec, cb),
-			Output("anothertopic", new(codec.String)),
-		),
+	bm.producer.EXPECT().Close().Return(nil).AnyTimes()
 
-		consumer: consumer,
-		producer: producer,
-
-		ctx: context.Background(),
-	}
-
-	// no emits
-	consumer.EXPECT().Commit("sometopic", int32(1), int64(123))
-	msg := &message{Topic: "sometopic", Partition: 1, Offset: 123, Data: []byte("something")}
-	updates, err := p.process(msg, st, &wg, pstats)
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, updates, 0)
-
-	// emit something
-	promise := new(kafka.Promise)
-	gomock.InOrder(
-		producer.EXPECT().Emit("anothertopic", "key", []byte("message")).Return(promise),
-		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
-	)
-	msg = &message{Topic: "sometopic", Partition: 1, Offset: 123, Data: []byte("something")}
-	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
-		ctx.Emit("anothertopic", "key", "message")
-	}
-	updates, err = p.process(msg, st, &wg, pstats)
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, updates, 0)
-	promise.Finish(nil)
-
-	// store something
-	promise = new(kafka.Promise)
-	gomock.InOrder(
-		st.EXPECT().Set("key", []byte("message")),
-		producer.EXPECT().Emit(tableName(group), "key", []byte("message")).Return(promise),
-		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
-		st.EXPECT().SetOffset(int64(322)),
-		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
-	)
-	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
-	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
-		ctx.SetValue("message")
-	}
-	updates, err = p.process(msg, st, &wg, pstats)
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, updates, 1)
-	promise.Finish(nil)
-
-	// store something twice
-	promise = new(kafka.Promise)
-	promise2 := new(kafka.Promise)
-	gomock.InOrder(
-		st.EXPECT().Set("key", []byte("message")),
-		producer.EXPECT().Emit(tableName(group), "key", []byte("message")).Return(promise),
-		st.EXPECT().Set("key", []byte("message2")),
-		producer.EXPECT().Emit(tableName(group), "key", []byte("message2")).Return(promise2),
-		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
-		st.EXPECT().SetOffset(int64(323)),
-		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)),
-	)
-	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
-	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
-		ctx.SetValue("message")
-		ctx.SetValue("message2")
-	}
-	updates, err = p.process(msg, st, &wg, pstats)
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, updates, 2)
-	promise.Finish(nil)
-	promise2.Finish(nil)
-
-}
-
-func TestProcessor_processFail(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	var (
-		wg       sync.WaitGroup
-		st       = mock.NewMockStorage(ctrl)
-		consumer = mock.NewMockConsumer(ctrl)
-		producer = mock.NewMockProducer(ctrl)
-		pstats   = newPartitionStats()
-	)
-	var canceled chan bool
-	newProcessor := func() *Processor {
-		canceled = make(chan bool)
-		p := &Processor{
-			graph: DefineGroup(group,
-				Persist(new(codec.String)),
-				Loop(c, cb),
-				Input("sometopic", rawCodec, cb),
-				Output("anothertopic", new(codec.String)),
-			),
-
-			consumer: consumer,
-			producer: producer,
-			opts:     new(poptions),
-
-			errors: new(multierr.Errors),
-			cancel: func() { close(canceled) },
-			ctx:    context.Background(),
-		}
-
-		p.opts.log = logger.Default()
-		return p
-	}
-	// fail get offset
-	p := newProcessor()
-	promise := new(kafka.Promise)
-	gomock.InOrder(
-		st.EXPECT().Set("key", []byte("message")),
-		producer.EXPECT().Emit(tableName(group), "key", []byte("message")).Return(promise),
-		st.EXPECT().GetOffset(int64(0)).Return(int64(321), errors.New("getOffset failed")),
-	)
-	msg := &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
-	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
-		ctx.SetValue("message")
-	}
-	updates, err := p.process(msg, st, &wg, pstats)
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, updates, 1)
-	promise.Finish(nil)
-	err = doTimed(t, func() {
-		<-canceled
-	})
-	ensure.Nil(t, err)
-
-	// fail set offset
-	promise = new(kafka.Promise)
-	p = newProcessor()
-	gomock.InOrder(
-		st.EXPECT().Set("key", []byte("message")),
-		producer.EXPECT().Emit(tableName(group), "key", []byte("message")).Return(promise),
-		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
-		st.EXPECT().SetOffset(int64(322)).Return(errors.New("setOffset failed")),
-	)
-	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
-	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
-		ctx.SetValue("message")
-	}
-	updates, err = p.process(msg, st, &wg, pstats)
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, updates, 1)
-	promise.Finish(nil)
-	err = doTimed(t, func() {
-		<-canceled
-	})
-	ensure.Nil(t, err)
-
-	// fail commit
-	promise = new(kafka.Promise)
-	p = newProcessor()
-	gomock.InOrder(
-		st.EXPECT().Set("key", []byte("message")),
-		producer.EXPECT().Emit(tableName(group), "key", []byte("message")).Return(promise),
-		st.EXPECT().GetOffset(int64(0)).Return(int64(321), nil),
-		st.EXPECT().SetOffset(int64(322)),
-		consumer.EXPECT().Commit("sometopic", int32(1), int64(123)).Return(errors.New("commit error")),
-	)
-	msg = &message{Topic: "sometopic", Key: "key", Partition: 1, Offset: 123, Data: []byte("something")}
-	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
-		ctx.SetValue("message")
-	}
-	updates, err = p.process(msg, st, &wg, pstats)
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, updates, 1)
-	promise.Finish(nil)
-	err = doTimed(t, func() {
-		<-canceled
-	})
-	ensure.Nil(t, err)
-
-	// fail with panic (ctx.Fatal)
-	p = newProcessor()
-	// we dont add expect consumer.EXPECT().Commit() here, so if the context
-	// would call it, the test would fail
-	p.graph.callbacks["sometopic"] = func(ctx Context, msg interface{}) {
-		ctx.Fail(errSome)
-		t.Errorf("should never reach this point")
-		t.Fail()
-	}
-	go func() {
+	bm.tmgr.EXPECT().Close().Return(nil).AnyTimes()
+	bm.tmgr.EXPECT().EnsureTableExists(table, gomock.Any()).Return(nil)
+	bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).AnyTimes()
+	bm.tmgr.EXPECT().GetOffset(table, gomock.Any(), sarama.OffsetNewest).Return(func() int64 {
 		defer func() {
-			if x := recover(); x != nil {
-				ensure.StringContains(t, fmt.Sprintf("%v", x), errSome.Error())
-			}
+			current++
 		}()
-		updates, err = p.process(msg, st, &wg, pstats)
-	}()
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, updates, 1)
-	err = doTimed(t, func() {
-		<-canceled
-	})
-	ensure.Nil(t, err)
-
+		return current
+	}(), nil)
+	bm.tmgr.EXPECT().GetOffset(table, gomock.Any(), sarama.OffsetOldest).Return(func() int64 {
+		return 0
+	}(), nil)
 }
 
-func TestNewProcessor(t *testing.T) {
-	_, err := NewProcessor(nil, DefineGroup(group))
-	ensure.NotNil(t, err)
-
-	_, err = NewProcessor(nil, DefineGroup(group, Input("topic", rawCodec, nil)))
-	ensure.NotNil(t, err)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	var (
-		consumer = mock.NewMockConsumer(ctrl)
-		producer = mock.NewMockProducer(ctrl)
-		tm       = mock.NewMockTopicManager(ctrl)
-	)
-
-	// error in applyOptions
-	_, err = NewProcessor(nil,
-		DefineGroup(group, Input(topic, rawCodec, cb)),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-		func(o *poptions, gg *GroupGraph) {
-			o.builders.storage = nil
-		},
-	)
-	ensure.NotNil(t, err)
-
-	// error creating topic manager
-	_, err = NewProcessor(nil,
-		DefineGroup(group, Input(topic, rawCodec, cb)),
-		WithTopicManagerBuilder(createFailedTopicManagerBuilder(tm)),
-	)
-	ensure.NotNil(t, err)
-
-	// error closing topic manager
-	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	tm.EXPECT().Close().Return(errSome)
-	_, err = NewProcessor(nil,
-		DefineGroup(group, Input(topic, rawCodec, cb)),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-	)
-	ensure.NotNil(t, err)
-
-	// error calling Partitions in copartitioned
-	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, errSome)
-	tm.EXPECT().Close().Return(nil)
-	_, err = NewProcessor(nil,
-		DefineGroup(group, Input(topic, rawCodec, cb)),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-	)
-	ensure.NotNil(t, err)
-
-	// error with partition gap in copartitioned
-	tm.EXPECT().Partitions(topic).Return([]int32{0, 2}, nil)
-	tm.EXPECT().Close().Return(nil)
-	_, err = NewProcessor(nil,
-		DefineGroup(group, Input(topic, rawCodec, cb)),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-	)
-	ensure.NotNil(t, err)
-
-	// error with non-copartitioned topics
-	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	tm.EXPECT().Partitions(topic2).Return([]int32{0, 1, 2}, nil)
-	tm.EXPECT().Close().Return(nil)
-	_, err = NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Input(topic2, rawCodec, cb),
-		),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-	)
-	ensure.NotNil(t, err)
-
-	// error ensuring streams
-	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	tm.EXPECT().EnsureStreamExists("group-loop", 2).Return(errSome)
-	tm.EXPECT().Close().Return(nil)
-	_, err = NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Loop(rawCodec, cb),
-		),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-	)
-	ensure.NotNil(t, err)
-
-	// error ensuring table
-	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	tm.EXPECT().EnsureTableExists("group-table", 2).Return(errSome)
-	tm.EXPECT().Close().Return(nil)
-	_, err = NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Persist(rawCodec),
-		),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-		WithStorageBuilder(storage.MemoryBuilder()),
-	)
-	ensure.NotNil(t, err)
-
-	// error creating views
-	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	// lookup table is allowed to be not copartitioned with input
-	tm.EXPECT().Partitions(table).Return([]int32{0, 1, 2}, errSome)
-	tm.EXPECT().Close().Return(nil).Times(2)
-	_, err = NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Lookup(table, rawCodec)),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-		WithStorageBuilder(storage.MemoryBuilder()),
-	)
-	ensure.NotNil(t, err)
-
-	// successfully create processor
-	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	tm.EXPECT().Partitions(string(topic2)).Return([]int32{0, 1}, nil)
-	tm.EXPECT().EnsureStreamExists(loopName(group), 2).Return(nil)
-	tm.EXPECT().EnsureTableExists(tableName(group), 2).Return(nil)
-	tm.EXPECT().Close().Return(nil)
-	p, err := NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Input(topic2, rawCodec, cb),
-			Loop(rawCodec, cb),
-			Persist(rawCodec),
-		),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-		WithStorageBuilder(storage.MemoryBuilder()),
-	)
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, p.graph.GroupTable().Topic(), tableName(group))
-	ensure.DeepEqual(t, p.graph.LoopStream().Topic(), loopName(group))
-	ensure.True(t, p.partitionCount == 2)
-	ensure.True(t, len(p.graph.inputs()) == 2)
-	ensure.False(t, p.isStateless())
-
-	// successfully create stateless processor
-	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	tm.EXPECT().Partitions(string(topic2)).Return([]int32{0, 1}, nil)
-	tm.EXPECT().Close().Return(nil)
-	p, err = NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Input(topic2, rawCodec, cb),
-		),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducerBuilder(createProducerBuilder(producer)),
-	)
-	ensure.Nil(t, err)
-	ensure.True(t, p.graph.GroupTable() == nil)
-	ensure.True(t, p.graph.LoopStream() == nil)
-	ensure.True(t, p.partitionCount == 2)
-	ensure.True(t, len(p.graph.inputs()) == 2)
-	ensure.True(t, p.isStateless())
-
-	// successfully create a processor with tables
-	tm.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
-	tm.EXPECT().Partitions(table).Return([]int32{0, 1}, nil)
-	tm.EXPECT().Partitions(table2).Return([]int32{0, 1, 2}, nil)
-	tm.EXPECT().Close().Return(nil).Times(2)
-	p, err = NewProcessor(nil,
-		DefineGroup(group,
-			Input(topic, rawCodec, cb),
-			Join(table, rawCodec),
-			Lookup(table2, rawCodec),
-		),
-		WithTopicManagerBuilder(createTopicManagerBuilder(tm)),
-		WithConsumerBuilder(createConsumerBuilder(consumer)),
-		WithProducerBuilder(createProducerBuilder(producer)),
-		WithStorageBuilder(storage.MemoryBuilder()),
-	)
-	ensure.Nil(t, err)
-	ensure.True(t, p.graph.GroupTable() == nil)
-	ensure.True(t, p.graph.LoopStream() == nil)
-	ensure.True(t, p.partitionCount == 2)
-	ensure.True(t, len(p.views[table2].partitions) == 3)
-	ensure.True(t, len(p.graph.copartitioned()) == 2)
-	ensure.True(t, len(p.graph.inputs()) == 3)
-	ensure.True(t, p.isStateless())
-}
-
-func TestProcessor_StartFails(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	consumer := mock.NewMockConsumer(ctrl)
-
-	// error creating consumer
-	done := make(chan bool)
-	p := createProcessor(t, ctrl, consumer, 2, nullStorageBuilder())
-	p.opts.builders.consumer = createFailedConsumerBuilder()
-	go func() {
-		errs := p.Run(context.Background())
-		ensure.NotNil(t, errs)
-		close(done)
-	}()
-	err := doTimed(t, func() { <-done })
-	ensure.Nil(t, err)
-
-	// error creating producer and closing consumer
-	done = make(chan bool)
-	p = createProcessor(t, ctrl, consumer, 2, nullStorageBuilder())
-	p.opts.builders.producer = createFailedProducerBuilder()
-	consumer.EXPECT().Close().Return(errSome)
-	go func() {
-		errs := p.Run(context.Background())
-		ensure.NotNil(t, errs)
-		ensure.StringContains(t, errs.Error(), "creating producer")
-		ensure.StringContains(t, errs.Error(), "closing consumer")
-		close(done)
-	}()
-	err = doTimed(t, func() { <-done })
-	ensure.Nil(t, err)
-
-	// error starting lookup tables and closing producer
-	done = make(chan bool)
-	st := mock.NewMockStorage(ctrl)
-	p = createProcessorWithLookupTable(t, ctrl, consumer, 2, createStorageBuilder(st))
-	producer := mock.NewMockProducer(ctrl)
-	//	tm := mock.NewMockTopicManager(ctrl)
-	p.opts.builders.producer = createProducerBuilder(producer)
-	//	p.opts.builders.topicmgr = createTopicManagerBuilder(tm)
-	wait := make(chan bool)
-	ch := make(chan kafka.Event)
-	consumer.EXPECT().Subscribe(map[string]int64{topic: -1}).Return(nil)
-	consumer.EXPECT().Events().Return(ch).Do(func() { <-wait }).Times(2) // view + processor
-	st.EXPECT().Open().Do(func() { close(wait) }).Return(errSome)
-	st.EXPECT().Open().Return(errSome)
-	st.EXPECT().Close().Times(2)
-	consumer.EXPECT().Close().Return(nil).Times(2) // view + processor
-	producer.EXPECT().Close().Return(errSome)
-	go func() {
-		errs := p.Run(context.Background())
-		ensure.NotNil(t, errs)
-		ensure.StringContains(t, errs.Error(), "closing producer")
-		ensure.StringContains(t, errs.Error(), "opening storage")
-		close(done)
-	}()
-	err = doTimed(t, func() { <-done })
-	ensure.Nil(t, err)
-
-	// error subscribing topics
-	done = make(chan bool)
-	p = createProcessor(t, ctrl, consumer, 2, nullStorageBuilder())
-	consumer.EXPECT().Subscribe(topOff).Return(errSome)
-	consumer.EXPECT().Close().Return(nil)
-	go func() {
-		errs := p.Run(context.Background())
-		ensure.NotNil(t, errs)
-		ensure.StringContains(t, errs.Error(), "subscribing topics")
-		close(done)
-	}()
-	err = doTimed(t, func() { <-done })
-	ensure.Nil(t, err)
-}
-
-func TestProcessor_StartStopEmpty(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	var (
-		consumer = mock.NewMockConsumer(ctrl)
-		wait     = make(chan bool)
-		final    = make(chan bool)
-		ch       = make(chan kafka.Event)
-		p        = createProcessor(t, ctrl, consumer, 2, nullStorageBuilder())
-	)
-
-	consumer.EXPECT().Subscribe(topOff).Return(nil)
-	consumer.EXPECT().Events().Return(ch).Do(func() { close(wait) })
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		err := p.Run(ctx)
-		ensure.Nil(t, err)
-		close(final)
-	}()
-
-	consumer.EXPECT().Close().Return(nil).Do(func() { close(ch) })
-	err := doTimed(t, func() {
-		<-wait
-		cancel()
-		<-final
-	})
-	ensure.Nil(t, err)
-}
-
-func TestProcessor_StartStopEmptyError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	var (
-		consumer = mock.NewMockConsumer(ctrl)
-		final    = make(chan bool)
-		wait     = make(chan bool)
-		ch       = make(chan kafka.Event)
-		p        = createProcessor(t, ctrl, consumer, 2, nullStorageBuilder())
-	)
-
-	consumer.EXPECT().Subscribe(topOff).Return(nil)
-	consumer.EXPECT().Events().Return(ch).Do(func() { close(wait) })
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		err := p.Run(ctx)
-		ensure.NotNil(t, err)
-		close(final)
-	}()
-
-	consumer.EXPECT().Close().Return(errors.New("some error")).Do(func() { close(ch) })
-	err := doTimed(t, func() {
-		<-wait
-		cancel()
-		<-final
-	})
-	ensure.Nil(t, err)
-}
-
-// start processor and receives an error from Kafka in the events
-// channel before rebalance.
-func TestProcessor_StartWithErrorBeforeRebalance(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	type TestCase struct {
-		name  string
-		event kafka.Event
-	}
-	tests := []TestCase{
-		{"error", &kafka.Error{Err: errors.New("something")}},
-		{"message", new(kafka.Message)},
-		{"EOF", new(kafka.EOF)},
-		{"BOF", new(kafka.BOF)},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			var (
-				err      error
-				consumer = mock.NewMockConsumer(ctrl)
-				st       = mock.NewMockStorage(ctrl)
-				sb       = func(topic string, par int32) (storage.Storage, error) {
-					return st, nil
-				}
-				final = make(chan bool)
-				ch    = make(chan kafka.Event)
-				p     = createProcessor(t, ctrl, consumer, 3, sb)
-			)
-
-			gomock.InOrder(
-				consumer.EXPECT().Subscribe(topOff).Return(nil),
-				consumer.EXPECT().Events().Return(ch),
-				consumer.EXPECT().Close().Do(func() { close(ch) }),
-			)
-			go func() {
-				err = p.Run(context.Background())
-				ensure.NotNil(t, err)
-				close(final)
-			}()
-
-			ch <- tc.event
-
-			err = doTimed(t, func() {
-				<-final
-			})
-			ensure.Nil(t, err)
-		})
+// accumulate is a callback that increments the
+// table value by the incoming message.
+// Persist and incoming codecs must be codec.Int64
+func accumulate(ctx Context, msg interface{}) {
+	inc := msg.(int64)
+	val := ctx.Value()
+	if val == nil {
+		ctx.SetValue(inc)
+	} else {
+		ctx.SetValue(val.(int64) + inc)
 	}
 }
 
-// start processor and receives an error from Kafka in the events
-// channel after rebalance.
-func TestProcessor_StartWithErrorAfterRebalance(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+func TestProcessor_Run(t *testing.T) {
 
-	var (
-		err      error
-		consumer = mock.NewMockConsumer(ctrl)
-		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32) (storage.Storage, error) {
-			return st, nil
+	t.Run("input-persist", func(t *testing.T) {
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
+		var (
+			topic  = "test-table"
+			toEmit = []*sarama.ConsumerMessage{
+				&sarama.ConsumerMessage{Topic: "input",
+					Value: []byte(strconv.FormatInt(3, 10)),
+					Key:   []byte("test-key-1"),
+				},
+				&sarama.ConsumerMessage{Topic: "input",
+					Value: []byte(strconv.FormatInt(3, 10)),
+					Key:   []byte("test-key-2"),
+				},
+			}
+		)
+
+		expectCGConsume(bm, topic, toEmit)
+		expectCGEmit(bm, topic, toEmit)
+
+		groupBuilder, cg := createTestConsumerGroupBuilder(t)
+		consBuilder, cons := createTestConsumerBuilder(t)
+		_ = cg
+		_ = cons
+
+		graph := DefineGroup("test",
+			Input("input", new(codec.Int64), accumulate),
+			Persist(new(codec.Int64)),
+		)
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
+		defer cancel()
+
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			bm.createProcessorOptions(consBuilder, groupBuilder)...,
+		)
+		test.AssertNil(t, err)
+		var (
+			procErr error
+			done    = make(chan struct{})
+		)
+
+		cons.ExpectConsumePartition(topic, 0, 0)
+
+		go func() {
+			defer close(done)
+			procErr = newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+
+		// if there was an error during startup, no point in sending messages
+		// and waiting for them to be delivered
+		test.AssertNil(t, procErr)
+
+		for _, msg := range toEmit {
+			cg.SendMessageWait(msg)
 		}
-		final = make(chan bool)
-		ch    = make(chan kafka.Event)
-		p     = createProcessor(t, ctrl, consumer, 3, sb)
-		value = []byte("value")
-	)
-	// -- expectations --
-	// 1. start
-	consumer.EXPECT().Subscribe(topOff).Return(nil)
-	consumer.EXPECT().Events().Return(ch).AnyTimes()
-	// 2. rebalance
-	st.EXPECT().Open().Times(3)
-	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(3)
-	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
-	// 3. message
-	gomock.InOrder(
-		st.EXPECT().Set("key", value).Return(nil),
-		st.EXPECT().SetOffset(int64(1)),
-		st.EXPECT().MarkRecovered(),
-	)
-	// 4. error
-	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(1))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
-	st.EXPECT().Close().Times(3)
-	consumer.EXPECT().Close().Do(func() { close(ch) })
 
-	// -- test --
-	// 1. start
-	go func() {
-		err = p.Run(context.Background())
-		ensure.NotNil(t, err)
-		close(final)
-	}()
+		val, err := newProc.Get("test-key-1")
+		test.AssertNil(t, err)
+		test.AssertEqual(t, val.(int64), int64(3))
 
-	// 2. rebalance
-	ensure.True(t, len(p.partitions) == 0)
-	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1, 1: -1, 2: -1})
-	err = syncWith(t, ch, -1) // with processor
-	ensure.Nil(t, err)
-	ensure.True(t, len(p.partitions) == 3)
+		val, err = newProc.Get("test-key-2")
+		test.AssertNil(t, err)
+		test.AssertEqual(t, val.(int64), int64(3))
 
-	// 3. message
-	ch <- &kafka.Message{
-		Topic:     tableName(group),
-		Partition: 1,
-		Offset:    1,
-		Key:       "key",
-		Value:     value,
-	}
-	err = syncWith(t, ch, 1) // with partition
-	ensure.Nil(t, err)
+		// shutdown
+		newProc.Stop()
+		<-done
+		test.AssertNil(t, procErr)
+	})
+	t.Run("loopback", func(t *testing.T) {
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
 
-	// 4. receive error
-	ch <- new(kafka.Error)
+		var (
+			topic  = "test-table"
+			loop   = "test-loop"
+			toEmit = []*sarama.ConsumerMessage{
+				&sarama.ConsumerMessage{Topic: "input",
+					Value: []byte(strconv.FormatInt(23, 10)),
+					Key:   []byte("test-key"),
+				},
+			}
+		)
 
-	// 5. stop
-	err = doTimed(t, func() { <-final })
-	ensure.Nil(t, err)
-}
+		expectCGConsume(bm, topic, toEmit)
+		expectCGLoop(bm, loop, toEmit)
 
-// start processor with table and receives an error from Kafka in the events
-// channel after rebalance.
-func TestProcessor_StartWithTableWithErrorAfterRebalance(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+		groupBuilder, cg := createTestConsumerGroupBuilder(t)
+		consBuilder, cons := createTestConsumerBuilder(t)
+		_ = cg
+		_ = cons
 
-	var (
-		err      error
-		consumer = mock.NewMockConsumer(ctrl)
-		producer = mock.NewMockProducer(ctrl)
-		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32) (storage.Storage, error) {
-			return st, nil
+		graph := DefineGroup("test",
+			// input passes to loopback
+			Input("input", new(codec.Int64), func(ctx Context, msg interface{}) {
+				ctx.Loopback(ctx.Key(), msg)
+			}),
+			// this will not be called in the test but we define it, otherwise the context will raise an error
+			Loop(new(codec.Int64), accumulate),
+			Persist(new(codec.Int64)),
+		)
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			bm.createProcessorOptions(consBuilder, groupBuilder)...,
+		)
+		test.AssertNil(t, err)
+		var (
+			procErr error
+			done    = make(chan struct{})
+		)
+
+		cons.ExpectConsumePartition(topic, 0, 0)
+
+		go func() {
+			defer close(done)
+			procErr = newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+
+		// if there was an error during startup, no point in sending messages
+		// and waiting for them to be delivered
+		test.AssertNil(t, procErr)
+
+		for _, msg := range toEmit {
+			cg.SendMessageWait(msg)
 		}
-		final     = make(chan bool)
-		ch        = make(chan kafka.Event)
-		p         = createProcessorWithTable(t, ctrl, consumer, producer, 3, sb)
-		value     = []byte("value")
-		blockit   = make(chan bool)
-		unblocked = make(chan bool)
-	)
-	p.graph.callbacks[topic] = func(ctx Context, msg interface{}) {
-		fmt.Println("hallodfads", msg)
-		defer close(unblocked)
-		<-blockit
-		fmt.Println("unblocked")
-	}
 
-	// -- expectations --
-	// 1. start
-	consumer.EXPECT().Subscribe(topOff).Return(nil)
-	consumer.EXPECT().Events().Return(ch).AnyTimes()
-	// 2. rebalance
-	st.EXPECT().Open().Times(6)
-	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(6)
-	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
-	consumer.EXPECT().AddPartition(table, int32(0), int64(123))
-	consumer.EXPECT().AddPartition(table, int32(1), int64(123))
-	consumer.EXPECT().AddPartition(table, int32(2), int64(123))
-	// 3. EOF messages
-	st.EXPECT().MarkRecovered().Times(3)
-	// 4. messages
-	consumer.EXPECT().Commit(topic, int32(1), int64(2))
-	// 5. error
-	consumer.EXPECT().Close().Do(func() { close(ch) })
-	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(1))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
-	consumer.EXPECT().RemovePartition(table, int32(0))
-	consumer.EXPECT().RemovePartition(table, int32(1))
-	consumer.EXPECT().RemovePartition(table, int32(2))
-	st.EXPECT().Close().Times(6)
-	producer.EXPECT().Close()
-
-	// -- test --
-	// 1. start
-	go func() {
-		err = p.Run(context.Background())
-		ensure.NotNil(t, err)
-		close(final)
-	}()
-
-	// 2. rebalance
-	ensure.True(t, len(p.partitions) == 0)
-	ensure.True(t, len(p.partitionViews) == 0)
-	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1, 1: -1, 2: -1})
-	err = syncWith(t, ch, -1) // with processor
-	ensure.Nil(t, err)
-	ensure.True(t, len(p.partitions) == 3)
-	ensure.True(t, len(p.partitionViews) == 3)
-
-	// 3. message
-	ch <- &kafka.EOF{
-		Topic:     tableName(group),
-		Hwm:       0,
-		Partition: 0,
-	}
-	err = syncWith(t, ch, 0) // with partition
-	ensure.Nil(t, err)
-	ch <- &kafka.EOF{
-		Topic:     tableName(group),
-		Hwm:       0,
-		Partition: 1,
-	}
-	err = syncWith(t, ch, 1) // with partition
-	ensure.Nil(t, err)
-	ch <- &kafka.EOF{
-		Topic:     tableName(group),
-		Hwm:       0,
-		Partition: 2,
-	}
-	err = syncWith(t, ch, 2) // with partition
-	ensure.Nil(t, err)
-
-	// 4. heavy message
-	ch <- &kafka.Message{
-		Topic:     topic,
-		Partition: 1,
-		Offset:    2,
-		Key:       "key",
-		Value:     value,
-	}
-	// dont wait for that
-
-	// 4. receive error
-	ch <- new(kafka.Error)
-
-	// sync with partition (should be unblocked)
-	close(blockit)
-	<-unblocked
-
-	// 5. stop
-	err = doTimed(t, func() {
-		<-final
+		// shutdown
+		newProc.Stop()
+		<-done
+		test.AssertNil(t, procErr)
 	})
-	ensure.Nil(t, err)
-}
+	t.Run("consume-error", func(t *testing.T) {
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
 
-func TestProcessor_Start(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
+		bm.producer.EXPECT().Close().Times(1)
 
-	var (
-		err      error
-		consumer = mock.NewMockConsumer(ctrl)
-		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32) (storage.Storage, error) {
-			return st, nil
-		}
-		final = make(chan bool)
-		ch    = make(chan kafka.Event)
-		p     = createProcessor(t, ctrl, consumer, 3, sb)
-		value = []byte("value")
-	)
+		groupBuilder, cg := createTestConsumerGroupBuilder(t)
+		consBuilder, cons := createTestConsumerBuilder(t)
+		_ = cg
+		_ = cons
 
-	// -- expectations --
-	// 1. start
-	consumer.EXPECT().Subscribe(topOff).Return(nil)
-	consumer.EXPECT().Events().Return(ch).AnyTimes()
-	// 2. rebalance
-	st.EXPECT().Open().Times(4)
-	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(4)
-	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
-	// 3. load message partition 1
-	st.EXPECT().Set("key", value).Return(nil)
-	st.EXPECT().SetOffset(int64(1))
-	st.EXPECT().MarkRecovered()
-	// 4. end of recovery partition 1
-	gomock.InOrder(
-		consumer.EXPECT().RemovePartition(tableName(group), int32(1)),
-		consumer.EXPECT().AddGroupPartition(int32(1)),
-	)
-	// 5. process message partition 1
-	consumer.EXPECT().Commit(topic, int32(1), int64(1))
-	// 6. new assignment remove partition 1 and 2
-	st.EXPECT().Close() // partition 0 close (only temporarily)
-	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
-	st.EXPECT().Close() // partition 1 close
-	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
-	st.EXPECT().Close() // partition 2 close
-	// add partition 0 again
-	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
-	// 7. stop processor
-	consumer.EXPECT().Close() //.Do(func() { close(ch) })
-	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
-	st.EXPECT().Close()
+		graph := DefineGroup("test",
+			// not really used, we're failing anyway
+			Input("input", new(codec.Int64), accumulate),
+		)
 
-	// -- test --
-	ctx, cancel := context.WithCancel(context.Background())
-	// 1. start
-	go func() {
-		err = p.Run(ctx)
-		ensure.Nil(t, err)
-		close(final)
-	}()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	// 2. rebalance
-	ensure.True(t, len(p.partitions) == 0)
-	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1, 1: -1, 2: -1})
-	err = syncWith(t, ch, -1) // with processor
-	ensure.Nil(t, err)
-	ensure.True(t, len(p.partitions) == 3)
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			bm.createProcessorOptions(consBuilder, groupBuilder)...,
+		)
+		test.AssertNil(t, err)
+		var (
+			procErr error
+			done    = make(chan struct{})
+		)
 
-	// 3. load message partition 1
-	ch <- &kafka.Message{
-		Topic:     tableName(group),
-		Partition: 1,
-		Offset:    1,
-		Key:       "key",
-		Value:     value,
-	}
-	err = syncWith(t, ch, 1) // with partition 1
-	ensure.Nil(t, err)
+		go func() {
+			defer close(done)
+			procErr = newProc.Run(ctx)
+		}()
 
-	// 4. end of recovery partition 1
-	ch <- &kafka.EOF{Partition: 1}
-	err = syncWith(t, ch, 1) // with partition 1
-	ensure.Nil(t, err)
+		newProc.WaitForReady()
 
-	// 5. process message partition 1
-	ch <- &kafka.Message{
-		Topic:     topic,
-		Partition: 1,
-		Offset:    1,
-		Key:       "key",
-		Value:     value,
-	}
-	err = syncWith(t, ch, 1) // with partition 1
-	ensure.Nil(t, err)
-
-	// 6. new assignment remove partition 1 and 2
-	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1})
-	err = syncWith(t, ch, 1, 2) // with partition 1 and 2
-	ensure.Nil(t, err)
-	ensure.True(t, len(p.partitions) == 1)
-
-	// 7. stop processor
-	err = doTimed(t, func() {
+		// if there was an error during startup, no point in sending messages
+		// and waiting for them to be delivered
+		test.AssertNil(t, procErr)
+		cg.SendError(fmt.Errorf("test-error"))
 		cancel()
-		<-final
+		<-done
+		// the errors sent back by the consumergroup do not lead to a failure of the processor
+		test.AssertNil(t, procErr)
+
 	})
-	ensure.Nil(t, err)
-}
+	t.Run("consgroup-error", func(t *testing.T) {
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
 
-func TestProcessor_StartStateless(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	var (
-		consumer = mock.NewMockConsumer(ctrl)
-		producer = mock.NewMockProducer(ctrl)
-		final    = make(chan bool)
-		ch       = make(chan kafka.Event)
-		p        = createProcessorStateless(ctrl, consumer, producer, 3, emptyRebalanceCallback)
-	)
+		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
+		bm.producer.EXPECT().Close().Times(1)
 
-	// -- expectactions --
-	// 1. start
-	consumer.EXPECT().Subscribe(topOff).Return(nil)
-	consumer.EXPECT().Events().Return(ch).AnyTimes()
-	// 2. rebalance
-	consumer.EXPECT().AddGroupPartition(int32(0))
-	consumer.EXPECT().AddGroupPartition(int32(1))
-	// 3. stop processor
-	consumer.EXPECT().Close().Return(nil).Do(func() { close(ch) })
-	producer.EXPECT().Close().Return(nil)
+		groupBuilder, cg := createTestConsumerGroupBuilder(t)
+		consBuilder, cons := createTestConsumerBuilder(t)
+		_ = cg
+		_ = cons
 
-	// -- test --
-	ctx, cancel := context.WithCancel(context.Background())
-	// 1. start
-	go func() {
-		err := p.Run(ctx)
-		ensure.Nil(t, err)
-		close(final)
-	}()
+		graph := DefineGroup("test",
+			// not really used, we're failing anyway
+			Input("input", new(codec.Int64), accumulate),
+		)
 
-	// 2. rebalance
-	ensure.True(t, len(p.partitions) == 0)
-	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1, 1: -1})
-	err := syncWith(t, ch, -1, 1, 2)
-	ensure.Nil(t, err)
-	ensure.True(t, len(p.partitions) == 2)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	// 3. stop processor
-	err = doTimed(t, func() {
-		cancel()
-		<-final
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			bm.createProcessorOptions(consBuilder, groupBuilder)...,
+		)
+		test.AssertNil(t, err)
+		var (
+			procErr error
+			done    = make(chan struct{})
+		)
+
+		cg.FailOnConsume(fmt.Errorf("consume-error"))
+
+		go func() {
+			defer close(done)
+			procErr = newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+
+		// if there was an error during startup, no point in sending messages
+		// and waiting for them to be delivered
+		<-done
+		// the errors sent back by the consumergroup do not lead to a failure of the processor
+		test.AssertTrue(t, strings.Contains(procErr.Error(), "consume-error"))
 	})
-	ensure.Nil(t, err)
-}
-
-func TestProcessor_StartWithTable(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	var (
-		err      error
-		consumer = mock.NewMockConsumer(ctrl)
-		producer = mock.NewMockProducer(ctrl)
-		st       = mock.NewMockStorage(ctrl)
-		sb       = func(topic string, par int32) (storage.Storage, error) {
-			return st, nil
-		}
-		final = make(chan bool)
-		ch    = make(chan kafka.Event)
-		p     = createProcessorWithTable(t, ctrl, consumer, producer, 3, sb)
-		value = []byte("value")
-	)
-
-	// -- expectations --
-	// 1. start
-	consumer.EXPECT().Subscribe(topOff).Return(nil)
-	consumer.EXPECT().Events().Return(ch).AnyTimes()
-	// 2. rebalance
-	st.EXPECT().Open().Times(6)
-	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(6)
-	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(1), int64(123))
-	consumer.EXPECT().AddPartition(tableName(group), int32(2), int64(123))
-	consumer.EXPECT().AddPartition(table, int32(0), int64(123))
-	consumer.EXPECT().AddPartition(table, int32(1), int64(123)).Times(2)
-	consumer.EXPECT().AddPartition(table, int32(2), int64(123))
-	// 3. message to group table
-	st.EXPECT().Set("key", value).Return(nil)
-	st.EXPECT().SetOffset(int64(1))
-	st.EXPECT().MarkRecovered()
-	// 4. finish recovery of partition 1
-	gomock.InOrder(
-		consumer.EXPECT().RemovePartition(tableName(group), int32(1)),
-		consumer.EXPECT().AddGroupPartition(int32(1)),
-	)
-	// 5. process messages in partition 1
-	gomock.InOrder(
-		consumer.EXPECT().Commit(topic, int32(1), int64(1)),
-	)
-	// 6. rebalance (only keep partition 0)
-	st.EXPECT().Close().Times(4) // close group and other table partitions
-	consumer.EXPECT().RemovePartition(table, int32(1)).Times(2)
-	consumer.EXPECT().RemovePartition(table, int32(2))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(2))
-	// also partition 0 will be temporarily closed
-	st.EXPECT().Close().Times(2) // close group and other table of partition 0
-	consumer.EXPECT().RemovePartition(table, int32(0))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
-	// add partition 0 again
-	st.EXPECT().Open().Times(2)
-	st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil).Times(2)
-	consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123))
-	consumer.EXPECT().AddPartition(table, int32(0), int64(123))
-	// 7. stop processor
-	consumer.EXPECT().Close().Do(func() { close(ch) })
-	consumer.EXPECT().RemovePartition(table, int32(0))
-	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
-	st.EXPECT().MarkRecovered()
-	st.EXPECT().Close().Times(2) // close group table and other table
-	producer.EXPECT().Close().Return(nil)
-
-	// -- test --
-	ctx, cancel := context.WithCancel(context.Background())
-	// 1. start
-	go func() {
-		procErrs := p.Run(ctx)
-		ensure.Nil(t, procErrs)
-		close(final)
-	}()
-
-	// 2. rebalance
-	ensure.True(t, len(p.partitions) == 0)
-	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1, 1: -1, 2: -1})
-	err = syncWith(t, ch)
-	ensure.Nil(t, err)
-	ensure.True(t, len(p.partitions) == 3)
-
-	// 3. message to group table
-	ch <- &kafka.Message{
-		Topic:     tableName(group),
-		Partition: 1,
-		Offset:    1,
-		Key:       "key",
-		Value:     value,
-	}
-	err = syncWith(t, ch, 1)
-	ensure.Nil(t, err)
-
-	// 4. finish recovery of partition 1
-	ch <- &kafka.EOF{
-		Partition: 1,
-	}
-	ensure.False(t, p.partitionViews[1][table].recovered())
-	time.Sleep(delayProxyInterval)
-	ensure.False(t, p.partitionViews[1][table].recovered())
-	ch <- &kafka.EOF{
-		Topic:     table,
-		Partition: 1,
-		Hwm:       123,
-	}
-	err = syncWith(t, ch)
-	ensure.Nil(t, err)
-	time.Sleep(delayProxyInterval)
-	ensure.True(t, p.partitionViews[1][table].recovered())
-
-	// 5. process messages in partition 1
-	ch <- &kafka.Message{
-		Topic:     topic,
-		Partition: 1,
-		Offset:    1,
-		Key:       "key",
-		Value:     value,
-	}
-	err = syncWith(t, ch, 1)
-	ensure.Nil(t, err)
-
-	// 6. rebalance
-	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1})
-	err = syncWith(t, ch, 1, 2) // synchronize with partitions 1 and 2
-	ensure.Nil(t, err)
-	ensure.True(t, len(p.partitions) == 1)
-
-	// 7. stop processor
-	err = doTimed(t, func() {
-		cancel()
-		<-final
-	})
-	ensure.Nil(t, err)
-}
-
-func TestProcessor_rebalanceError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	var (
-		consumer = mock.NewMockConsumer(ctrl)
-		wait     = make(chan bool)
-		ch       = make(chan kafka.Event)
-		p        = createProcessor(t, ctrl, consumer, 1,
-			func(topic string, partition int32) (storage.Storage, error) {
-				return nil, errors.New("some error")
-			})
-	)
-
-	consumer.EXPECT().Subscribe(topOff).Return(nil)
-	consumer.EXPECT().Events().Return(ch).AnyTimes()
-	consumer.EXPECT().Close().Return(nil).Do(func() {
-		close(ch)
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		err := p.Run(ctx)
-		ensure.NotNil(t, err)
-		close(wait)
-	}()
-
-	// assignment arrives
-	ensure.True(t, len(p.partitions) == 0)
-	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1})
-
-	// stop processor
-	err := doTimed(t, func() {
-		cancel()
-		<-wait
-	})
-	ensure.Nil(t, err)
-}
-
-func TestProcessor_HasGet(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	var (
-		st = mock.NewMockStorage(ctrl)
-		sb = func(topic string, partition int32) (storage.Storage, error) {
-			return st, nil
-		}
-		consumer = mock.NewMockConsumer(ctrl)
-		ch       = make(chan kafka.Event)
-		wait     = make(chan bool)
-		p        = createProcessor(t, ctrl, consumer, 1, sb)
-	)
-
-	ensure.True(t, p.partitionCount == 1)
-
-	consumer.EXPECT().Subscribe(topOff).Return(nil)
-	consumer.EXPECT().Events().Return(ch).AnyTimes()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		procErrs := p.Run(ctx)
-		ensure.Nil(t, procErrs)
-		close(wait)
-	}()
-
-	// assignment arrives
-
-	ensure.True(t, len(p.partitions) == 0)
-	gomock.InOrder(
-		st.EXPECT().Open(),
-		st.EXPECT().GetOffset(int64(-2)).Return(int64(123), nil),
-		consumer.EXPECT().AddPartition(tableName(group), int32(0), int64(123)),
-	)
-	ch <- (*kafka.Assignment)(&map[int32]int64{0: -1})
-	ch <- new(kafka.NOP)
-	ensure.True(t, len(p.partitions) == 1)
-
-	gomock.InOrder(
-		st.EXPECT().Get("item1").Return([]byte("item1-value"), nil),
-	)
-
-	value, err := p.Get("item1")
-	ensure.Nil(t, err)
-	ensure.DeepEqual(t, value.(string), "item1-value")
-
-	// stop processor
-	consumer.EXPECT().Close().Do(func() { close(ch) })
-	consumer.EXPECT().RemovePartition(tableName(group), int32(0))
-	st.EXPECT().Close()
-
-	err = doTimed(t, func() {
-		cancel()
-		<-wait
-	})
-	ensure.Nil(t, err)
-}
-
-func TestProcessor_HasGetStateless(t *testing.T) {
-	p := &Processor{graph: DefineGroup(group), opts: &poptions{hasher: DefaultHasher()}}
-	_, err := p.Get("item1")
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "stateless processor")
-
-	p = &Processor{graph: DefineGroup(group, Persist(c)), opts: &poptions{hasher: DefaultHasher()}}
-	p.partitions = map[int32]*partition{
-		0: new(partition),
-	}
-	p.partitionCount = 0
-	_, err = p.Get("item1")
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "0 partitions")
-
-	p = &Processor{graph: DefineGroup(group, Persist(c)), opts: &poptions{hasher: DefaultHasher()}}
-	p.partitions = map[int32]*partition{
-		0: new(partition),
-	}
-	p.partitionCount = 2
-	_, err = p.Get("item1")
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "does not contain partition 1")
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	st := mock.NewMockStorage(ctrl)
-	p = &Processor{graph: DefineGroup(group, Persist(c)), opts: &poptions{hasher: DefaultHasher()}}
-	p.partitions = map[int32]*partition{
-		0: &partition{log: logger.Default(), st: &storageProxy{Storage: st, partition: 0}},
-	}
-	p.partitionCount = 1
-
-	st.EXPECT().Get("item1").Return(nil, errors.New("some error"))
-	_, err = p.Get("item1")
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "error getting item1")
-
-	st.EXPECT().Get("item1").Return(nil, nil)
-	value, err := p.Get("item1")
-	ensure.Nil(t, err)
-	ensure.True(t, value == nil)
-}
-
-func TestProcessor_RebalanceCallback(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	var (
-		consumer = mock.NewMockConsumer(ctrl)
-		producer = mock.NewMockProducer(ctrl)
-		final    = make(chan bool)
-		ch       = make(chan kafka.Event)
-		asmt     = (*kafka.Assignment)(&map[int32]int64{0: -1, 1: -1})
-		i        = 0
-		eAsmt    = []kafka.Assignment{{}, *asmt}
-		rcb      = func(a kafka.Assignment){
-			ensure.DeepEqual(t, a, eAsmt[i])
-			i += 1
-		}
-		p        = createProcessorStateless(ctrl, consumer, producer, 3, rcb)
-	)
-
-	// -- expectactions --
-	// 1. start
-	consumer.EXPECT().Subscribe(topOff).Return(nil)
-	consumer.EXPECT().Events().Return(ch).AnyTimes()
-	// 2. rebalance
-	consumer.EXPECT().AddGroupPartition(int32(0))
-	consumer.EXPECT().AddGroupPartition(int32(1))
-	// 3. stop processor
-	consumer.EXPECT().Close().Return(nil).Do(func() { close(ch) })
-	producer.EXPECT().Close().Return(nil)
-
-	// -- test --
-	ctx, cancel := context.WithCancel(context.Background())
-	// 1. start
-	go func() {
-		err := p.Run(ctx)
-		ensure.Nil(t, err)
-		close(final)
-	}()
-
-	// 2. rebalance
-	ensure.True(t, len(p.partitions) == 0)
-	ch <- asmt
-	err := syncWith(t, ch, -1, 1, 2)
-	ensure.Nil(t, err)
-	ensure.True(t, len(p.partitions) == 2)
-
-	// 3. stop processor
-	err = doTimed(t, func() {
-		cancel()
-		<-final
-	})
-	ensure.Nil(t, err)
-}
-
-// Example shows how to use a callback. For each partition of the topics, a new
-// goroutine will be created. Topics should be co-partitioned (they should have
-// the same number of partitions and be partitioned by the same key).
-func ExampleProcessor_simplest() {
-	var (
-		brokers        = []string{"127.0.0.1:9092"}
-		group   Group  = "group"
-		topic   Stream = "topic"
-	)
-
-	consume := func(ctx Context, m interface{}) {
-		fmt.Printf("Hello world: %v", m)
-	}
-
-	p, err := NewProcessor(brokers, DefineGroup(group, Input(topic, rawCodec, consume)))
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	// start consumer with a goroutine (blocks)
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		err := p.Run(ctx)
-		panic(err)
-	}()
-
-	// wait for bad things to happen
-	wait := make(chan os.Signal, 1)
-	signal.Notify(wait, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-	<-wait
-	cancel()
 }

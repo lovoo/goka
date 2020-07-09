@@ -39,6 +39,37 @@ You can install Goka by running the following command:
 
 ``$ go get -u github.com/lovoo/goka``
 
+## Configuration
+
+Goka relies on [Sarama](https://github.com/Shopify/sarama) to perform the actual communication with Kafka, which offers many configuration settings. The config is documented [here](https://godoc.org/github.com/Shopify/sarama#Config).
+
+In most cases, you need to modify the config, e.g. to set the Kafka Version.
+
+```
+cfg := goka.DefaultConfig()
+cfg.Version = sarama.V2_4_0_0
+goka.ReplaceGlobalConfig(cfg)
+```
+
+This makes all goka components use the updated config.
+
+If you do need specific configuration for different components, you need to pass customized builders to the 
+component's constructor, e.g.
+
+```
+cfg := goka.DefaultConfig()
+// modify the config with component-specific settings
+
+
+// use the config by creating a builder which allows to override global config
+goka.NewProcessor(// ...,
+	goka.WithConsumerGroupBuilder(
+		goka.ConsumerGroupBuilderWithConfig(cfg),
+	),
+	// ...
+)
+```
+
 ## Concepts
 
 Goka relies on Kafka for message passing, fault-tolerant state storage and workload partitioning.
@@ -67,11 +98,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
@@ -83,18 +114,20 @@ var (
 	group   goka.Group  = "example-group"
 )
 
-// emits a single message and leave
+// Emit messages forever every second
 func runEmitter() {
 	emitter, err := goka.NewEmitter(brokers, topic, new(codec.String))
 	if err != nil {
 		log.Fatalf("error creating emitter: %v", err)
 	}
 	defer emitter.Finish()
-	err = emitter.EmitSync("some-key", "some-value")
-	if err != nil {
-		log.Fatalf("error emitting message: %v", err)
+	for {
+		time.Sleep(1 * time.Second)
+		err = emitter.EmitSync("some-key", "some-value")
+		if err != nil {
+			log.Fatalf("error emitting message: %v", err)
+		}
 	}
-	fmt.Println("message emitted")
 }
 
 // process messages until ctrl-c is pressed
@@ -132,6 +165,8 @@ func runProcessor() {
 		defer close(done)
 		if err = p.Run(ctx); err != nil {
 			log.Fatalf("error running processor: %v", err)
+		} else {
+			log.Printf("Processor shutdown cleanly")
 		}
 	}()
 
@@ -143,10 +178,12 @@ func runProcessor() {
 }
 
 func main() {
-	runEmitter()   // emits one message and stops
-	runProcessor() // press ctrl-c to stop
+	go runEmitter() // emits one message and stops
+	runProcessor()  // press ctrl-c to stop
 }
+
 ```
+A very similar example is also in *1-simplest*. Just run `go run examples/1-simplest/main.go`.
 
 Note that tables have to be configured in Kafka with log compaction.
 For details check the [Wiki](https://github.com/lovoo/goka/wiki/Tips#configuring-log-compaction-for-table-topics).

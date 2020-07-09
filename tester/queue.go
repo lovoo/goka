@@ -1,8 +1,6 @@
 package tester
 
 import (
-	"fmt"
-	"log"
 	"sync"
 )
 
@@ -14,62 +12,43 @@ type message struct {
 
 type queue struct {
 	sync.Mutex
-	topic            string
-	messages         []*message
-	hwm              int64
-	waitConsumerInit sync.WaitGroup
-	simpleConsumers  map[*queueConsumer]int64
-	groupConsumers   map[*queueConsumer]int64
+	topic    string
+	messages []*message
+	hwm      int64
 }
 
 func newQueue(topic string) *queue {
 
 	return &queue{
-		topic:           topic,
-		simpleConsumers: make(map[*queueConsumer]int64),
-		groupConsumers:  make(map[*queueConsumer]int64),
+		topic: topic,
 	}
 }
 
-func (q *queue) size() int {
-	return len(q.messages)
+func (q *queue) Hwm() int64 {
+	q.Lock()
+	defer q.Unlock()
+
+	hwm := q.hwm
+	return hwm
+}
+
+func (q *queue) push(key string, value []byte) int64 {
+	q.Lock()
+	defer q.Unlock()
+	offset := q.hwm
+	q.messages = append(q.messages, &message{
+		offset: offset,
+		key:    key,
+		value:  value,
+	})
+	q.hwm++
+	return offset
 }
 
 func (q *queue) message(offset int) *message {
+	q.Lock()
+	defer q.Unlock()
 	return q.messages[offset]
-}
-
-func (q *queue) messagesFrom(from int) []*message {
-	return q.messages[from:]
-}
-
-func (q *queue) expectGroupConsumer() {
-	q.Lock()
-	defer q.Unlock()
-	q.groupConsumers[newQueueConsumer(q.topic, q)] = 0
-}
-
-func (q *queue) expectSimpleConsumer() {
-	q.Lock()
-	defer q.Unlock()
-	q.simpleConsumers[newQueueConsumer(q.topic, q)] = 0
-}
-
-func (q *queue) bindConsumer(cons *consumer, groupConsumer bool) *queueConsumer {
-	q.Lock()
-	defer q.Unlock()
-
-	consumers := q.simpleConsumers
-	if groupConsumer {
-		consumers = q.groupConsumers
-	}
-	for qCons := range consumers {
-		if !qCons.isBound() {
-			qCons.bindToConsumer(cons)
-			return qCons
-		}
-	}
-	panic(fmt.Errorf("did not find an unbound consumer for %s. The group graph was not parsed correctly", q.topic))
 }
 
 func (q *queue) messagesFromOffset(offset int64) []*message {
@@ -78,55 +57,71 @@ func (q *queue) messagesFromOffset(offset int64) []*message {
 	return q.messages[offset:]
 }
 
-// wait until all consumers are ready to consume (only for startup)
-func (q *queue) waitConsumersInit() {
-	logger.Printf("Consumers in Queue %s", q.topic)
-	for cons := range q.groupConsumers {
-		logger.Printf("waiting for group consumer %s to be running or killed (state=%v)", cons.queue.topic, cons.state.State())
-
-		select {
-		case <-cons.state.WaitForState(killed):
-			log.Printf("At least one consumer was killed. No point in waiting for it")
-			return
-		case <-cons.state.WaitForState(running):
-			logger.Printf(" --> %s is running", cons.queue.topic)
-		}
-	}
-
-	for cons := range q.simpleConsumers {
-		logger.Printf("waiting for simple consumer %s to be ready", cons.queue.topic)
-		select {
-		case <-cons.state.WaitForState(running):
-		case <-cons.state.WaitForState(stopped):
-		case <-cons.state.WaitForState(killed):
-		}
-		logger.Printf(" --> %s is ready", cons.queue.topic)
-	}
-}
-
-func (q *queue) waitForConsumers() int {
-	// wait until all consumers for the queue have processed all the messages
-	var numMessagesConsumed int
-	for sub := range q.simpleConsumers {
-		logger.Printf("waiting for simple consumer %s to finish up", q.topic)
-		numMessagesConsumed += sub.catchupAndSync()
-		logger.Printf(">> done waiting for simple consumer %s to finish up", q.topic)
-	}
-	for sub := range q.groupConsumers {
-		logger.Printf("waiting for simple consumer %s to finish up", q.topic)
-		numMessagesConsumed += sub.catchupAndSync()
-		logger.Printf(">> done waiting for simple consumer %s to finish up", q.topic)
-	}
-	return numMessagesConsumed
-}
-
-func (q *queue) push(key string, value []byte) {
+func (q *queue) size() int {
 	q.Lock()
 	defer q.Unlock()
-	q.messages = append(q.messages, &message{
-		offset: q.hwm,
-		key:    key,
-		value:  value,
-	})
-	q.hwm++
+	return len(q.messages)
+}
+
+// QueueTracker tracks message offsets for each topic for convenient
+// 'expect message x to be in topic y' in unit tests
+type QueueTracker struct {
+	t          T
+	topic      string
+	nextOffset int64
+	tester     *Tester
+}
+
+func newQueueTracker(tester *Tester, t T, topic string) *QueueTracker {
+	return &QueueTracker{
+		t:          t,
+		topic:      topic,
+		tester:     tester,
+		nextOffset: tester.getOrCreateQueue(topic).hwm,
+	}
+}
+
+// Next returns the next message since the last time this
+// function was called (or MoveToEnd)
+// It uses the known codec for the topic to decode the message
+func (mt *QueueTracker) Next() (string, interface{}, bool) {
+
+	key, msgRaw, hasNext := mt.NextRaw()
+
+	if !hasNext {
+		return key, msgRaw, hasNext
+	}
+
+	decoded, err := mt.tester.codecForTopic(mt.topic).Decode(msgRaw)
+	if err != nil {
+		mt.t.Fatalf("Error decoding message: %v", err)
+	}
+	return key, decoded, true
+}
+
+// NextRaw returns the next message similar to Next(), but without the decoding
+func (mt *QueueTracker) NextRaw() (string, []byte, bool) {
+	q := mt.tester.getOrCreateQueue(mt.topic)
+	if int(mt.nextOffset) >= q.size() {
+		return "", nil, false
+	}
+	msg := q.message(int(mt.nextOffset))
+
+	mt.nextOffset++
+	return msg.key, msg.value, true
+}
+
+// Seek moves the index pointer of the queue tracker to passed offset
+func (mt *QueueTracker) Seek(offset int64) {
+	mt.nextOffset = offset
+}
+
+// Hwm returns the tracked queue's hwm value
+func (mt *QueueTracker) Hwm() int64 {
+	return mt.tester.getOrCreateQueue(mt.topic).Hwm()
+}
+
+// NextOffset returns the tracker's next offset
+func (mt *QueueTracker) NextOffset() int64 {
+	return mt.nextOffset
 }

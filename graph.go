@@ -43,6 +43,8 @@ type GroupGraph struct {
 	codecs    map[string]Codec
 	callbacks map[string]ProcessCallback
 
+	outputStreamTopics map[Stream]struct{}
+
 	joinCheck map[string]bool
 }
 
@@ -89,6 +91,12 @@ func (gg *GroupGraph) OutputStreams() Edges {
 	return gg.outputStreams
 }
 
+// returns whether the passed topic is a valid group output topic
+func (gg *GroupGraph) isOutputTopic(topic Stream) bool {
+	_, ok := gg.outputStreamTopics[topic]
+	return ok
+}
+
 // inputs returns all input topics (tables and streams)
 func (gg *GroupGraph) inputs() Edges {
 	return append(append(gg.inputStreams, gg.inputTables...), gg.crossTables...)
@@ -115,9 +123,10 @@ func (gg *GroupGraph) joint(topic string) bool {
 // edges.
 func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 	gg := GroupGraph{group: string(group),
-		codecs:    make(map[string]Codec),
-		callbacks: make(map[string]ProcessCallback),
-		joinCheck: make(map[string]bool),
+		codecs:             make(map[string]Codec),
+		callbacks:          make(map[string]ProcessCallback),
+		joinCheck:          make(map[string]bool),
+		outputStreamTopics: make(map[Stream]struct{}),
 	}
 
 	for _, e := range edges {
@@ -143,6 +152,7 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 		case *outputStream:
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.outputStreams = append(gg.outputStreams, e)
+			gg.outputStreamTopics[Stream(e.Topic())] = struct{}{}
 		case *inputTable:
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.inputTables = append(gg.inputTables, e)
@@ -156,6 +166,7 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 			gg.groupTable = append(gg.groupTable, e)
 		}
 	}
+
 	return &gg
 }
 
@@ -335,10 +346,16 @@ type groupTable struct {
 }
 
 // Persist represents the edge of the group table, which is log-compacted and
-// copartitioned with the input streams. This edge specifies the codec of the
+// copartitioned with the input streams.
+// Without Persist, calls to ctx.Value or ctx.SetValue in the consume callback will
+// fail and lead to shutdown of the processor.
+//
+// This edge specifies the codec of the
 // messages in the topic, ie, the codec of the values of the table.
 // The processing of input streams is blocked until all partitions of the group
 // table are recovered.
+//
+// The topic name is derived from the group name by appending "-table".
 func Persist(c Codec) Edge {
 	return &groupTable{&topicDef{codec: c}}
 }
@@ -372,4 +389,16 @@ func tableName(group Group) string {
 // loopName returns the name of the loop topic of group.
 func loopName(group Group) string {
 	return string(group) + loopSuffix
+}
+
+// StringsToStreams is a simple cast/conversion functions that allows to pass a slice
+// of strings as a slice of Stream (Streams)
+// Avoids the boilerplate loop over the string array that would be necessary otherwise.
+func StringsToStreams(strings ...string) Streams {
+	streams := make(Streams, 0, len(strings))
+
+	for _, str := range strings {
+		streams = append(streams, Stream(str))
+	}
+	return streams
 }

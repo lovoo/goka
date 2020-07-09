@@ -10,11 +10,19 @@ type Iterator interface {
 	// after Next returns false to check whether the iteration finished
 	// from exhaustion or was aborted due to an error.
 	Next() bool
-	Key() string
-	Value() (interface{}, error)
-	Release()
-	// Err returns the possible iteration error.
+	// Err returns the error that stopped the iteration if any.
 	Err() error
+	// Return the key of the current item
+	Key() string
+	// Return the value of the current item
+	// This value is already decoded with the view's codec (or nil, if it's nil)
+	Value() (interface{}, error)
+	// Release the iterator. After release, the iterator is not usable anymore
+	Release()
+	// Seek moves the iterator to the begining of a key-value pair sequence that
+	// is greater or equal to the given key. It returns whether at least one of
+	// such key-value pairs exist. Next must be called after seeking to access
+	// the first pair.
 	Seek(key string) bool
 }
 

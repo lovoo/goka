@@ -12,7 +12,6 @@ type iterator struct {
 	snap *leveldb.Snapshot
 }
 
-// Next advances the iterator to the next key.
 func (i *iterator) Next() bool {
 	next := i.iter.Next()
 	if string(i.iter.Key()) == offsetKey {
@@ -22,18 +21,14 @@ func (i *iterator) Next() bool {
 	return next
 }
 
-// Err should be called after Next returns false to check for possible
-// iteration errors.
 func (i *iterator) Err() error {
 	return i.iter.Error()
 }
 
-// Key returns the current key.
 func (i *iterator) Key() []byte {
 	return i.iter.Key()
 }
 
-// Value returns the current value decoded by the codec of the storage.
 func (i *iterator) Value() ([]byte, error) {
 	data := i.iter.Value()
 	if data == nil {
@@ -43,8 +38,6 @@ func (i *iterator) Value() ([]byte, error) {
 	return data, nil
 }
 
-// Releases releases the iterator and the associated snapshot. The iterator is
-// not usable anymore after calling Release.
 func (i *iterator) Release() {
 	i.iter.Release()
 	i.snap.Release()

@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"log"
 	"path/filepath"
+	"time"
 
-	"github.com/lovoo/goka/kafka"
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 )
@@ -16,7 +18,7 @@ import (
 type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte) error
 
 // RebalanceCallback is invoked when the processor receives a new partition assignment.
-type RebalanceCallback func(a kafka.Assignment)
+type RebalanceCallback func(a Assignment)
 
 ///////////////////////////////////////////////////////////////////////////////
 // default values
@@ -25,6 +27,7 @@ type RebalanceCallback func(a kafka.Assignment)
 const (
 	defaultBaseStoragePath = "/tmp/goka"
 	defaultClientID        = "goka"
+	defaultBackoffRestTime = time.Minute
 )
 
 // DefaultProcessorStoragePath is the default path where processor state
@@ -51,10 +54,9 @@ func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte)
 	return s.Set(key, value)
 }
 
-
 // DefaultRebalance is the default callback when a new partition assignment is received.
 // DefaultRebalance can be used in the function passed to WithRebalanceCallback.
-func DefaultRebalance(a kafka.Assignment) {}
+func DefaultRebalance(a Assignment) {}
 
 // DefaultHasher returns an FNV hasher builder to assign keys to partitions.
 func DefaultHasher() func() hash.Hash32 {
@@ -81,12 +83,15 @@ type poptions struct {
 	partitionChannelSize int
 	hasher               func() hash.Hash32
 	nilHandling          NilHandling
+	backoffResetTime     time.Duration
 
 	builders struct {
-		storage  storage.Builder
-		consumer kafka.ConsumerBuilder
-		producer kafka.ProducerBuilder
-		topicmgr kafka.TopicManagerBuilder
+		storage        storage.Builder
+		consumerSarama SaramaConsumerBuilder
+		consumerGroup  ConsumerGroupBuilder
+		producer       ProducerBuilder
+		topicmgr       TopicManagerBuilder
+		backoff        BackoffBuilder
 	}
 }
 
@@ -113,23 +118,37 @@ func WithStorageBuilder(sb storage.Builder) ProcessorOption {
 }
 
 // WithTopicManagerBuilder replaces the default topic manager builder.
-func WithTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ProcessorOption {
+func WithTopicManagerBuilder(tmb TopicManagerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.topicmgr = tmb
 	}
 }
 
-// WithConsumerBuilder replaces the default consumer builder.
-func WithConsumerBuilder(cb kafka.ConsumerBuilder) ProcessorOption {
+// WithConsumerGroupBuilder replaces the default consumer group builder
+func WithConsumerGroupBuilder(cgb ConsumerGroupBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
-		o.builders.consumer = cb
+		o.builders.consumerGroup = cgb
+	}
+}
+
+// WithConsumerSaramaBuilder replaces the default consumer group builder
+func WithConsumerSaramaBuilder(cgb SaramaConsumerBuilder) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.builders.consumerSarama = cgb
 	}
 }
 
 // WithProducerBuilder replaces the default producer builder.
-func WithProducerBuilder(pb kafka.ProducerBuilder) ProcessorOption {
+func WithProducerBuilder(pb ProducerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.producer = pb
+	}
+}
+
+// WithBackoffBuilder replaced the default backoff.
+func WithBackoffBuilder(bb BackoffBuilder) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.builders.backoff = bb
 	}
 }
 
@@ -164,6 +183,14 @@ func WithGroupGraphHook(hook func(gg *GroupGraph)) ProcessorOption {
 	}
 }
 
+// WithBackoffResetTimeout defines the timeout when the backoff
+// will be reset.
+func WithBackoffResetTimeout(duration time.Duration) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.backoffResetTime = duration
+	}
+}
+
 // NilHandling defines how nil messages should be handled by the processor.
 type NilHandling int
 
@@ -188,13 +215,14 @@ func WithNilHandling(nh NilHandling) ProcessorOption {
 // the tester.
 type Tester interface {
 	StorageBuilder() storage.Builder
-	ConsumerBuilder() kafka.ConsumerBuilder
-	ProducerBuilder() kafka.ProducerBuilder
-	EmitterProducerBuilder() kafka.ProducerBuilder
-	TopicManagerBuilder() kafka.TopicManagerBuilder
-	RegisterGroupGraph(*GroupGraph)
+	ProducerBuilder() ProducerBuilder
+	ConsumerGroupBuilder() ConsumerGroupBuilder
+	ConsumerBuilder() SaramaConsumerBuilder
+	EmitterProducerBuilder() ProducerBuilder
+	TopicManagerBuilder() TopicManagerBuilder
+	RegisterGroupGraph(*GroupGraph) string
 	RegisterEmitter(Stream, Codec)
-	RegisterView(Table, Codec)
+	RegisterView(Table, Codec) string
 }
 
 // WithTester configures all external connections of a processor, ie, storage,
@@ -202,11 +230,12 @@ type Tester interface {
 func WithTester(t Tester) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.storage = t.StorageBuilder()
-		o.builders.consumer = t.ConsumerBuilder()
 		o.builders.producer = t.ProducerBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
+		o.builders.consumerGroup = t.ConsumerGroupBuilder()
+		o.builders.consumerSarama = t.ConsumerBuilder()
 		o.partitionChannelSize = 0
-		t.RegisterGroupGraph(gg)
+		o.clientID = t.RegisterGroupGraph(gg)
 	}
 }
 
@@ -214,6 +243,7 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
 	opt.hasher = DefaultHasher()
+	opt.backoffResetTime = defaultBackoffRestTime
 
 	for _, o := range opts {
 		o(opt, gg)
@@ -223,14 +253,29 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	if opt.builders.storage == nil {
 		return fmt.Errorf("StorageBuilder not set")
 	}
-	if opt.builders.consumer == nil {
-		opt.builders.consumer = kafka.DefaultConsumerBuilder
+
+	if globalConfig.Producer.RequiredAcks == sarama.NoResponse {
+		return fmt.Errorf("Processors do not work with `Config.Producer.RequiredAcks==sarama.NoResponse`, as it uses the response's offset to store the value")
 	}
+
 	if opt.builders.producer == nil {
-		opt.builders.producer = kafka.DefaultProducerBuilder
+		opt.builders.producer = DefaultProducerBuilder
 	}
+
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
+		opt.builders.topicmgr = DefaultTopicManagerBuilder
+	}
+
+	if opt.builders.consumerGroup == nil {
+		opt.builders.consumerGroup = DefaultConsumerGroupBuilder
+	}
+
+	if opt.builders.consumerSarama == nil {
+		opt.builders.consumerSarama = DefaultSaramaConsumerBuilder
+	}
+
+	if opt.builders.backoff == nil {
+		opt.builders.backoff = DefaultBackoffBuilder
 	}
 
 	return nil
@@ -252,18 +297,19 @@ func WithRebalanceCallback(cb RebalanceCallback) ProcessorOption {
 type ViewOption func(*voptions, Table, Codec)
 
 type voptions struct {
-	log                  logger.Logger
-	clientID             string
-	tableCodec           Codec
-	updateCallback       UpdateCallback
-	partitionChannelSize int
-	hasher               func() hash.Hash32
-	restartable          bool
+	log              logger.Logger
+	clientID         string
+	tableCodec       Codec
+	updateCallback   UpdateCallback
+	hasher           func() hash.Hash32
+	autoreconnect    bool
+	backoffResetTime time.Duration
 
 	builders struct {
-		storage  storage.Builder
-		consumer kafka.ConsumerBuilder
-		topicmgr kafka.TopicManagerBuilder
+		storage        storage.Builder
+		consumerSarama SaramaConsumerBuilder
+		topicmgr       TopicManagerBuilder
+		backoff        BackoffBuilder
 	}
 }
 
@@ -290,26 +336,24 @@ func WithViewStorageBuilder(sb storage.Builder) ViewOption {
 	}
 }
 
-// WithViewConsumerBuilder replaces default view consumer.
-func WithViewConsumerBuilder(cb kafka.ConsumerBuilder) ViewOption {
+// WithViewConsumerSaramaBuilder replaces the default sarama consumer builder
+func WithViewConsumerSaramaBuilder(cgb SaramaConsumerBuilder) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
-		o.builders.consumer = cb
+		o.builders.consumerSarama = cgb
 	}
 }
 
 // WithViewTopicManagerBuilder replaces the default topic manager.
-func WithViewTopicManagerBuilder(tmb kafka.TopicManagerBuilder) ViewOption {
+func WithViewTopicManagerBuilder(tmb TopicManagerBuilder) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
 		o.builders.topicmgr = tmb
 	}
 }
 
-// WithViewPartitionChannelSize replaces the default partition channel size.
-// This is mostly used for testing by setting it to 0 to have synchronous behavior
-// of goka.
-func WithViewPartitionChannelSize(size int) ViewOption {
+// WithViewBackoffBuilder replaced the default backoff.
+func WithViewBackoffBuilder(bb BackoffBuilder) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
-		o.partitionChannelSize = size
+		o.builders.backoff = bb
 	}
 }
 
@@ -327,12 +371,27 @@ func WithViewClientID(clientID string) ViewOption {
 	}
 }
 
-// WithViewRestartable defines the view can be restarted, even when Run()
-// returns errors. If the view is restartable, the client must call Terminate()
-// to release all resources, ie, close the local storage.
+// WithViewRestartable is kept only for backwards compatibility.
+// DEPRECATED: since the behavior has changed, this name is misleading and should be replaced by
+// WithViewAutoReconnect().
 func WithViewRestartable() ViewOption {
+	log.Printf("Warning: this option is deprecated and will be removed. Replace with WithViewAutoReconnect, which is semantically equivalent")
+	return WithViewAutoReconnect()
+}
+
+// WithViewAutoReconnect defines the view is reconnecting internally, so Run() does not return
+// in case of connection errors. The view must be shutdown by cancelling the context passed to Run()
+func WithViewAutoReconnect() ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
-		o.restartable = true
+		o.autoreconnect = true
+	}
+}
+
+// WithViewBackoffResetTimeout defines the timeout when the backoff
+// will be reset.
+func WithViewBackoffResetTimeout(duration time.Duration) ViewOption {
+	return func(o *voptions, table Table, codec Codec) {
+		o.backoffResetTime = duration
 	}
 }
 
@@ -341,10 +400,9 @@ func WithViewRestartable() ViewOption {
 func WithViewTester(t Tester) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
 		o.builders.storage = t.StorageBuilder()
-		o.builders.consumer = t.ConsumerBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
-		o.partitionChannelSize = 0
-		t.RegisterView(table, codec)
+		o.builders.consumerSarama = t.ConsumerBuilder()
+		o.clientID = t.RegisterView(table, codec)
 	}
 }
 
@@ -352,6 +410,7 @@ func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) 
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
 	opt.hasher = DefaultHasher()
+	opt.backoffResetTime = defaultBackoffRestTime
 
 	for _, o := range opts {
 		o(opt, topic, codec)
@@ -361,11 +420,17 @@ func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) 
 	if opt.builders.storage == nil {
 		return fmt.Errorf("StorageBuilder not set")
 	}
-	if opt.builders.consumer == nil {
-		opt.builders.consumer = kafka.DefaultConsumerBuilder
+
+	if opt.builders.consumerSarama == nil {
+		opt.builders.consumerSarama = DefaultSaramaConsumerBuilder
 	}
+
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
+		opt.builders.topicmgr = DefaultTopicManagerBuilder
+	}
+
+	if opt.builders.backoff == nil {
+		opt.builders.backoff = DefaultBackoffBuilder
 	}
 
 	return nil
@@ -387,8 +452,8 @@ type eoptions struct {
 	hasher func() hash.Hash32
 
 	builders struct {
-		topicmgr kafka.TopicManagerBuilder
-		producer kafka.ProducerBuilder
+		topicmgr TopicManagerBuilder
+		producer ProducerBuilder
 	}
 }
 
@@ -408,14 +473,14 @@ func WithEmitterClientID(clientID string) EmitterOption {
 }
 
 // WithEmitterTopicManagerBuilder replaces the default topic manager builder.
-func WithEmitterTopicManagerBuilder(tmb kafka.TopicManagerBuilder) EmitterOption {
+func WithEmitterTopicManagerBuilder(tmb TopicManagerBuilder) EmitterOption {
 	return func(o *eoptions, topic Stream, codec Codec) {
 		o.builders.topicmgr = tmb
 	}
 }
 
 // WithEmitterProducerBuilder replaces the default producer builder.
-func WithEmitterProducerBuilder(pb kafka.ProducerBuilder) EmitterOption {
+func WithEmitterProducerBuilder(pb ProducerBuilder) EmitterOption {
 	return func(o *eoptions, topic Stream, codec Codec) {
 		o.builders.producer = pb
 	}
@@ -428,6 +493,8 @@ func WithEmitterHasher(hasher func() hash.Hash32) EmitterOption {
 	}
 }
 
+// WithEmitterTester configures the emitter to use passed tester.
+// This is used for component tests
 func WithEmitterTester(t Tester) EmitterOption {
 	return func(o *eoptions, topic Stream, codec Codec) {
 		o.builders.producer = t.EmitterProducerBuilder()
@@ -435,7 +502,7 @@ func WithEmitterTester(t Tester) EmitterOption {
 		t.RegisterEmitter(topic, codec)
 	}
 }
-func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOption) error {
+func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOption) {
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
 	opt.hasher = DefaultHasher()
@@ -446,11 +513,9 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 
 	// config not set, use default one
 	if opt.builders.producer == nil {
-		opt.builders.producer = kafka.DefaultProducerBuilder
+		opt.builders.producer = DefaultProducerBuilder
 	}
 	if opt.builders.topicmgr == nil {
-		opt.builders.topicmgr = kafka.DefaultTopicManagerBuilder
+		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
-
-	return nil
 }

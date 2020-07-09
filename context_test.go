@@ -1,59 +1,61 @@
 package goka
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/kafka"
-	"github.com/lovoo/goka/logger"
-	"github.com/lovoo/goka/mock"
-
-	"github.com/facebookgo/ensure"
+	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
+
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/internal/test"
+	"github.com/lovoo/goka/logger"
 )
 
 func newEmitter(err error, done func(err error)) emitter {
-	return func(topic string, key string, value []byte) *kafka.Promise {
-		p := kafka.NewPromise()
+	return func(topic string, key string, value []byte) *Promise {
+		p := NewPromise()
 		if done != nil {
 			p.Then(done)
 		}
-		return p.Finish(err)
+		return p.Finish(nil, err)
 	}
 }
 
 func newEmitterW(wg *sync.WaitGroup, err error, done func(err error)) emitter {
-	return func(topic string, key string, value []byte) *kafka.Promise {
+	return func(topic string, key string, value []byte) *Promise {
 		wg.Add(1)
-		p := kafka.NewPromise()
+		p := NewPromise()
 		if done != nil {
 			p.Then(done)
 		}
-		return p.Finish(err)
+		return p.Finish(nil, err)
 	}
 }
 
 func TestContext_Emit(t *testing.T) {
-	ack := 0
-	emitted := 0
+	var (
+		ack           = 0
+		emitted       = 0
+		group   Group = "some-group"
+	)
 
 	ctx := &cbContext{
-		graph:  DefineGroup(group),
-		commit: func() { ack++ },
-		wg:     &sync.WaitGroup{},
-		pstats: newPartitionStats(),
+		graph:            DefineGroup(group),
+		commit:           func() { ack++ },
+		wg:               &sync.WaitGroup{},
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 	}
 
 	// after that the message is processed
 	ctx.emitter = newEmitter(nil, func(err error) {
 		emitted++
-		ensure.Nil(t, err)
+		test.AssertNil(t, err)
 	})
 
 	ctx.start()
@@ -65,41 +67,46 @@ func TestContext_Emit(t *testing.T) {
 	ctx.wg.Wait()
 
 	// check everything is done
-	ensure.DeepEqual(t, emitted, 1)
-	ensure.DeepEqual(t, ack, 1)
+	test.AssertEqual(t, emitted, 1)
+	test.AssertEqual(t, ack, 1)
 }
 
 func TestContext_Timestamp(t *testing.T) {
 	ts := time.Now()
 
 	ctx := &cbContext{
-		msg: &message{
+		msg: &sarama.ConsumerMessage{
 			Timestamp: ts,
 		},
 	}
 
-	ensure.DeepEqual(t, ctx.Timestamp(), ts)
+	test.AssertEqual(t, ctx.Timestamp(), ts)
 }
 
 func TestContext_EmitError(t *testing.T) {
-	ack := 0
-	emitted := 0
-	errToEmit := errors.New("some error")
+	var (
+		ack             = 0
+		emitted         = 0
+		errToEmit       = errors.New("some error")
+		group     Group = "some-group"
+	)
+
+	failer := func(err error) {
+		test.AssertTrue(t, strings.Contains(err.Error(), errToEmit.Error()))
+	}
 
 	// test error case
 	ctx := &cbContext{
-		graph:  DefineGroup(group, Persist(new(codec.String))),
-		commit: func() { ack++ },
-		wg:     &sync.WaitGroup{},
-		pstats: newPartitionStats(),
-		failer: func(err error) {
-			ensure.StringContains(t, err.Error(), errToEmit.Error())
-		},
+		graph:            DefineGroup(group, Persist(new(codec.String))),
+		wg:               &sync.WaitGroup{},
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+		syncFailer:       failer,
+		asyncFailer:      failer,
 	}
 	ctx.emitter = newEmitter(errToEmit, func(err error) {
 		emitted++
-		ensure.NotNil(t, err)
-		ensure.DeepEqual(t, err, errToEmit)
+		test.AssertNotNil(t, err)
+		test.AssertEqual(t, err, errToEmit)
 	})
 
 	ctx.start()
@@ -111,49 +118,49 @@ func TestContext_EmitError(t *testing.T) {
 	ctx.wg.Wait()
 
 	// check everything is done
-	ensure.DeepEqual(t, emitted, 1)
+	test.AssertEqual(t, emitted, 1)
 
 	// nothing should be committed here
-	ensure.DeepEqual(t, ack, 0)
+	test.AssertEqual(t, ack, 0)
 
 }
 
 func TestContext_EmitToStateTopic(t *testing.T) {
-	ctx := &cbContext{graph: DefineGroup(group, Persist(c), Loop(c, cb))}
+	var (
+		group Group = "some-group"
+	)
+
+	ctx := &cbContext{
+		graph:      DefineGroup(group, Persist(c), Loop(c, cb)),
+		syncFailer: func(err error) { panic(err) },
+	}
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to table topic (use SetValue instead)"))
+		defer test.PanicAssertEqual(t, errors.New("cannot emit to table topic (use SetValue instead)"))
 		ctx.Emit(Stream(tableName(group)), "key", []byte("value"))
 	}()
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to loop topic (use Loopback instead)"))
+		defer test.PanicAssertEqual(t, errors.New("cannot emit to loop topic (use Loopback instead)"))
 		ctx.Emit(Stream(loopName(group)), "key", []byte("value"))
 	}()
 	func() {
-		defer ensure.PanicDeepEqual(t, errors.New("cannot emit to empty topic"))
+		defer test.PanicAssertEqual(t, errors.New("cannot emit to empty topic"))
 		ctx.Emit("", "key", []byte("value"))
 	}()
 }
 
-func PanicStringContains(t *testing.T, s string) {
-	if r := recover(); r != nil {
-		err := r.(error)
-		ensure.StringContains(t, err.Error(), s)
-	} else {
-		// there was no panic
-		t.Errorf("panic expected")
-		t.FailNow()
-	}
-}
-
 func TestContext_GetSetStateless(t *testing.T) {
 	// ctx stateless since no storage passed
-	ctx := &cbContext{graph: DefineGroup("group"), msg: new(message)}
+	ctx := &cbContext{
+		graph:      DefineGroup("group"),
+		msg:        new(sarama.ConsumerMessage),
+		syncFailer: func(err error) { panic(err) },
+	}
 	func() {
-		defer PanicStringContains(t, "stateless")
+		defer test.PanicAssertStringContains(t, "stateless")
 		_ = ctx.Value()
 	}()
 	func() {
-		defer PanicStringContains(t, "stateless")
+		defer test.PanicAssertStringContains(t, "stateless")
 		ctx.SetValue("whatever")
 	}()
 }
@@ -161,33 +168,41 @@ func TestContext_GetSetStateless(t *testing.T) {
 func TestContext_Delete(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	storage := mock.NewMockStorage(ctrl)
 
-	offset := int64(123)
-	ack := 0
-	key := "key"
+	var (
+		offset       = int64(123)
+		key          = "key"
+		ack          = 0
+		group  Group = "some-group"
+		st           = NewMockStorage(ctrl)
+		pt           = &PartitionTable{
+			st: &storageProxy{
+				Storage: st,
+			},
+			stats: newTableStats(),
+		}
+	)
+
+	st.EXPECT().Delete(key).Return(nil)
 
 	ctx := &cbContext{
-		graph:   DefineGroup(group, Persist(new(codec.String))),
-		storage: storage,
-		wg:      new(sync.WaitGroup),
-		commit:  func() { ack++ },
-		msg:     &message{Offset: offset},
+		graph:  DefineGroup(group, Persist(new(codec.String))),
+		wg:     new(sync.WaitGroup),
+		commit: func() { ack++ },
+		msg:    &sarama.ConsumerMessage{Offset: offset},
+		table:  pt,
 	}
 
-	gomock.InOrder(
-		storage.EXPECT().Delete(key),
-	)
 	ctx.emitter = newEmitter(nil, nil)
 
 	ctx.start()
 	err := ctx.deleteKey(key)
-	ensure.Nil(t, err)
+	test.AssertNil(t, err)
 	ctx.finish(nil)
 
 	ctx.wg.Wait()
 
-	ensure.DeepEqual(t, ctx.counters, struct {
+	test.AssertEqual(t, ctx.counters, struct {
 		emits  int
 		dones  int
 		stores int
@@ -198,81 +213,102 @@ func TestContext_DeleteStateless(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	offset := int64(123)
-	key := "key"
+	var (
+		offset       = int64(123)
+		key          = "key"
+		group  Group = "some-group"
+	)
 
 	ctx := &cbContext{
 		graph: DefineGroup(group),
 		wg:    new(sync.WaitGroup),
-		msg:   &message{Offset: offset},
+		msg:   &sarama.ConsumerMessage{Offset: offset},
 	}
 	ctx.emitter = newEmitter(nil, nil)
 
 	err := ctx.deleteKey(key)
-	ensure.Err(t, err, regexp.MustCompile("^Cannot access state in stateless processor$"))
+	test.AssertTrue(t, strings.Contains(err.Error(), "Cannot access state in stateless processor"))
 }
 
 func TestContext_DeleteStorageError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	storage := mock.NewMockStorage(ctrl)
 
-	offset := int64(123)
-	key := "key"
+	var (
+		offset       = int64(123)
+		key          = "key"
+		group  Group = "some-group"
+		st           = NewMockStorage(ctrl)
+		pt           = &PartitionTable{
+			st: &storageProxy{
+				Storage: st,
+			},
+			stats: newTableStats(),
+		}
+		retErr = errors.New("storage error")
+	)
+
+	st.EXPECT().Delete(key).Return(retErr)
 
 	ctx := &cbContext{
-		graph:   DefineGroup(group, Persist(new(codec.String))),
-		storage: storage,
-		wg:      new(sync.WaitGroup),
-		msg:     &message{Offset: offset},
+		graph: DefineGroup(group, Persist(new(codec.String))),
+		wg:    new(sync.WaitGroup),
+		msg:   &sarama.ConsumerMessage{Offset: offset},
+		table: pt,
 	}
 
-	gomock.InOrder(
-		storage.EXPECT().Delete(key).Return(fmt.Errorf("storage error")),
-	)
 	ctx.emitter = newEmitter(nil, nil)
 
 	err := ctx.deleteKey(key)
-	ensure.Err(t, err, regexp.MustCompile("^error deleting key \\(key\\) from storage: storage error$"))
+	test.AssertTrue(t, strings.Contains(err.Error(), "error deleting key (key) from storage: storage error"))
 }
 
 func TestContext_Set(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	storage := mock.NewMockStorage(ctrl)
 
-	offset := int64(123)
-	ack := 0
-	key := "key"
-	value := "value"
+	var (
+		offset       = int64(123)
+		ack          = 0
+		key          = "key"
+		value        = "value"
+		group  Group = "some-group"
+		st           = NewMockStorage(ctrl)
+		pt           = &PartitionTable{
+			st: &storageProxy{
+				Storage: st,
+			},
+			stats:       newTableStats(),
+			updateStats: make(chan func(), 10),
+		}
+	)
+	st.EXPECT().Set(key, []byte(value)).Return(nil)
 
 	ctx := &cbContext{
-		graph:   DefineGroup(group, Persist(new(codec.String))),
-		storage: storage,
-		wg:      new(sync.WaitGroup),
-		pstats:  newPartitionStats(),
-		commit:  func() { ack++ },
-		msg:     &message{Offset: offset},
+		graph:            DefineGroup(group, Persist(new(codec.String))),
+		wg:               new(sync.WaitGroup),
+		commit:           func() { ack++ },
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
+		table:            pt,
+		ctx:              context.Background(),
 	}
 
-	gomock.InOrder(
-		storage.EXPECT().Set(key, []byte(value)).Return(nil),
-	)
 	ctx.emitter = newEmitter(nil, nil)
 
 	ctx.start()
 	err := ctx.setValueForKey(key, value)
-	ensure.Nil(t, err)
+	test.AssertNil(t, err)
 	ctx.finish(nil)
 
 	ctx.wg.Wait()
 
-	ensure.DeepEqual(t, ctx.counters, struct {
+	test.AssertEqual(t, ctx.counters, struct {
 		emits  int
 		dones  int
 		stores int
 	}{1, 1, 1})
-	ensure.DeepEqual(t, ack, 1)
+	test.AssertEqual(t, ack, 1)
 }
 
 func TestContext_GetSetStateful(t *testing.T) {
@@ -280,38 +316,50 @@ func TestContext_GetSetStateful(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		storage = mock.NewMockStorage(ctrl)
-		key     = "key"
-		value   = "value"
-		offset  = int64(123)
-		wg      = new(sync.WaitGroup)
+		group  Group = "some-group"
+		key          = "key"
+		value        = "value"
+		offset       = int64(123)
+		wg           = new(sync.WaitGroup)
+		st           = NewMockStorage(ctrl)
+		pt           = &PartitionTable{
+			st: &storageProxy{
+				Storage: st,
+			},
+			state:       newPartitionTableState().SetState(State(PartitionRunning)),
+			stats:       newTableStats(),
+			updateStats: make(chan func(), 10),
+		}
 	)
+
+	st.EXPECT().Get(key).Return(nil, nil)
+	st.EXPECT().Set(key, []byte(value)).Return(nil)
+	st.EXPECT().Get(key).Return([]byte(value), nil)
+
 	graph := DefineGroup(group, Persist(new(codec.String)))
 	ctx := &cbContext{
-		pstats:  newPartitionStats(),
-		wg:      wg,
-		graph:   graph,
-		msg:     &message{Key: key, Offset: offset},
-		storage: storage,
-		emitter: func(tp string, k string, v []byte) *kafka.Promise {
+		table:            pt,
+		wg:               wg,
+		graph:            graph,
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
+		emitter: func(tp string, k string, v []byte) *Promise {
 			wg.Add(1)
-			ensure.DeepEqual(t, tp, graph.GroupTable().Topic())
-			ensure.DeepEqual(t, string(k), key)
-			ensure.DeepEqual(t, string(v), value)
-			return kafka.NewPromise().Finish(nil)
+			test.AssertEqual(t, tp, graph.GroupTable().Topic())
+			test.AssertEqual(t, string(k), key)
+			test.AssertEqual(t, string(v), value)
+			return NewPromise().Finish(nil, nil)
 		},
+		ctx: context.Background(),
 	}
 
-	storage.EXPECT().Get(key).Return(nil, nil)
 	val := ctx.Value()
-	ensure.True(t, val == nil)
+	test.AssertTrue(t, val == nil)
 
-	storage.EXPECT().Set(key, []byte(value)).Return(nil)
 	ctx.SetValue(value)
 
-	storage.EXPECT().Get(key).Return([]byte(value), nil)
 	val = ctx.Value()
-	ensure.DeepEqual(t, val, value)
+	test.AssertEqual(t, val, value)
 }
 
 func TestContext_SetErrors(t *testing.T) {
@@ -319,52 +367,67 @@ func TestContext_SetErrors(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		storage       = mock.NewMockStorage(ctrl)
-		key           = "key"
-		value         = "value"
-		offset  int64 = 123
-		wg            = new(sync.WaitGroup)
-		failed  error
-		_       = failed // make linter happy
+		group  Group = "some-group"
+		key          = "key"
+		value        = "value"
+		offset int64 = 123
+		wg           = new(sync.WaitGroup)
+		st           = NewMockStorage(ctrl)
+		pt           = &PartitionTable{
+			st: &storageProxy{
+				Storage: st,
+			},
+			stats: newTableStats(),
+		}
+		failed error
+		_      = failed // make linter happy
 	)
 
+	failer := func(err error) { failed = err }
+
 	ctx := &cbContext{
-		pstats:  newPartitionStats(),
-		wg:      wg,
-		graph:   DefineGroup(group, Persist(new(codec.String))),
-		msg:     &message{Key: key, Offset: offset},
-		storage: storage,
-		failer:  func(err error) { failed = err },
+		table:            pt,
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+		wg:               wg,
+		graph:            DefineGroup(group, Persist(new(codec.String))),
+		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
+		syncFailer:       failer,
+		asyncFailer:      failer,
 	}
 
 	err := ctx.setValueForKey(key, nil)
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "cannot set nil")
+	test.AssertNotNil(t, err)
+	test.AssertTrue(t, strings.Contains(err.Error(), "cannot set nil"))
 
 	err = ctx.setValueForKey(key, 123) // cannot encode 123 as string
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "error encoding")
+	test.AssertNotNil(t, err)
+	test.AssertTrue(t, strings.Contains(err.Error(), "error encoding"))
 
-	storage.EXPECT().Set(key, []byte(value)).Return(fmt.Errorf("some error"))
+	st.EXPECT().Set(key, []byte(value)).Return(errors.New("some-error"))
+
 	err = ctx.setValueForKey(key, value)
-	ensure.NotNil(t, err)
-	ensure.StringContains(t, err.Error(), "error storing")
+	test.AssertNotNil(t, err)
+	test.AssertTrue(t, strings.Contains(err.Error(), "some-error"))
 
+	// TODO(jb): check if still valid
 	// finish with error
-	ctx.emitter = newEmitterW(wg, fmt.Errorf("some error X"), func(err error) {
-		ensure.NotNil(t, err)
-		ensure.StringContains(t, err.Error(), "error X")
-	})
-	storage.EXPECT().Set(key, []byte(value)).Return(nil)
-	err = ctx.setValueForKey(key, value)
-	ensure.Nil(t, err)
+	// ctx.emitter = newEmitterW(wg, fmt.Errorf("some-error"), func(err error) {
+	// 	test.AssertNotNil(t, err)
+	//	test.AssertTrue(t, strings.Contains(err.Error(), "some-error"))
+	// })
+	// err = ctx.setValueForKey(key, value)
+	// test.AssertNil(t, err)
 }
 
 func TestContext_LoopbackNoLoop(t *testing.T) {
 	// ctx has no loop set
-	ctx := &cbContext{graph: DefineGroup("group", Persist(c)), msg: new(message)}
+	ctx := &cbContext{
+		graph:      DefineGroup("group", Persist(c)),
+		msg:        &sarama.ConsumerMessage{},
+		syncFailer: func(err error) { panic(err) },
+	}
 	func() {
-		defer PanicStringContains(t, "loop")
+		defer test.PanicAssertStringContains(t, "loop")
 		ctx.Loopback("some-key", "whatever")
 	}()
 }
@@ -382,20 +445,20 @@ func TestContext_Loopback(t *testing.T) {
 
 	graph := DefineGroup("group", Persist(c), Loop(c, cb))
 	ctx := &cbContext{
-		graph:  graph,
-		msg:    new(message),
-		pstats: newPartitionStats(),
-		emitter: func(tp string, k string, v []byte) *kafka.Promise {
+		graph:            graph,
+		msg:              &sarama.ConsumerMessage{},
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+		emitter: func(tp string, k string, v []byte) *Promise {
 			cnt++
-			ensure.DeepEqual(t, tp, graph.LoopStream().Topic())
-			ensure.DeepEqual(t, string(k), key)
-			ensure.DeepEqual(t, string(v), value)
-			return kafka.NewPromise()
+			test.AssertEqual(t, tp, graph.LoopStream().Topic())
+			test.AssertEqual(t, string(k), key)
+			test.AssertEqual(t, string(v), value)
+			return NewPromise()
 		},
 	}
 
 	ctx.Loopback(key, value)
-	ensure.True(t, cnt == 1)
+	test.AssertTrue(t, cnt == 1)
 }
 
 func TestContext_Join(t *testing.T) {
@@ -403,43 +466,46 @@ func TestContext_Join(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		key         = "key"
-		value       = "value"
-		table Table = "table"
-		st          = mock.NewMockStorage(ctrl)
+		key           = "key"
+		value         = "value"
+		table   Table = "table"
+		errSome       = errors.New("some-error")
+		st            = NewMockStorage(ctrl)
 	)
 
 	ctx := &cbContext{
 		graph: DefineGroup("group", Persist(c), Loop(c, cb), Join(table, c)),
-		msg:   &message{Key: key},
-		pviews: map[string]*partition{
-			string(table): &partition{
+		msg:   &sarama.ConsumerMessage{Key: []byte(key)},
+		pviews: map[string]*PartitionTable{
+			string(table): &PartitionTable{
 				log: logger.Default(),
 				st: &storageProxy{
 					Storage: st,
 				},
+				stats: newTableStats(),
 			},
 		},
+		syncFailer: func(err error) { panic(err) },
 	}
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Join(table)
-	ensure.DeepEqual(t, v, value)
+	test.AssertEqual(t, v, value)
 
 	func() {
-		defer PanicStringContains(t, errSome.Error())
+		defer test.PanicAssertStringContains(t, errSome.Error())
 		st.EXPECT().Get(key).Return(nil, errSome)
 		_ = ctx.Join(table)
 	}()
 
 	func() {
-		defer PanicStringContains(t, "not subs")
+		defer test.PanicAssertStringContains(t, "not subs")
 		_ = ctx.Join("other-table")
 	}()
 
 	ctx.pviews = nil
 	func() {
-		defer PanicStringContains(t, "not subs")
+		defer test.PanicAssertStringContains(t, "not subs")
 		_ = ctx.Join(table)
 	}()
 }
@@ -449,65 +515,95 @@ func TestContext_Lookup(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		key         = "key"
-		value       = "value"
-		table Table = "table"
-		st          = mock.NewMockStorage(ctrl)
+		key           = "key"
+		value         = "value"
+		table   Table = "table"
+		errSome       = errors.New("some-error")
+		st            = NewMockStorage(ctrl)
 	)
 
 	ctx := &cbContext{
 		graph: DefineGroup("group", Persist(c), Loop(c, cb)),
-		msg:   &message{Key: key},
+		msg:   &sarama.ConsumerMessage{Key: []byte(key)},
 		views: map[string]*View{
 			string(table): &View{
 				opts: &voptions{
 					tableCodec: c,
 					hasher:     DefaultHasher(),
 				},
-				partitions: []*partition{
-					&partition{
+				partitions: []*PartitionTable{
+					&PartitionTable{
 						st: &storageProxy{
 							Storage: st,
 						},
+						state: newPartitionTableState().SetState(State(PartitionRunning)),
+						stats: newTableStats(),
 					},
 				},
 			},
 		},
+		syncFailer: func(err error) { panic(err) },
 	}
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Lookup(table, key)
-	ensure.DeepEqual(t, v, value)
+	test.AssertEqual(t, v, value)
 
 	func() {
-		defer PanicStringContains(t, errSome.Error())
+		defer test.PanicAssertStringContains(t, errSome.Error())
 		st.EXPECT().Get(key).Return(nil, errSome)
 		_ = ctx.Lookup(table, key)
 	}()
 
 	func() {
-		defer PanicStringContains(t, "not subs")
+		defer test.PanicAssertStringContains(t, "not subs")
 		_ = ctx.Lookup("other-table", key)
 	}()
 
 	ctx.views = nil
 	func() {
-		defer PanicStringContains(t, "not subs")
+		defer test.PanicAssertStringContains(t, "not subs")
 		_ = ctx.Lookup(table, key)
 	}()
 }
 
+func TestContext_Headers(t *testing.T) {
+
+	// context without headers will return empty map
+	ctx := &cbContext{
+		msg: &sarama.ConsumerMessage{Key: []byte("key")},
+	}
+	headers := ctx.Headers()
+	test.AssertNotNil(t, headers)
+	test.AssertEqual(t, len(headers), 0)
+
+	ctx = &cbContext{
+		msg: &sarama.ConsumerMessage{Key: []byte("key"), Headers: []*sarama.RecordHeader{
+			&sarama.RecordHeader{
+				Key:   []byte("key"),
+				Value: []byte("value"),
+			},
+		}},
+	}
+	headers = ctx.Headers()
+	test.AssertEqual(t, headers["key"], []byte("value"))
+}
+
 func TestContext_Fail(t *testing.T) {
-	ctx := new(cbContext)
+	ctx := &cbContext{
+		syncFailer: func(err error) {
+			panic(fmt.Errorf("%#v", err))
+		},
+	}
 
 	defer func() {
 		err := recover()
-		ensure.NotNil(t, err)
-		ensure.True(t, strings.Contains(fmt.Sprintf("%v", err), "blubb"))
+		test.AssertNotNil(t, err)
+		test.AssertTrue(t, strings.Contains(fmt.Sprintf("%v", err), "blubb"))
 	}()
 
 	ctx.Fail(errors.New("blubb"))
 
 	// this must not be executed. ctx.Fail should stop execution
-	ensure.True(t, false)
+	test.AssertTrue(t, false)
 }

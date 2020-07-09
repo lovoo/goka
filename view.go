@@ -6,11 +6,35 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lovoo/goka/kafka"
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
+
+// ViewState represents the state of the view
+type ViewState int
+
+const (
+	// ViewStateIdle  - the view is not started yet
+	ViewStateIdle ViewState = iota
+	// ViewStateInitializing - the view (i.e. at least one partition) is initializing
+	ViewStateInitializing
+	// ViewStateConnecting - the view (i.e. at least one partition) is (re-)connecting
+	ViewStateConnecting
+	// ViewStateCatchUp - the view (i.e. at least one partition) is still catching up
+	ViewStateCatchUp
+	// ViewStateRunning - the view (i.e. all partitions) has caught up and is running
+	ViewStateRunning
+)
+
+func newViewSignal() *Signal {
+	return NewSignal(State(ViewStateIdle),
+		State(ViewStateInitializing),
+		State(ViewStateConnecting),
+		State(ViewStateCatchUp),
+		State(ViewStateRunning)).SetState(State(ViewStateIdle))
+}
 
 // Getter functions return a value for a key or an error. If no value exists for the key, nil is returned without errors.
 type Getter func(string) (interface{}, error)
@@ -20,9 +44,11 @@ type View struct {
 	brokers    []string
 	topic      string
 	opts       *voptions
-	partitions []*partition
-	consumer   kafka.Consumer
-	terminated bool
+	log        logger.Logger
+	partitions []*PartitionTable
+	consumer   sarama.Consumer
+	tmgr       TopicManager
+	state      *Signal
 }
 
 // NewView creates a new View object from a group.
@@ -30,9 +56,9 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	options = append(
 		// default options comes first
 		[]ViewOption{
+			WithViewClientID(fmt.Sprintf("goka-view-%s", topic)),
 			WithViewLogger(logger.Default()),
 			WithViewCallback(DefaultUpdate),
-			WithViewPartitionChannelSize(defaultPartitionChannelSize),
 			WithViewStorageBuilder(storage.DefaultBuilder(DefaultViewStoragePath())),
 		},
 
@@ -40,19 +66,31 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 		options...,
 	)
 
-	// figure out how many partitions the group has
 	opts := new(voptions)
 	err := opts.applyOptions(topic, codec, options...)
 	if err != nil {
 		return nil, fmt.Errorf("Error applying user-defined options: %v", err)
 	}
 
+	consumer, err := opts.builders.consumerSarama(brokers, opts.clientID)
+	if err != nil {
+		return nil, fmt.Errorf("Error creating sarama consumer for brokers %+v: %v", brokers, err)
+	}
 	opts.tableCodec = codec
 
+	tmgr, err := opts.builders.topicmgr(brokers)
+	if err != nil {
+		return nil, fmt.Errorf("Error creating topic manager: %v", err)
+	}
+
 	v := &View{
-		brokers: brokers,
-		topic:   string(topic),
-		opts:    opts,
+		brokers:  brokers,
+		topic:    string(topic),
+		opts:     opts,
+		log:      opts.log.Prefix(fmt.Sprintf("View %s", topic)),
+		consumer: consumer,
+		tmgr:     tmgr,
+		state:    newViewSignal(),
 	}
 
 	if err = v.createPartitions(brokers); err != nil {
@@ -60,6 +98,11 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 	}
 
 	return v, err
+}
+
+// WaitRunning returns a channel that will be closed when the view enters the running state
+func (v *View) WaitRunning() <-chan struct{} {
+	return v.state.WaitForState(State(ViewStateRunning))
 }
 
 func (v *View) createPartitions(brokers []string) (rerr error) {
@@ -86,115 +129,170 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 		}
 	}
 
-	v.opts.log.Printf("Table %s has %d partitions", v.topic, len(partitions))
-	for _, p := range partitions {
-		st, err := v.opts.builders.storage(v.topic, p)
+	for partID, p := range partitions {
+		backoff, err := v.opts.builders.backoff()
 		if err != nil {
-			// TODO(diogo): gracefully terminate all partitions
-			return fmt.Errorf("Error creating local storage for partition %d: %v", p, err)
+			return fmt.Errorf("Error creating backoff: %v", err)
+		}
+		v.partitions = append(v.partitions, newPartitionTable(v.topic,
+			p,
+			v.consumer,
+			v.tmgr,
+			v.opts.updateCallback,
+			v.opts.builders.storage,
+			v.log.Prefix(fmt.Sprintf("PartTable-%d", partID)),
+			backoff,
+			v.opts.backoffResetTime,
+		))
+	}
+
+	return nil
+}
+
+func (v *View) runStateMerger(ctx context.Context) {
+
+	var (
+		states = make(map[int]PartitionStatus)
+		m      sync.Mutex
+	)
+
+	// internal callback that will be called when the state of any
+	// partition changes.
+	// Then the "lowest" state of all partitions will be selected and
+	// translated into the respective ViewState
+	updateViewState := func(idx int, state State) {
+		m.Lock()
+		defer m.Unlock()
+		states[idx] = PartitionStatus(state)
+
+		var lowestState = PartitionStatus(-1)
+
+		for _, partitionState := range states {
+			if lowestState == -1 || partitionState < lowestState {
+				lowestState = partitionState
+			}
+		}
+		var newState = ViewState(-1)
+		switch lowestState {
+		case PartitionStopped:
+			newState = ViewStateIdle
+		case PartitionInitializing:
+			newState = ViewStateInitializing
+		case PartitionConnecting:
+			newState = ViewStateConnecting
+		case PartitionRecovering:
+			newState = ViewStateCatchUp
+		case PartitionPreparing:
+			newState = ViewStateCatchUp
+		case PartitionRunning:
+			newState = ViewStateRunning
+		default:
+			v.log.Printf("State merger received unknown partition state: %v", lowestState)
 		}
 
-		po := newPartition(v.opts.log, v.topic, nil,
-			&storageProxy{Storage: st, partition: p, update: v.opts.updateCallback},
-			&proxy{p, nil},
-			v.opts.partitionChannelSize,
-		)
-		v.partitions = append(v.partitions, po)
+		if newState != -1 {
+			v.state.SetState(State(newState))
+		}
 	}
 
-	return nil
+	// get a state change observer for all partitions
+	for idx, partition := range v.partitions {
+		idx := idx
+		partition := partition
+
+		observer := partition.observeStateChanges()
+		// create a goroutine that updates the view state based all partition states
+		go func() {
+			for {
+				select {
+				case newState, ok := <-observer.C():
+					if !ok {
+						return
+					}
+					// something has changed, so update the state
+					updateViewState(idx, newState)
+				case <-ctx.Done():
+					observer.Stop()
+					return
+				}
+			}
+		}()
+	}
 }
 
-// reinit (re)initializes the view and its partitions to connect to Kafka
-func (v *View) reinit() error {
-	if v.terminated {
-		return fmt.Errorf("view: cannot reinitialize terminated view")
-	}
+// Run starts consuming the view's topic and saving updates in the local persistent cache.
+//
+// The view will shutdown in case of errors or when the context is closed.
+// It can be initialized with autoreconnect
+//  view := NewView(..., WithViewAutoReconnect())
+// which makes the view internally reconnect in case of errors.
+// Then it will only stop by canceling the context (see example).
+func (v *View) Run(ctx context.Context) (rerr error) {
+	v.log.Debugf("starting")
+	defer v.log.Debugf("stopped")
 
-	consumer, err := v.opts.builders.consumer(v.brokers, "goka-view", v.opts.clientID)
-	if err != nil {
-		return fmt.Errorf("view: cannot create Kafka consumer: %v", err)
-	}
-	v.consumer = consumer
+	// update the view state asynchronously by observing
+	// the partition's state and translating that to the view
+	v.runStateMerger(ctx)
+	defer v.state.SetState(State(ViewStateIdle))
 
-	for i, p := range v.partitions {
-		p.reinit(&proxy{int32(i), v.consumer})
-	}
-	return nil
-}
+	// close the view after running
+	defer func() {
+		errs := new(multierr.Errors)
+		errs.Collect(rerr)
+		errs.Collect(v.close())
+		rerr = errs.NilOrError()
+	}()
 
-// Run starts consuming the view's topic.
-func (v *View) Run(ctx context.Context) error {
-	v.opts.log.Printf("view [%s]: starting", v.Topic())
-	defer v.opts.log.Printf("view [%s]: stopped", v.Topic())
+	recoverErrg, recoverCtx := multierr.NewErrGroup(ctx)
 
-	if err := v.reinit(); err != nil {
-		return err
-	}
-
-	errg, ctx := multierr.NewErrGroup(ctx)
-	errg.Go(func() error { return v.run(ctx) })
-
-	for id, p := range v.partitions {
-		pid, par := int32(id), p
-		errg.Go(func() error {
-			v.opts.log.Printf("view [%s]: partition %d started", v.Topic(), pid)
-			defer v.opts.log.Printf("view [%s]: partition %d stopped", v.Topic(), pid)
-			if err := par.st.Open(); err != nil {
-				return fmt.Errorf("view [%s]: error opening storage partition %d: %v", v.Topic(), pid, err)
-			}
-			if err := par.startCatchup(ctx); err != nil {
-				return fmt.Errorf("view [%s]: error running partition %d: %v", v.Topic(), pid, err)
-			}
-			return nil
+	for _, partition := range v.partitions {
+		partition := partition
+		go partition.RunStatsLoop(ctx)
+		recoverErrg.Go(func() error {
+			return partition.SetupAndRecover(recoverCtx, v.opts.autoreconnect)
 		})
 	}
 
-	// wait for partition goroutines and shutdown
-	errs := errg.Wait()
-
-	v.opts.log.Printf("view [%s]: closing consumer", v.Topic())
-	if err := v.consumer.Close(); err != nil {
-		_ = errs.Collect(fmt.Errorf("view [%s]: failed closing consumer: %v", v.Topic(), err))
+	err := recoverErrg.Wait().NilOrError()
+	if err != nil {
+		rerr = fmt.Errorf("Error recovering partitions for view %s: %v", v.Topic(), err)
+		return
 	}
 
-	if !v.opts.restartable {
-		v.terminated = true
-		errs = errs.Merge(v.close())
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
 	}
 
-	return errs.NilOrError()
+	catchupErrg, catchupCtx := multierr.NewErrGroup(ctx)
+
+	for _, partition := range v.partitions {
+		partition := partition
+		catchupErrg.Go(func() error {
+			return partition.CatchupForever(catchupCtx, v.opts.autoreconnect)
+		})
+	}
+
+	err = catchupErrg.Wait().NilOrError()
+	if err != nil {
+		rerr = fmt.Errorf("Error catching up partitions for view %s: %v", v.Topic(), err)
+	}
+	return
 }
 
 // close closes all storage partitions
-func (v *View) close() *multierr.Errors {
-	errs := new(multierr.Errors)
+func (v *View) close() error {
+	errg, _ := multierr.NewErrGroup(context.Background())
 	for _, p := range v.partitions {
-		_ = errs.Collect(p.st.Close())
+		p := p
+		errg.Go(func() error {
+			return p.Close()
+		})
 	}
 	v.partitions = nil
-	return errs
-}
-
-// Terminate closes storage partitions. It must be called only if the view is
-// restartable (see WithViewRestartable() option). Once Terminate() is called,
-// the view cannot be restarted anymore.
-func (v *View) Terminate() error {
-	if !v.opts.restartable {
-		return nil
-	}
-	v.opts.log.Printf("View: closing")
-
-	// do not allow any reinitialization
-	if v.terminated {
-		return nil
-	}
-	v.terminated = true
-
-	if v.opts.restartable {
-		return v.close().NilOrError()
-	}
-	return nil
+	return errg.Wait().NilOrError()
 }
 
 func (v *View) hash(key string) (int32, error) {
@@ -217,12 +315,12 @@ func (v *View) hash(key string) (int32, error) {
 	return hash % int32(len(v.partitions)), nil
 }
 
-func (v *View) find(key string) (storage.Storage, error) {
+func (v *View) find(key string) (*PartitionTable, error) {
 	h, err := v.hash(key)
 	if err != nil {
 		return nil, err
 	}
-	return v.partitions[h].st, nil
+	return v.partitions[h], nil
 }
 
 // Topic returns  the view's topic
@@ -235,13 +333,13 @@ func (v *View) Topic() string {
 // Get can only be called after Recovered returns true.
 func (v *View) Get(key string) (interface{}, error) {
 	// find partition where key is located
-	s, err := v.find(key)
+	partTable, err := v.find(key)
 	if err != nil {
 		return nil, err
 	}
 
 	// get key and return
-	data, err := s.Get(key)
+	data, err := partTable.Get(key)
 	if err != nil {
 		return nil, fmt.Errorf("error getting value (key %s): %v", key, err)
 	} else if data == nil {
@@ -261,12 +359,12 @@ func (v *View) Get(key string) (interface{}, error) {
 // Has checks whether a value for passed key exists in the view.
 func (v *View) Has(key string) (bool, error) {
 	// find partition where key is located
-	s, err := v.find(key)
+	partTable, err := v.find(key)
 	if err != nil {
 		return false, err
 	}
 
-	return s.Has(key)
+	return partTable.Has(key)
 }
 
 // Iterator returns an iterator that iterates over the state of the View.
@@ -326,54 +424,10 @@ func (v *View) Evict(key string) error {
 	return s.Delete(key)
 }
 
-func (v *View) run(ctx context.Context) error {
-	for {
-		select {
-		case ev := <-v.consumer.Events():
-			switch ev := ev.(type) {
-			case *kafka.Message:
-				partition := v.partitions[int(ev.Partition)]
-				select {
-				case partition.ch <- ev:
-				case <-ctx.Done():
-					return nil
-				}
-			case *kafka.BOF:
-				partition := v.partitions[int(ev.Partition)]
-				select {
-				case partition.ch <- ev:
-				case <-ctx.Done():
-					return nil
-				}
-			case *kafka.EOF:
-				partition := v.partitions[int(ev.Partition)]
-				select {
-				case partition.ch <- ev:
-				case <-ctx.Done():
-					return nil
-				}
-			case *kafka.NOP:
-				partition := v.partitions[int(ev.Partition)]
-				select {
-				case partition.ch <- ev:
-				case <-ctx.Done():
-					return nil
-				}
-			case *kafka.Error:
-				return fmt.Errorf("view: error from kafka consumer: %v", ev)
-			default:
-				return fmt.Errorf("view: cannot handle %T = %v", ev, ev)
-			}
-		case <-ctx.Done():
-			return nil
-		}
-	}
-}
-
 // Recovered returns true when the view has caught up with events from kafka.
 func (v *View) Recovered() bool {
 	for _, p := range v.partitions {
-		if !p.recovered() {
+		if !p.IsRecovered() {
 			return false
 		}
 	}
@@ -381,28 +435,66 @@ func (v *View) Recovered() bool {
 	return true
 }
 
+// CurrentState returns the current ViewState of the view
+// This is useful for polling e.g. when implementing health checks or metrics
+func (v *View) CurrentState() ViewState {
+	return ViewState(v.state.State())
+}
+
+// ObserveStateChanges returns a StateChangeObserver that allows to handle state changes of the view
+// by reading from a channel.
+// It is crucial to continuously read from that channel, otherwise the View might deadlock upon
+// state changes.
+// If the observer is not needed, the caller must call observer.Stop()
+//
+// Example
+//
+//  view := goka.NewView(...)
+//  go view.Run(ctx)
+//
+//  go func(){
+//    obs := view.ObserveStateChanges()
+//    defer obs.Stop()
+//    for {
+//      select{
+//        case state, ok := <-obs.C:
+//          // handle state (or closed channel)
+//        case <-ctx.Done():
+//      }
+//    }
+//  }()
+func (v *View) ObserveStateChanges() *StateChangeObserver {
+	return v.state.ObserveStateChange()
+}
+
 // Stats returns a set of performance metrics of the view.
-func (v *View) Stats() *ViewStats {
-	return v.statsWithContext(context.Background())
+func (v *View) Stats(ctx context.Context) *ViewStats {
+	return v.statsWithContext(ctx)
 }
 
 func (v *View) statsWithContext(ctx context.Context) *ViewStats {
 	var (
 		m     sync.Mutex
-		wg    sync.WaitGroup
 		stats = newViewStats()
 	)
+	errg, ctx := multierr.NewErrGroup(ctx)
 
-	wg.Add(len(v.partitions))
-	for i, p := range v.partitions {
-		go func(pid int32, par *partition) {
-			s := par.fetchStats(ctx)
+	for _, partTable := range v.partitions {
+		partTable := partTable
+
+		errg.Go(func() error {
+			tableStats := partTable.fetchStats(ctx)
 			m.Lock()
-			stats.Partitions[pid] = s
-			m.Unlock()
-			wg.Done()
-		}(int32(i), p)
+			defer m.Unlock()
+
+			stats.Partitions[partTable.partition] = tableStats
+			return nil
+		})
 	}
-	wg.Wait()
+
+	err := errg.Wait().NilOrError()
+	if err != nil {
+		v.log.Printf("Error retrieving stats: %v", err)
+	}
 	return stats
 }

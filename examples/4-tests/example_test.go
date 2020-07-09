@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/facebookgo/ensure"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/tester"
 )
 
@@ -15,7 +15,7 @@ import (
 // One processor with only one input
 func Test_1Input(t *testing.T) {
 	var (
-		gkt             = tester.New(t)
+		tt              = tester.New(t)
 		receivedMessage string
 	)
 
@@ -25,17 +25,27 @@ func Test_1Input(t *testing.T) {
 			receivedMessage = msg.(string)
 		}),
 	),
-		goka.WithTester(gkt),
+		goka.WithTester(tt),
 	)
-
 	// start it
-	go proc.Run(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		err := proc.Run(context.Background())
+		if err != nil {
+			t.Fatalf("processor run failed with: %v", err)
+		}
+	}()
 
 	// consume a message
-	gkt.Consume("input", "key", "some message")
+	tt.Consume("input", "key", "some message")
 
 	// ensure the message was received
-	ensure.DeepEqual(t, receivedMessage, "some message")
+	test.AssertEqual(t, receivedMessage, "some message")
+
+	// stop the processor and wait to finish
+	proc.Stop()
+	<-done
 }
 
 // Scenario (2)
@@ -67,9 +77,55 @@ func Test_2InputOutput(t *testing.T) {
 
 	// make sure received the message in the output
 	key, value, valid := mt.Next()
-	ensure.True(t, valid)
-	ensure.DeepEqual(t, key, "key")
-	ensure.DeepEqual(t, value, "forwarded: some-message")
+	test.AssertTrue(t, valid)
+	test.AssertEqual(t, key, "key")
+	test.AssertEqual(t, value, "forwarded: some-message")
+}
+
+func Test_SetTableValue(t *testing.T) {
+	var (
+		gkt = tester.New(t)
+	)
+
+	// create a new processor, registering the tester
+	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
+		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			ctx.SetValue(ctx.Value().(int64) + msg.(int64))
+		}),
+		goka.Persist(new(codec.Int64)),
+	),
+		goka.WithTester(gkt),
+	)
+
+	go proc.Run(context.Background())
+
+	gkt.SetTableValue("group-table", "value", int64(10))
+	// start it
+	gkt.Consume("input", "value", int64(2))
+
+	// make sure it's correctly persisted in the state
+	value := gkt.TableValue("group-table", "value")
+	test.AssertEqual(t, value, int64(12))
+}
+
+func Test_JoinOutput(t *testing.T) {
+
+	var (
+		gkt = tester.New(t)
+	)
+
+	// create a new processor, registering the tester
+	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
+		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+		}),
+		goka.Output("output", new(codec.Int64)),
+		goka.Join("join", new(codec.Int64)),
+	),
+		goka.WithTester(gkt),
+	)
+	go proc.Run(context.Background())
+
+	gkt.Consume("input", "value", int64(2))
 }
 
 // Scenario (3)
@@ -97,7 +153,7 @@ func Test_3Persist(t *testing.T) {
 
 	// make sure it's correctly persisted in the state
 	value := gkt.TableValue("group-table", "key")
-	ensure.DeepEqual(t, value, "state: some-message")
+	test.AssertEqual(t, value, "state: some-message")
 }
 
 // Scenario (4)
@@ -133,16 +189,17 @@ func Test_Subtest(t *testing.T) {
 
 		// check it was emitted
 		key, value, ok := mt.Next()
-		ensure.True(t, ok)
-		ensure.DeepEqual(t, key, "output-key")
-		ensure.DeepEqual(t, value, "forwarded: hello")
+		test.AssertTrue(t, ok)
+		test.AssertEqual(t, key, "output-key")
+		test.AssertEqual(t, value, "forwarded: hello")
 
 		// we should be at the end
-		ensure.DeepEqual(t, mt.Hwm(), mt.NextOffset())
+		test.AssertEqual(t, mt.Hwm(), int64(1))
+		test.AssertEqual(t, mt.NextOffset(), int64(1))
 
 		// this is equivalent
 		_, _, ok = mt.Next()
-		ensure.False(t, ok)
+		test.AssertFalse(t, ok)
 	})
 	t.Run("test-2", func(t *testing.T) {
 		// clear all values so we can start with an empty state
@@ -153,7 +210,7 @@ func Test_Subtest(t *testing.T) {
 
 		// do some state checks
 		value := gkt.TableValue("group-table", "bob")
-		ensure.DeepEqual(t, value, "state: hello")
+		test.AssertEqual(t, value, "state: hello")
 	})
 }
 
@@ -201,5 +258,5 @@ func Test_Chain(t *testing.T) {
 	// the value should be persisted in the second processor's table
 	value := gkt.TableValue("proc2-table", "bob")
 
-	ensure.DeepEqual(t, value, "persist: proc1-out: loop: hello world")
+	test.AssertEqual(t, value, "persist: proc1-out: loop: hello world")
 }

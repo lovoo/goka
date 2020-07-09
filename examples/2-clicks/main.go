@@ -87,7 +87,14 @@ func runProcessor() {
 		goka.Input(topic, new(codec.String), process),
 		goka.Persist(new(userCodec)),
 	)
-	p, err := goka.NewProcessor(brokers, g)
+	tmc := goka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+	p, err := goka.NewProcessor(brokers,
+		g,
+		goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
+		goka.WithConsumerGroupBuilder(goka.DefaultConsumerGroupBuilder),
+	)
 	if err != nil {
 		panic(err)
 	}
