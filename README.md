@@ -98,11 +98,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
@@ -114,18 +114,20 @@ var (
 	group   goka.Group  = "example-group"
 )
 
-// emits a single message and leave
+// Emit messages forever every second
 func runEmitter() {
 	emitter, err := goka.NewEmitter(brokers, topic, new(codec.String))
 	if err != nil {
 		log.Fatalf("error creating emitter: %v", err)
 	}
 	defer emitter.Finish()
-	err = emitter.EmitSync("some-key", "some-value")
-	if err != nil {
-		log.Fatalf("error emitting message: %v", err)
+	for {
+		time.Sleep(1 * time.Second)
+		err = emitter.EmitSync("some-key", "some-value")
+		if err != nil {
+			log.Fatalf("error emitting message: %v", err)
+		}
 	}
-	fmt.Println("message emitted")
 }
 
 // process messages until ctrl-c is pressed
@@ -163,6 +165,8 @@ func runProcessor() {
 		defer close(done)
 		if err = p.Run(ctx); err != nil {
 			log.Fatalf("error running processor: %v", err)
+		} else {
+			log.Printf("Processor shutdown cleanly")
 		}
 	}()
 
@@ -174,10 +178,12 @@ func runProcessor() {
 }
 
 func main() {
-	runEmitter()   // emits one message and stops
-	runProcessor() // press ctrl-c to stop
+	go runEmitter() // emits one message and stops
+	runProcessor()  // press ctrl-c to stop
 }
+
 ```
+This code is also in *examples/readme/main.go*, no need to copy around. Just run `go run examples/readme/main.go`.
 
 Note that tables have to be configured in Kafka with log compaction.
 For details check the [Wiki](https://github.com/lovoo/goka/wiki/Tips#configuring-log-compaction-for-table-topics).
