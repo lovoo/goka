@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
 )
@@ -98,6 +99,13 @@ func runProcessor() {
 
 func main() {
 	config := goka.DefaultConfig()
+	// since the emitter only emits one message, we need to tell the processor
+	// to read from the beginning
+	// As the processor is slower to start than the emitter, it would not consume the first
+	// message otherwise.
+	// In production systems however, check whether you really want to read the whole topic on first start, which
+	// can be a lot of messages.
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	goka.ReplaceGlobalConfig(config)
 
 	tm, err := goka.NewTopicManager(brokers, goka.DefaultConfig(), tmc)
