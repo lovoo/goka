@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
 )
@@ -99,7 +98,6 @@ func runProcessor() {
 
 func main() {
 	config := goka.DefaultConfig()
-	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	goka.ReplaceGlobalConfig(config)
 
 	tm, err := goka.NewTopicManager(brokers, goka.DefaultConfig(), tmc)

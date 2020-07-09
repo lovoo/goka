@@ -2,7 +2,26 @@
 
 ## [Unreleased](https://github.com/lovoo/goka/tree/HEAD)
 
-[Full Changelog](https://github.com/lovoo/goka/compare/v0.9.0-beta2...HEAD)
+[Full Changelog](https://github.com/lovoo/goka/compare/v0.9.0-beta3...HEAD)
+
+**Implemented enhancements:**
+
+- Migration guide [\#249](https://github.com/lovoo/goka/issues/249)
+- View: expose view and connection state [\#248](https://github.com/lovoo/goka/issues/248)
+- PartitionTable backoff on errors [\#247](https://github.com/lovoo/goka/issues/247)
+
+**Closed issues:**
+
+- Examples `simplest` and `clicks` panic with "non-positive interval for NewTicker" [\#258](https://github.com/lovoo/goka/issues/258)
+- panic: non-positive interval for NewTicker [\#255](https://github.com/lovoo/goka/issues/255)
+
+**Merged pull requests:**
+
+- fixed broken goka blogpost link [\#257](https://github.com/lovoo/goka/pull/257) ([frairon](https://github.com/frairon))
+
+## [v0.9.0-beta3](https://github.com/lovoo/goka/tree/v0.9.0-beta3) (2020-04-09)
+
+[Full Changelog](https://github.com/lovoo/goka/compare/v0.9.0-beta2...v0.9.0-beta3)
 
 **Implemented enhancements:**
 
@@ -12,6 +31,14 @@
 **Closed issues:**
 
 - cannot run multiple consumers in the same group [\#204](https://github.com/lovoo/goka/issues/204)
+
+**Merged pull requests:**
+
+- stats-tracking improved [\#245](https://github.com/lovoo/goka/pull/245) ([frairon](https://github.com/frairon))
+- return trackOutput if stats are nil [\#244](https://github.com/lovoo/goka/pull/244) ([R053NR07](https://github.com/R053NR07))
+- added lots of godoc, fixed many linter errors, added Open call when c… [\#243](https://github.com/lovoo/goka/pull/243) ([frairon](https://github.com/frairon))
+- Open Storage in PartitionTable when performing Setup [\#242](https://github.com/lovoo/goka/pull/242) ([frairon](https://github.com/frairon))
+- updated readme for configuration, added changelog [\#240](https://github.com/lovoo/goka/pull/240) ([frairon](https://github.com/frairon))
 
 ## [v0.9.0-beta2](https://github.com/lovoo/goka/tree/v0.9.0-beta2) (2020-03-20)
 
