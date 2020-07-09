@@ -183,7 +183,7 @@ func main() {
 }
 
 ```
-This code is also in *examples/readme/main.go*, no need to copy around. Just run `go run examples/readme/main.go`.
+A very similar example is also in *1-simplest*. Just run `go run examples/1-simplest/main.go`.
 
 Note that tables have to be configured in Kafka with log compaction.
 For details check the [Wiki](https://github.com/lovoo/goka/wiki/Tips#configuring-log-compaction-for-table-topics).
