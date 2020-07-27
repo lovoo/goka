@@ -51,8 +51,8 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 	}, nil
 }
 
-// Emit sends a message for passed key using the emitter's codec.
-func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
+// EmitWithHeaders sends a message with the given headers for the passed key using the emitter's codec.
+func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers map[string][]byte) (*Promise, error) {
 	select {
 	case <-e.done:
 		return NewPromise().Finish(nil, ErrEmitterAlreadyClosed), nil
@@ -71,9 +71,21 @@ func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
 		}
 	}
 	e.wg.Add(1)
-	return e.producer.Emit(e.topic, key, data).Then(func(err error) {
-		e.wg.Done()
-	}), nil
+	if headers == nil {
+		return e.producer.Emit(e.topic, key, data).Then(func(err error) {
+			e.wg.Done()
+		}), nil
+	} else {
+		return e.producer.EmitWithHeaders(e.topic, key, data, headers).Then(func(err error) {
+			e.wg.Done()
+		}), nil
+	}
+
+}
+
+// Emit sends a message for passed key using the emitter's codec.
+func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
+	return e.EmitWithHeaders(key, msg, nil)
 }
 
 // EmitSync sends a message to passed topic and key.
