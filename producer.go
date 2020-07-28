@@ -12,6 +12,7 @@ import (
 type Producer interface {
 	// Emit sends a message to topic.
 	Emit(topic string, key string, value []byte) *Promise
+	EmitWithHeaders(topic string, key string, value []byte, headers map[string][]byte) *Promise
 	Close() error
 }
 
@@ -68,6 +69,30 @@ func (p *producer) Emit(topic string, key string, value []byte) *Promise {
 		Key:      sarama.StringEncoder(key),
 		Value:    sarama.ByteEncoder(value),
 		Metadata: promise,
+	}
+	return promise
+}
+
+// Emit emits a key-value pair to topic and returns a Promise that
+// can be checked for errors asynchronously
+func (p *producer) EmitWithHeaders(topic string, key string, value []byte, headers map[string][]byte) *Promise {
+	promise := NewPromise()
+
+	recordHeaders := make([]sarama.RecordHeader, 0, len(headers))
+	for key, value := range headers {
+		recordHeaders = append(recordHeaders,
+			sarama.RecordHeader{
+				Key:   []byte(key),
+				Value: value,
+			})
+	}
+
+	p.producer.Input() <- &sarama.ProducerMessage{
+		Topic:    topic,
+		Key:      sarama.StringEncoder(key),
+		Value:    sarama.ByteEncoder(value),
+		Metadata: promise,
+		Headers:  recordHeaders,
 	}
 	return promise
 }

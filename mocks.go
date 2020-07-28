@@ -170,6 +170,20 @@ func (mr *MockProducerMockRecorder) Emit(arg0, arg1, arg2 interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Emit", reflect.TypeOf((*MockProducer)(nil).Emit), arg0, arg1, arg2)
 }
 
+// EmitWithHeaders mocks base method
+func (m *MockProducer) EmitWithHeaders(arg0, arg1 string, arg2 []byte, arg3 map[string][]byte) *Promise {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EmitWithHeaders", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(*Promise)
+	return ret0
+}
+
+// EmitWithHeaders indicates an expected call of EmitWithHeaders
+func (mr *MockProducerMockRecorder) EmitWithHeaders(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EmitWithHeaders", reflect.TypeOf((*MockProducer)(nil).EmitWithHeaders), arg0, arg1, arg2, arg3)
+}
+
 // MockBroker is a mock of Broker interface
 type MockBroker struct {
 	ctrl     *gomock.Controller
