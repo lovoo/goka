@@ -3,7 +3,7 @@ module github.com/lovoo/goka
 go 1.13
 
 require (
-	github.com/Shopify/sarama v1.26.1
+	github.com/Shopify/sarama v1.27.0
 	github.com/golang/mock v1.4.0
 	github.com/gorilla/mux v1.7.3
 	github.com/syndtr/goleveldb v1.0.0
