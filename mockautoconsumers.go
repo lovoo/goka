@@ -435,6 +435,11 @@ func (cgs *MockConsumerGroupSession) MarkOffset(topic string, partition int32, o
 	panic("not implemented")
 }
 
+// Commit the offset to the backend
+func (cgs *MockConsumerGroupSession) Commit() {
+	panic("not implemented")
+}
+
 // ResetOffset resets the offset to be consumed from
 func (cgs *MockConsumerGroupSession) ResetOffset(topic string, partition int32, offset int64, metadata string) {
 	panic("reset offset is not implemented by the mock")
