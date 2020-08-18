@@ -236,6 +236,10 @@ func (cgs *cgSession) MarkOffset(topic string, partition int32, offset int64, me
 	cgs.queues[topic].setHwmIfNewer(offset + 1)
 }
 
+func (cgs *cgSession) Commit() {
+	panic("commit offset is not implemented by the mock")
+}
+
 // ResetOffset resets the offset to be consumed from
 func (cgs *cgSession) ResetOffset(topic string, partition int32, offset int64, metadata string) {
 	panic("reset offset is not implemented by the mock")
