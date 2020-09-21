@@ -88,8 +88,8 @@ func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
 	return e.EmitWithHeaders(key, msg, nil)
 }
 
-// EmitWithHeadersSync sends a message with the given headers to passed topic and key.
-func (e *Emitter) EmitWithHeadersSync(key string, msg interface{}, headers map[string][]byte) error {
+// EmitSyncWithHeaders sends a message with the given headers to passed topic and key.
+func (e *Emitter) EmitSyncWithHeaders(key string, msg interface{}, headers map[string][]byte) error {
 	var (
 		err     error
 		promise *Promise
@@ -111,7 +111,7 @@ func (e *Emitter) EmitWithHeadersSync(key string, msg interface{}, headers map[s
 
 // EmitSync sends a message to passed topic and key.
 func (e *Emitter) EmitSync(key string, msg interface{}) error {
-	return e.EmitWithHeadersSync(key, msg, nil)
+	return e.EmitSyncWithHeaders(key, msg, nil)
 }
 
 // Finish waits until the emitter is finished producing all pending messages.
