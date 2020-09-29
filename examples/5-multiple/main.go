@@ -71,7 +71,7 @@ func runEmitter(ctx context.Context) (rerr error) {
 	if err != nil {
 		return err
 	}
-	emitterB, err := goka.NewEmitter(brokers, inputA, new(codec.String))
+	emitterB, err := goka.NewEmitter(brokers, inputB, new(codec.String))
 	if err != nil {
 		return err
 	}
