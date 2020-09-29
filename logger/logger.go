@@ -79,7 +79,7 @@ func Default() Logger {
 func Debug(gokaDebug, saramaDebug bool) {
 	defaultLogger.debug = gokaDebug
 	if saramaDebug {
-		SetSaramaLogger(&std{debug: true})
+		SetSaramaLogger((&std{debug: true}).Prefix("Sarama"))
 	}
 }
 
