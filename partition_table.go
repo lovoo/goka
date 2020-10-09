@@ -194,43 +194,56 @@ func (p *PartitionTable) Close() error {
 func (p *PartitionTable) createStorage(ctx context.Context) (*storageProxy, error) {
 	var (
 		err  error
+		errs = new(multierr.Errors)
 		st   storage.Storage
+		start = time.Now()
 		done = make(chan struct{})
 	)
-	start := time.Now()
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
+	defer close(done)
+
 	go func() {
-		defer close(done)
-		st, err = p.builder(p.topic, p.partition)
-		if err != nil {
-			return
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				p.log.Printf("creating storage for topic %s/%d for %.1f minutes ...", p.topic, p.partition, time.Since(start).Minutes())
+			}
 		}
-		err = st.Open()
 	}()
 
-WaitLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, nil
-		case <-ticker.C:
-			p.log.Printf("creating storage for topic %s/%d for %.1f minutes ...", p.topic, p.partition, time.Since(start).Minutes())
-		case <-done:
-			p.log.Debugf("finished building storage for topic %s/%d in %.1f minutes", p.topic, p.partition, time.Since(start).Minutes())
-			if err != nil {
-				return nil, fmt.Errorf("error building storage: %v", err)
-			}
-			break WaitLoop
-		}
+	st, err = p.builder(p.topic, p.partition)
+	if err != nil {
+		return nil, fmt.Errorf("error building storage: %v", err)
+	}
+	err = st.Open()
+	if err != nil {
+		errs.Collect(st.Close())
+		errs.Collect(fmt.Errorf("error opening storage: %v", err))
+		return nil, errs.NilOrError()
 	}
 
+	// close the db if context was cancelled before the builder returned
+	select {
+	case <-ctx.Done():
+		err = st.Close()
+		// only collect context error if Close() errored out
+		if err != nil {
+			errs.Collect(err)
+			errs.Collect(ctx.Err())
+		}
+		return nil, errs.NilOrError()
+	default:
+	}
+
+	p.log.Debugf("finished building storage for topic %s/%d in %.1f minutes", p.topic, p.partition, time.Since(start).Minutes())
 	return &storageProxy{
 		Storage:   st,
 		partition: p.partition,
 		update:    p.updateCallback,
 	}, nil
-
 }
 
 // findOffsetToLoad returns the first offset to load and the high watermark.
