@@ -41,7 +41,7 @@ type Tester struct {
 	mClients sync.RWMutex
 	clients  map[string]*client
 
-	mCodecs sync.Mutex
+	mCodecs sync.RWMutex
 	codecs  map[string]goka.Codec
 
 	mQueues     sync.Mutex
@@ -216,6 +216,10 @@ func (tt *Tester) getOrCreateQueue(topic string) *queue {
 }
 
 func (tt *Tester) codecForTopic(topic string) goka.Codec {
+	// lock the access to codecs-map
+	tt.mCodecs.RLock()
+	defer tt.mCodecs.RUnlock()
+
 	codec, exists := tt.codecs[topic]
 	if !exists {
 		panic(fmt.Errorf("no codec for topic %s registered", topic))
