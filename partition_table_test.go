@@ -71,7 +71,7 @@ func TestPT_createStorage(t *testing.T) {
 		test.AssertFuncEqual(t, sp.Update, equalSP.Update)
 	})
 	t.Run("fail_ctx_cancel", func(t *testing.T) {
-		pt, _, ctrl := defaultPT(
+		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
 			0,
@@ -79,10 +79,13 @@ func TestPT_createStorage(t *testing.T) {
 			nil,
 		)
 		defer ctrl.Finish()
-		pt.builder = errStorageBuilder()
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		cancel()
+
+		bm.mst.EXPECT().Open().Return(nil)
+		bm.mst.EXPECT().Close().Return(nil)
+
 		sp, err := pt.createStorage(ctx)
 		test.AssertNil(t, err)
 		test.AssertNil(t, sp)
