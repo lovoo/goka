@@ -55,7 +55,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers map[string][]byte) (*Promise, error) {
 	select {
 	case <-e.done:
-		return NewPromise().Finish(nil, ErrEmitterAlreadyClosed), nil
+		return NewPromise().finish(nil, ErrEmitterAlreadyClosed), nil
 	default:
 	}
 

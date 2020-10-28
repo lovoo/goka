@@ -16,9 +16,19 @@ type Promise struct {
 	callbacks []func(msg *sarama.ProducerMessage, err error)
 }
 
+// PromiseFinisher finishes a promise
+type PromiseFinisher func(msg *sarama.ProducerMessage, err error) *Promise
+
 // NewPromise creates a new Promise
 func NewPromise() *Promise {
 	return new(Promise)
+}
+
+// NewPromiseWithFinisher creates a new Promise and a separate finish method.
+// This is necessary if the promise is used outside of goka package.
+func NewPromiseWithFinisher() (*Promise, PromiseFinisher) {
+	p := new(Promise)
+	return p, p.finish
 }
 
 // execute all callbacks conveniently
@@ -58,7 +68,7 @@ func (p *Promise) ThenWithMessage(callback func(msg *sarama.ProducerMessage, err
 }
 
 // Finish finishes the promise by executing all callbacks and saving the message/error for late subscribers
-func (p *Promise) Finish(msg *sarama.ProducerMessage, err error) *Promise {
+func (p *Promise) finish(msg *sarama.ProducerMessage, err error) *Promise {
 	p.Lock()
 	defer p.Unlock()
 
