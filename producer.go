@@ -109,7 +109,7 @@ func (p *producer) run() {
 			if !ok {
 				return
 			}
-			err.Msg.Metadata.(*Promise).Finish(nil, err.Err)
+			err.Msg.Metadata.(*Promise).finish(nil, err.Err)
 		}
 	}()
 
@@ -121,7 +121,7 @@ func (p *producer) run() {
 			if !ok {
 				return
 			}
-			msg.Metadata.(*Promise).Finish(msg, nil)
+			msg.Metadata.(*Promise).finish(msg, nil)
 		}
 	}()
 }
