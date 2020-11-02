@@ -6,6 +6,7 @@ import (
 	"hash"
 	"log"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -95,9 +96,7 @@ func TestView_hash(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
-		view.partitions = []*PartitionTable{
-			&PartitionTable{},
-		}
+		view.partitions = []*PartitionTable{{}}
 
 		h, err := view.hash("a")
 		test.AssertNil(t, err)
@@ -107,9 +106,7 @@ func TestView_hash(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
-		view.partitions = []*PartitionTable{
-			&PartitionTable{},
-		}
+		view.partitions = []*PartitionTable{{}}
 		view.opts.hasher = func() hash.Hash32 {
 			hasher := newConstHasher(0)
 			hasher.ReturnError()
@@ -138,7 +135,7 @@ func TestView_find(t *testing.T) {
 			proxy = &storageProxy{}
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
+			{
 				st:    proxy,
 				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
@@ -156,9 +153,7 @@ func TestView_find(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
-		view.partitions = []*PartitionTable{
-			&PartitionTable{},
-		}
+		view.partitions = []*PartitionTable{{}}
 		view.opts.hasher = func() hash.Hash32 {
 			hasher := newConstHasher(0)
 			hasher.ReturnError()
@@ -187,7 +182,7 @@ func TestView_Get(t *testing.T) {
 			value int64 = 3
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
+			{
 				st:    proxy,
 				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
@@ -215,7 +210,7 @@ func TestView_Get(t *testing.T) {
 			key = "some-key"
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
+			{
 				st:    proxy,
 				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
@@ -244,7 +239,7 @@ func TestView_Get(t *testing.T) {
 			errRet error = fmt.Errorf("get failed")
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
+			{
 				st:    proxy,
 				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
@@ -270,7 +265,7 @@ func TestView_Has(t *testing.T) {
 			has = true
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
+			{
 				st:    proxy,
 				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
@@ -298,7 +293,7 @@ func TestView_Has(t *testing.T) {
 			has = false
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
+			{
 				st:    proxy,
 				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
@@ -322,9 +317,7 @@ func TestView_Has(t *testing.T) {
 			key = "some-key"
 			has = false
 		)
-		view.partitions = []*PartitionTable{
-			&PartitionTable{},
-		}
+		view.partitions = []*PartitionTable{{}}
 		view.opts.hasher = func() hash.Hash32 {
 			hasher := newConstHasher(0)
 			hasher.ReturnError()
@@ -349,9 +342,7 @@ func TestView_Evict(t *testing.T) {
 			}
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
-				st: proxy,
-			},
+			{st: proxy},
 		}
 		view.opts.hasher = func() hash.Hash32 {
 			hasher := newConstHasher(0)
@@ -373,9 +364,7 @@ func TestView_Recovered(t *testing.T) {
 			hasRecovered = true
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
-				state: NewSignal(State(PartitionRunning)).SetState(State(PartitionRunning)),
-			},
+			{state: NewSignal(State(PartitionRunning)).SetState(State(PartitionRunning))},
 		}
 		ret := view.Recovered()
 		test.AssertTrue(t, ret == hasRecovered)
@@ -388,12 +377,8 @@ func TestView_Recovered(t *testing.T) {
 			hasRecovered = false
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
-				state: NewSignal(State(PartitionRunning), State(PartitionRecovering)).SetState(State(PartitionRecovering)),
-			},
-			&PartitionTable{
-				state: NewSignal(State(PartitionRunning)).SetState(State(PartitionRunning)),
-			},
+			{state: NewSignal(State(PartitionRunning), State(PartitionRecovering)).SetState(State(PartitionRecovering))},
+			{state: NewSignal(State(PartitionRunning)).SetState(State(PartitionRunning))},
 		}
 		ret := view.Recovered()
 		test.AssertTrue(t, ret == hasRecovered)
@@ -421,15 +406,9 @@ func TestView_close(t *testing.T) {
 			}
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
+			{st: proxy},
+			{st: proxy},
+			{st: proxy},
 		}
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
@@ -448,15 +427,9 @@ func TestView_close(t *testing.T) {
 			retErr error = fmt.Errorf("some-error")
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
+			{st: proxy},
+			{st: proxy},
+			{st: proxy},
 		}
 		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
 
@@ -478,15 +451,9 @@ func TestView_Terminate(t *testing.T) {
 			isAutoReconnect = true
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
+			{st: proxy},
+			{st: proxy},
+			{st: proxy},
 		}
 		view.opts.autoreconnect = isAutoReconnect
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
@@ -507,15 +474,9 @@ func TestView_Terminate(t *testing.T) {
 			isAutoReconnect = true
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
+			{st: proxy},
+			{st: proxy},
+			{st: proxy},
 		}
 		view.opts.autoreconnect = isAutoReconnect
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
@@ -540,15 +501,9 @@ func TestView_Terminate(t *testing.T) {
 			isAutoReconnect       = true
 		)
 		view.partitions = []*PartitionTable{
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
-			&PartitionTable{
-				st: proxy,
-			},
+			{st: proxy},
+			{st: proxy},
+			{st: proxy},
 		}
 		view.opts.autoreconnect = isAutoReconnect
 		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
@@ -570,9 +525,9 @@ func TestView_Run(t *testing.T) {
 			// local     int64          = oldest
 			consumer  = defaultSaramaAutoConsumerMock(t)
 			partition int32
-			count     int64
+			count                    = new(int64)
 			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
-				count++
+				atomic.AddInt64(count, 1)
 				return nil
 			}
 		)
@@ -610,7 +565,7 @@ func TestView_Run(t *testing.T) {
 					return
 				default:
 				}
-				if count == 10 {
+				if atomic.LoadInt64(count) == 10 {
 					time.Sleep(time.Millisecond * 10)
 					cancel()
 					return

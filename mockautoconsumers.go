@@ -95,7 +95,7 @@ func (c *MockAutoConsumer) Topics() ([]string, error) {
 	return result, nil
 }
 
-// Partitions returns the list of parititons for the given topic, as registered with SetTopicMetadata
+// Partitions returns the list of partitions for the given topic, as registered with SetTopicMetadata
 func (c *MockAutoConsumer) Partitions(topic string) ([]int32, error) {
 	c.l.Lock()
 	defer c.l.Unlock()
@@ -340,6 +340,8 @@ type MockConsumerGroupSession struct {
 	topics     []string
 	claims     map[string]*MockConsumerGroupClaim
 
+	mu sync.RWMutex
+
 	consumerGroup *MockConsumerGroup
 }
 
@@ -404,6 +406,9 @@ func (cgs *MockConsumerGroupSession) Claims() map[string][]int32 {
 }
 
 func (cgs *MockConsumerGroupSession) createGroupClaim(topic string, partition int32) *MockConsumerGroupClaim {
+	cgs.mu.Lock()
+	defer cgs.mu.Unlock()
+
 	cgs.claims[topic] = NewMockConsumerGroupClaim(topic, 0)
 
 	return cgs.claims[topic]
@@ -411,6 +416,8 @@ func (cgs *MockConsumerGroupSession) createGroupClaim(topic string, partition in
 
 // SendMessage sends a message to the consumer
 func (cgs *MockConsumerGroupSession) SendMessage(msg *sarama.ConsumerMessage) {
+	cgs.mu.RLock()
+	defer cgs.mu.RUnlock()
 
 	for topic, claim := range cgs.claims {
 		if topic == msg.Topic {
@@ -420,7 +427,7 @@ func (cgs *MockConsumerGroupSession) SendMessage(msg *sarama.ConsumerMessage) {
 }
 
 // MemberID returns the member ID
-// TOOD: clarify what that actually means and whether we need to mock taht somehow
+// TODO: clarify what that actually means and whether we need to mock that somehow
 func (cgs *MockConsumerGroupSession) MemberID() string {
 	panic("MemberID not provided by mock")
 }
@@ -458,6 +465,8 @@ func (cgs *MockConsumerGroupSession) Context() context.Context {
 // MockConsumerGroup mocks the consumergroup
 type MockConsumerGroup struct {
 	errs chan error
+
+	mu sync.RWMutex
 
 	// setting this makes the consume call fail with this error for testing
 	failOnConsume error
@@ -572,6 +581,8 @@ func (cg *MockConsumerGroup) Consume(ctx context.Context, topics []string, handl
 
 // SendError sends an error the consumergroup
 func (cg *MockConsumerGroup) SendError(err error) {
+	cg.mu.RLock()
+	defer cg.mu.RUnlock()
 	cg.errs <- err
 }
 
@@ -609,11 +620,16 @@ func (cg *MockConsumerGroup) SendMessageWait(message *sarama.ConsumerMessage) {
 
 // Errors returns the errors channel
 func (cg *MockConsumerGroup) Errors() <-chan error {
+	cg.mu.RLock()
+	defer cg.mu.RUnlock()
 	return cg.errs
 }
 
 // Close closes the consumergroup
 func (cg *MockConsumerGroup) Close() error {
+	cg.mu.Lock()
+	defer cg.mu.Unlock()
+
 	cg.messages = make(map[int64]int64)
 
 	// close old errs chan and create new one

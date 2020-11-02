@@ -23,6 +23,8 @@ type consumerGroup struct {
 
 	currentSession *cgSession
 
+	mu sync.RWMutex
+
 	tt *Tester
 }
 
@@ -116,11 +118,15 @@ func (cg *consumerGroup) Consume(ctx context.Context, topics []string, handler s
 
 // SendError sends an error the consumergroup
 func (cg *consumerGroup) SendError(err error) {
+	cg.mu.RLock()
+	defer cg.mu.RUnlock()
 	cg.errs <- err
 }
 
 // Errors returns the errors channel
 func (cg *consumerGroup) Errors() <-chan error {
+	cg.mu.RLock()
+	defer cg.mu.RUnlock()
 	return cg.errs
 }
 
@@ -135,6 +141,8 @@ func (cg *consumerGroup) nextOffset() int64 {
 // Close closes the consumergroup
 func (cg *consumerGroup) Close() error {
 	// close old errs chan and create new one
+	cg.mu.Lock()
+	defer cg.mu.Unlock()
 	close(cg.errs)
 	cg.errs = make(chan error)
 
