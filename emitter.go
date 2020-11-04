@@ -19,7 +19,7 @@ type Emitter struct {
 	topic string
 
 	wg   sync.WaitGroup
-	mu   sync.Mutex
+	mu   sync.RWMutex
 	done chan struct{}
 }
 
@@ -69,14 +69,15 @@ func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers map[strin
 	}
 
 	// protect e.done channel and e.wg WaitGroup together to reject all new emits after calling e.Finish
-	e.mu.Lock()
+	// wg.Add must not be called after wg.Wait finished
+	e.mu.RLock()
 	select {
 	case <-e.done:
-		e.mu.Unlock()
+		e.mu.RUnlock()
 		return NewPromise().finish(nil, ErrEmitterAlreadyClosed), nil
 	default:
 		e.wg.Add(1)
-		e.mu.Unlock()
+		e.mu.RUnlock()
 	}
 
 	if headers == nil {
