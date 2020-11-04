@@ -525,9 +525,9 @@ func TestView_Run(t *testing.T) {
 			// local     int64          = oldest
 			consumer  = defaultSaramaAutoConsumerMock(t)
 			partition int32
-			count                    = new(int64)
+			count     int64
 			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
-				atomic.AddInt64(count, 1)
+				atomic.AddInt64(&count, 1)
 				return nil
 			}
 		)
@@ -565,7 +565,7 @@ func TestView_Run(t *testing.T) {
 					return
 				default:
 				}
-				if atomic.LoadInt64(count) == 10 {
+				if atomic.LoadInt64(&count) == 10 {
 					time.Sleep(time.Millisecond * 10)
 					cancel()
 					return

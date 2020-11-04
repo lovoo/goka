@@ -373,9 +373,9 @@ func TestPT_load(t *testing.T) {
 			consumer               = defaultSaramaAutoConsumerMock(t)
 			topic                  = "some-topic"
 			partition        int32
-			count                           = new(int64)
+			count            int64
 			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
-				atomic.AddInt64(count, 1)
+				atomic.AddInt64(&count, 1)
 				return nil
 			}
 		)
@@ -408,7 +408,7 @@ func TestPT_load(t *testing.T) {
 					return
 				default:
 				}
-				if atomic.LoadInt64(count) == 10 {
+				if atomic.LoadInt64(&count) == 10 {
 					cancel()
 					return
 				}
@@ -419,7 +419,7 @@ func TestPT_load(t *testing.T) {
 		test.AssertNil(t, err)
 		err = pt.load(ctx, stopAfterCatchup)
 		test.AssertNil(t, err)
-		test.AssertTrue(t, atomic.LoadInt64(count) == 10)
+		test.AssertTrue(t, atomic.LoadInt64(&count) == 10)
 	})
 }
 
@@ -522,10 +522,10 @@ func TestPT_loadMessages(t *testing.T) {
 			stopAfterCatchup       = false
 			topic                  = "some-topic"
 			partition        int32
-			consumer                        = defaultSaramaAutoConsumerMock(t)
-			count                           = new(int64)
+			consumer         = defaultSaramaAutoConsumerMock(t)
+			count            int64
 			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
-				atomic.AddInt64(count, 1)
+				atomic.AddInt64(&count, 1)
 				return nil
 			}
 		)
@@ -554,7 +554,7 @@ func TestPT_loadMessages(t *testing.T) {
 					return
 				default:
 				}
-				if atomic.LoadInt64(count) == 100 {
+				if atomic.LoadInt64(&count) == 100 {
 					break
 				}
 			}
@@ -562,7 +562,7 @@ func TestPT_loadMessages(t *testing.T) {
 		}(ctx)
 		err = pt.loadMessages(ctx, partConsumer, partitionHwm, stopAfterCatchup)
 		test.AssertNil(t, err)
-		test.AssertTrue(t, atomic.LoadInt64(count) == 100)
+		test.AssertTrue(t, atomic.LoadInt64(&count) == 100)
 	})
 	t.Run("close_msg_chan", func(t *testing.T) {
 		var (
@@ -866,9 +866,9 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 			consumer        = defaultSaramaAutoConsumerMock(t)
 			topic           = "some-topic"
 			partition int32
-			count                    = new(int64)
+			count     int64
 			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
-				atomic.AddInt64(count, 1)
+				atomic.AddInt64(&count, 1)
 				return nil
 			}
 		)
@@ -901,7 +901,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 
 		err := pt.SetupAndRecover(ctx, false)
 		test.AssertNil(t, err)
-		test.AssertTrue(t, atomic.LoadInt64(count) == msgsToRecover)
+		test.AssertTrue(t, atomic.LoadInt64(&count) == msgsToRecover)
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
@@ -937,9 +937,9 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 			consumer        = defaultSaramaAutoConsumerMock(t)
 			topic           = "some-topic"
 			partition int32
-			count                    = new(int64)
+			count     int64
 			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
-				atomic.AddInt64(count, 1)
+				atomic.AddInt64(&count, 1)
 				return nil
 			}
 		)
@@ -969,7 +969,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 					return
 				default:
 				}
-				if atomic.LoadInt64(count) == 10 {
+				if atomic.LoadInt64(&count) == 10 {
 					time.Sleep(time.Millisecond * 10)
 					cancel()
 					return

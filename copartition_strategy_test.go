@@ -27,7 +27,7 @@ func TestCopartitioningStrategy(t *testing.T) {
 			},
 			// topics are inconsistent with members
 			topics: map[string][]int32{
-				"T2": []int32{0, 1, 2},
+				"T2": {0, 1, 2},
 			},
 			hasError: true,
 		},
@@ -38,8 +38,8 @@ func TestCopartitioningStrategy(t *testing.T) {
 			},
 			// topics are inconsistent with members
 			topics: map[string][]int32{
-				"T1": []int32{0, 1, 2},
-				"T2": []int32{0, 1},
+				"T1": {0, 1, 2},
+				"T2": {0, 1},
 			},
 			hasError: true,
 		},
@@ -51,8 +51,8 @@ func TestCopartitioningStrategy(t *testing.T) {
 			},
 			// topics are inconsistent with members
 			topics: map[string][]int32{
-				"T1": []int32{0, 1, 2},
-				"T2": []int32{0, 1, 2},
+				"T1": {0, 1, 2},
+				"T2": {0, 1, 2},
 			},
 			hasError: true,
 		},
@@ -63,11 +63,11 @@ func TestCopartitioningStrategy(t *testing.T) {
 			},
 			// topics are inconsistent with members
 			topics: map[string][]int32{
-				"T1": []int32{0, 1, 2},
+				"T1": {0, 1, 2},
 			},
 			expected: sarama.BalanceStrategyPlan{
 				"M1": map[string][]int32{
-					"T1": []int32{0, 1, 2},
+					"T1": {0, 1, 2},
 				},
 			},
 		},
@@ -79,14 +79,14 @@ func TestCopartitioningStrategy(t *testing.T) {
 			},
 			// topics are inconsistent with members
 			topics: map[string][]int32{
-				"T1": []int32{0, 1, 2},
+				"T1": {0, 1, 2},
 			},
 			expected: sarama.BalanceStrategyPlan{
 				"M1": map[string][]int32{
-					"T1": []int32{0, 1},
+					"T1": {0, 1},
 				},
 				"M2": map[string][]int32{
-					"T1": []int32{2},
+					"T1": {2},
 				},
 			},
 		},
@@ -99,25 +99,25 @@ func TestCopartitioningStrategy(t *testing.T) {
 			},
 			// topics are inconsistent with members
 			topics: map[string][]int32{
-				"T1": []int32{0, 1, 2, 3, 4, 5},
-				"T2": []int32{0, 1, 2, 3, 4, 5},
-				"T3": []int32{0, 1, 2, 3, 4, 5},
+				"T1": {0, 1, 2, 3, 4, 5},
+				"T2": {0, 1, 2, 3, 4, 5},
+				"T3": {0, 1, 2, 3, 4, 5},
 			},
 			expected: sarama.BalanceStrategyPlan{
 				"M1": map[string][]int32{
-					"T1": []int32{0, 1},
-					"T2": []int32{0, 1},
-					"T3": []int32{0, 1},
+					"T1": {0, 1},
+					"T2": {0, 1},
+					"T3": {0, 1},
 				},
 				"M2": map[string][]int32{
-					"T1": []int32{2, 3},
-					"T2": []int32{2, 3},
-					"T3": []int32{2, 3},
+					"T1": {2, 3},
+					"T2": {2, 3},
+					"T3": {2, 3},
 				},
 				"M3": map[string][]int32{
-					"T1": []int32{4, 5},
-					"T2": []int32{4, 5},
-					"T3": []int32{4, 5},
+					"T1": {4, 5},
+					"T2": {4, 5},
+					"T3": {4, 5},
 				},
 			},
 		},
