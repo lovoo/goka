@@ -477,7 +477,7 @@ func TestContext_Join(t *testing.T) {
 		graph: DefineGroup("group", Persist(c), Loop(c, cb), Join(table, c)),
 		msg:   &sarama.ConsumerMessage{Key: []byte(key)},
 		pviews: map[string]*PartitionTable{
-			string(table): &PartitionTable{
+			string(table): {
 				log: logger.Default(),
 				st: &storageProxy{
 					Storage: st,
@@ -526,13 +526,13 @@ func TestContext_Lookup(t *testing.T) {
 		graph: DefineGroup("group", Persist(c), Loop(c, cb)),
 		msg:   &sarama.ConsumerMessage{Key: []byte(key)},
 		views: map[string]*View{
-			string(table): &View{
+			string(table): {
 				opts: &voptions{
 					tableCodec: c,
 					hasher:     DefaultHasher(),
 				},
 				partitions: []*PartitionTable{
-					&PartitionTable{
+					{
 						st: &storageProxy{
 							Storage: st,
 						},
@@ -579,7 +579,7 @@ func TestContext_Headers(t *testing.T) {
 
 	ctx = &cbContext{
 		msg: &sarama.ConsumerMessage{Key: []byte("key"), Headers: []*sarama.RecordHeader{
-			&sarama.RecordHeader{
+			{
 				Key:   []byte("key"),
 				Value: []byte("value"),
 			},

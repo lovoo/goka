@@ -19,6 +19,7 @@ type Emitter struct {
 	topic string
 
 	wg   sync.WaitGroup
+	mu   sync.RWMutex
 	done chan struct{}
 }
 
@@ -51,14 +52,10 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 	}, nil
 }
 
+func (e *Emitter) emitDone(err error) { e.wg.Done() }
+
 // EmitWithHeaders sends a message with the given headers for the passed key using the emitter's codec.
 func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers map[string][]byte) (*Promise, error) {
-	select {
-	case <-e.done:
-		return NewPromise().finish(nil, ErrEmitterAlreadyClosed), nil
-	default:
-	}
-
 	var (
 		err  error
 		data []byte
@@ -70,17 +67,23 @@ func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers map[strin
 			return nil, fmt.Errorf("Error encoding value for key %s in topic %s: %v", key, e.topic, err)
 		}
 	}
-	e.wg.Add(1)
-	if headers == nil {
-		return e.producer.Emit(e.topic, key, data).Then(func(err error) {
-			e.wg.Done()
-		}), nil
-	} else {
-		return e.producer.EmitWithHeaders(e.topic, key, data, headers).Then(func(err error) {
-			e.wg.Done()
-		}), nil
+
+	// protect e.done channel and e.wg WaitGroup together to reject all new emits after calling e.Finish
+	// wg.Add must not be called after wg.Wait finished
+	e.mu.RLock()
+	select {
+	case <-e.done:
+		e.mu.RUnlock()
+		return NewPromise().finish(nil, ErrEmitterAlreadyClosed), nil
+	default:
+		e.wg.Add(1)
+		e.mu.RUnlock()
 	}
 
+	if headers == nil {
+		return e.producer.Emit(e.topic, key, data).Then(e.emitDone), nil
+	}
+	return e.producer.EmitWithHeaders(e.topic, key, data, headers).Then(e.emitDone), nil
 }
 
 // Emit sends a message for passed key using the emitter's codec.
@@ -116,7 +119,9 @@ func (e *Emitter) EmitSync(key string, msg interface{}) error {
 
 // Finish waits until the emitter is finished producing all pending messages.
 func (e *Emitter) Finish() error {
+	e.mu.Lock()
 	close(e.done)
+	e.mu.Unlock()
 	e.wg.Wait()
 	return e.producer.Close()
 }

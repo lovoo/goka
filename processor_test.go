@@ -92,11 +92,13 @@ func TestProcessor_Run(t *testing.T) {
 		var (
 			topic  = "test-table"
 			toEmit = []*sarama.ConsumerMessage{
-				&sarama.ConsumerMessage{Topic: "input",
+				{
+					Topic: "input",
 					Value: []byte(strconv.FormatInt(3, 10)),
 					Key:   []byte("test-key-1"),
 				},
-				&sarama.ConsumerMessage{Topic: "input",
+				{
+					Topic: "input",
 					Value: []byte(strconv.FormatInt(3, 10)),
 					Key:   []byte("test-key-2"),
 				},
@@ -166,7 +168,8 @@ func TestProcessor_Run(t *testing.T) {
 			topic  = "test-table"
 			loop   = "test-loop"
 			toEmit = []*sarama.ConsumerMessage{
-				&sarama.ConsumerMessage{Topic: "input",
+				{
+					Topic: "input",
 					Value: []byte(strconv.FormatInt(23, 10)),
 					Key:   []byte("test-key"),
 				},

@@ -336,7 +336,7 @@ func TestTM_createTopic(t *testing.T) {
 		)
 		bm.broker.EXPECT().CreateTopics(gomock.Any()).Return(&sarama.CreateTopicsResponse{
 			TopicErrors: map[string]*sarama.TopicError{
-				"a": &sarama.TopicError{
+				"a": {
 					Err:    sarama.KError(0),
 					ErrMsg: &errMsg,
 				},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -372,9 +373,9 @@ func TestPT_load(t *testing.T) {
 			consumer               = defaultSaramaAutoConsumerMock(t)
 			topic                  = "some-topic"
 			partition        int32
-			count            int32
+			count            int64
 			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
-				count++
+				atomic.AddInt64(&count, 1)
 				return nil
 			}
 		)
@@ -407,7 +408,7 @@ func TestPT_load(t *testing.T) {
 					return
 				default:
 				}
-				if count == 10 {
+				if atomic.LoadInt64(&count) == 10 {
 					cancel()
 					return
 				}
@@ -418,7 +419,7 @@ func TestPT_load(t *testing.T) {
 		test.AssertNil(t, err)
 		err = pt.load(ctx, stopAfterCatchup)
 		test.AssertNil(t, err)
-		test.AssertTrue(t, count == 10)
+		test.AssertTrue(t, atomic.LoadInt64(&count) == 10)
 	})
 }
 
@@ -522,9 +523,9 @@ func TestPT_loadMessages(t *testing.T) {
 			topic                  = "some-topic"
 			partition        int32
 			consumer         = defaultSaramaAutoConsumerMock(t)
-			count            int32
+			count            int64
 			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
-				count++
+				atomic.AddInt64(&count, 1)
 				return nil
 			}
 		)
@@ -553,7 +554,7 @@ func TestPT_loadMessages(t *testing.T) {
 					return
 				default:
 				}
-				if count == 100 {
+				if atomic.LoadInt64(&count) == 100 {
 					break
 				}
 			}
@@ -561,7 +562,7 @@ func TestPT_loadMessages(t *testing.T) {
 		}(ctx)
 		err = pt.loadMessages(ctx, partConsumer, partitionHwm, stopAfterCatchup)
 		test.AssertNil(t, err)
-		test.AssertTrue(t, count == 100)
+		test.AssertTrue(t, atomic.LoadInt64(&count) == 100)
 	})
 	t.Run("close_msg_chan", func(t *testing.T) {
 		var (
@@ -867,7 +868,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 			partition int32
 			count     int64
 			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
-				count++
+				atomic.AddInt64(&count, 1)
 				return nil
 			}
 		)
@@ -900,7 +901,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 
 		err := pt.SetupAndRecover(ctx, false)
 		test.AssertNil(t, err)
-		test.AssertTrue(t, count == msgsToRecover)
+		test.AssertTrue(t, atomic.LoadInt64(&count) == msgsToRecover)
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
@@ -938,7 +939,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 			partition int32
 			count     int64
 			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
-				count++
+				atomic.AddInt64(&count, 1)
 				return nil
 			}
 		)
@@ -968,7 +969,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 					return
 				default:
 				}
-				if count == 10 {
+				if atomic.LoadInt64(&count) == 10 {
 					time.Sleep(time.Millisecond * 10)
 					cancel()
 					return

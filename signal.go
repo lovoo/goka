@@ -88,8 +88,6 @@ func (s *Signal) State() State {
 // WaitForStateMin returns a channel that will be closed, when the signal enters passed
 // state or higher (states are ints, so we're just comparing ints here)
 func (s *Signal) WaitForStateMin(state State) chan struct{} {
-	s.m.Lock()
-	defer s.m.Unlock()
 
 	w := &waiter{
 		done:     make(chan struct{}),
@@ -103,8 +101,6 @@ func (s *Signal) WaitForStateMin(state State) chan struct{} {
 // WaitForState returns a channel that closes when the signal reaches passed
 // state.
 func (s *Signal) WaitForState(state State) chan struct{} {
-	s.m.Lock()
-	s.m.Unlock()
 
 	w := &waiter{
 		done:  make(chan struct{}),
@@ -115,9 +111,10 @@ func (s *Signal) WaitForState(state State) chan struct{} {
 }
 
 func (s *Signal) waitForWaiter(state State, w *waiter) chan struct{} {
-
 	// if the signal is currently in that state (or in a higher state if minState is set)
 	// then close the waiter immediately
+	s.m.Lock()
+	defer s.m.Unlock()
 	if curState := s.state; state == curState || (w.minState && curState >= state) {
 		close(w.done)
 	} else {
