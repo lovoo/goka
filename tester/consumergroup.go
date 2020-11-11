@@ -74,11 +74,11 @@ func (cg *consumerGroup) Consume(ctx context.Context, topics []string, handler s
 		if err != nil {
 			return fmt.Errorf("Error setting up: %v", err)
 		}
-		errg, _ := multierr.NewErrGroup(ctx)
+		errg, innerCtx := multierr.NewErrGroup(ctx)
 		for _, claim := range session.claims {
 			claim := claim
 			errg.Go(func() error {
-				<-ctx.Done()
+				<-innerCtx.Done()
 				claim.close()
 				return nil
 			})
@@ -311,11 +311,18 @@ func (cgs *cgSession) pushMessageToClaim(claim *cgClaim, msg *message) {
 	cgs.waitingMessages[msgKey] = true
 	cgs.wgMessages.Add(1)
 
-	claim.msgs <- &sarama.ConsumerMessage{
+	select {
+	case claim.msgs <- &sarama.ConsumerMessage{
 		Key:    []byte(msg.key),
 		Value:  msg.value,
 		Topic:  claim.Topic(),
 		Offset: msg.offset,
+	}:
+	// context closed already, so don't push as no consumer will be listening
+	case <-cgs.ctx.Done():
+		// decrement wg count as we couldn'T push the message
+		cgs.wgMessages.Done()
+		return
 	}
 }
 

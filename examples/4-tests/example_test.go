@@ -3,6 +3,8 @@ package tests
 import (
 	"context"
 	"fmt"
+	"log"
+	"regexp"
 	"testing"
 
 	"github.com/lovoo/goka"
@@ -259,4 +261,81 @@ func Test_Chain(t *testing.T) {
 	value := gkt.TableValue("proc2-table", "bob")
 
 	test.AssertEqual(t, value, "persist: proc1-out: loop: hello world")
+}
+
+// Scenario (6)
+// Different failing scenarios where the user code throws an error
+// This is mainly to improve error reporting/stack trace, so run with "-v" to see the trace
+func Test_Failing(t *testing.T) {
+
+	for idx, testcase := range []struct {
+		failer func(ctx goka.Context)
+	}{
+
+		// panics explicitly
+		{
+			failer: func(ctx goka.Context) {
+				panic("some panic")
+			},
+		},
+
+		// fails for nil pointer dereference
+		{
+			failer: func(ctx goka.Context) {
+				var nilPointer *int
+				_ = *nilPointer
+			},
+		},
+
+		// explicit context fail
+		{
+			failer: func(ctx goka.Context) {
+				ctx.Fail(fmt.Errorf("failing callback"))
+			},
+		},
+		// div-by-zero
+		{
+			failer: func(ctx goka.Context) {
+				var x int
+				_ = 123 / x
+			},
+		},
+		// wrong regex
+		{
+			failer: func(ctx goka.Context) {
+				_ = regexp.MustCompile(`)`)
+			},
+		},
+	} {
+
+		t.Run(fmt.Sprintf("failing-test-%d", idx), func(t *testing.T) {
+			gkt := tester.New(t)
+
+			// create a new processor, registering the tester
+			proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
+				goka.Inputs(goka.StringsToStreams("input", "input2", "input3", "input4"), new(codec.String), func(ctx goka.Context, msg interface{}) {
+					testcase.failer(ctx)
+				}),
+			),
+				goka.WithTester(gkt),
+			)
+
+			var (
+				done     = make(chan struct{})
+				runError error
+			)
+			// start it
+			go func() {
+				defer close(done)
+				runError = proc.Run(context.Background())
+			}()
+
+			// send some message
+			gkt.Consume("input", "key", "some-message")
+
+			<-done
+			test.AssertNotNil(t, runError)
+			log.Printf("Reported (expected) error for test %d: %v", idx, runError)
+		})
+	}
 }

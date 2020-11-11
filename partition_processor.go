@@ -3,7 +3,7 @@ package goka
 import (
 	"context"
 	"fmt"
-	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,6 +45,10 @@ type PartitionProcessor struct {
 
 	runnerGroup       *multierr.ErrGroup
 	cancelRunnerGroup func()
+	// runnerErrors store the errors occuring during runtime of the
+	// partition processor. It is created in Setup and after the runnerGroup
+	// finishes.
+	runnerErrors chan error
 
 	consumer sarama.Consumer
 	tmgr     TopicManager
@@ -155,18 +159,9 @@ func (pp *PartitionProcessor) Recovered() bool {
 	return pp.state.IsState(PPStateRunning)
 }
 
-// Errors returns a channel or errors during consumption
+// Errors returns a channel of errors during consumption
 func (pp *PartitionProcessor) Errors() <-chan error {
-	errs := make(chan error)
-
-	go func() {
-		defer close(errs)
-		err := pp.runnerGroup.Wait().NilOrError()
-		if err != nil {
-			errs <- err
-		}
-	}()
-	return errs
+	return pp.runnerErrors
 }
 
 // Setup initializes the processor after a rebalance
@@ -175,6 +170,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 
 	var runnerCtx context.Context
 	pp.runnerGroup, runnerCtx = multierr.NewErrGroup(ctx)
+	pp.runnerErrors = make(chan error)
 
 	setupErrg, setupCtx := multierr.NewErrGroup(ctx)
 
@@ -221,6 +217,14 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	default:
 	}
 
+	go func() {
+		defer close(pp.runnerErrors)
+		err := pp.runnerGroup.Wait().NilOrError()
+		if err != nil {
+			pp.runnerErrors <- err
+		}
+	}()
+
 	for _, join := range pp.joins {
 		join := join
 		pp.runnerGroup.Go(func() error {
@@ -232,7 +236,7 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	pp.runnerGroup.Go(func() error {
 		err := pp.run(runnerCtx)
 		if err != nil {
-			pp.log.Printf("Run failed with error: %v", err)
+			pp.log.Debugf("Run failed with error: %v", err)
 		}
 		return err
 	})
@@ -251,7 +255,7 @@ func (pp *PartitionProcessor) Stop() error {
 		pp.cancelRunnerGroup()
 	}
 	if pp.runnerGroup != nil {
-		errs.Collect(pp.runnerGroup.Wait().NilOrError())
+		errs.Collect(<-pp.Errors())
 	}
 
 	// stop the stats updating/serving loop
@@ -314,7 +318,7 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			rerr = fmt.Errorf("%v\n%v", r, string(debug.Stack()))
+			rerr = fmt.Errorf("%v\n%v", r, strings.Join(userStacktrace(), "\n"))
 			return
 		}
 
