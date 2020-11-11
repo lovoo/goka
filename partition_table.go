@@ -659,16 +659,18 @@ func (p *PartitionTable) WaitRecovered() chan struct{} {
 
 // Get returns the value for passed key
 func (p *PartitionTable) Get(key string) ([]byte, error) {
-	if !p.state.IsState(State(PartitionRunning)) {
-		return nil, fmt.Errorf("Partition is not running so it's not safe to read values")
+	pstate := p.CurrentState()
+	if pstate != PartitionRunning {
+		return nil, fmt.Errorf("Partition is not running (but %v) so it's not safe to read values", pstate)
 	}
 	return p.st.Get(key)
 }
 
 // Has returns whether the storage contains passed key
 func (p *PartitionTable) Has(key string) (bool, error) {
-	if !p.state.IsState(State(PartitionRunning)) {
-		return false, fmt.Errorf("Partition is not running so it's not safe to read values")
+	pstate := p.CurrentState()
+	if pstate != PartitionRunning {
+		return false, fmt.Errorf("Partition is not running (but %v) so it's not safe to read values", pstate)
 	}
 	return p.st.Has(key)
 }
