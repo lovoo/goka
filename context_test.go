@@ -71,6 +71,60 @@ func TestContext_Emit(t *testing.T) {
 	test.AssertEqual(t, ack, 1)
 }
 
+func TestContext_DeferCommit(t *testing.T) {
+	var (
+		ack         = 0
+		group Group = "some-group"
+	)
+
+	ctx := &cbContext{
+		graph:            DefineGroup(group),
+		commit:           func() { ack++ },
+		wg:               &sync.WaitGroup{},
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+	}
+
+	ctx.start()
+	doneFunc := ctx.DeferCommit()
+	ctx.finish(nil)
+
+	// ack is not done
+	test.AssertEqual(t, ack, 0)
+	doneFunc(nil)
+	test.AssertEqual(t, ack, 1)
+}
+
+func TestContext_DeferCommit_witherror(t *testing.T) {
+	var (
+		ack             = 0
+		group     Group = "some-group"
+		errToEmit       = errors.New("async error")
+	)
+
+	failer := func(err error) {
+		test.AssertTrue(t, strings.Contains(err.Error(), errToEmit.Error()))
+	}
+
+	ctx := &cbContext{
+		graph:            DefineGroup(group),
+		commit:           func() { ack++ },
+		wg:               &sync.WaitGroup{},
+		trackOutputStats: func(ctx context.Context, topic string, size int) {},
+		asyncFailer:      failer,
+	}
+
+	ctx.start()
+	doneFunc := ctx.DeferCommit()
+	ctx.finish(nil)
+
+	// ack is not done
+	test.AssertEqual(t, ack, 0)
+	doneFunc(fmt.Errorf("async error"))
+	// no commit, no ack, so we'll get the message again.
+	test.AssertEqual(t, ack, 0)
+	test.AssertEqual(t, ctx.errors.NilOrError().Error(), "async error")
+}
+
 func TestContext_Timestamp(t *testing.T) {
 	ts := time.Now()
 

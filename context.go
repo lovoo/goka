@@ -121,6 +121,14 @@ type Context interface {
 	// Context returns the underlying context used to start the processor or a
 	// subcontext.
 	Context() context.Context
+
+	// DeferCommit makes the callback omit the final commit when the callback returns.
+	// It returns a function that *must* be called eventually to mark the message processing as finished.
+	// If the function is not called, the processor might reprocess the message in future.
+	// Note when calling DeferCommit multiple times, all returned functions must be called.
+	// *Important*: this context is only safe to use within this goroutine, so do not pass it to an
+	// asynchronously called callback.
+	DeferCommit() func(error)
 }
 
 type cbContext struct {
@@ -437,4 +445,18 @@ func (ctx *cbContext) Fail(err error) {
 
 func (ctx *cbContext) Context() context.Context {
 	return ctx.ctx
+}
+
+func (ctx *cbContext) DeferCommit() func(err error) {
+	ctx.m.Lock()
+	defer ctx.m.Unlock()
+	ctx.counters.emits++
+
+	var once sync.Once
+
+	return func(err error) {
+		once.Do(func() {
+			ctx.emitDone(err)
+		})
+	}
 }
