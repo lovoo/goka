@@ -170,7 +170,16 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 
 	var runnerCtx context.Context
 	pp.runnerGroup, runnerCtx = multierr.NewErrGroup(ctx)
-	pp.runnerErrors = make(chan error)
+	pp.runnerErrors = make(chan error, 1)
+	defer func() {
+		go func() {
+			defer close(pp.runnerErrors)
+			err := pp.runnerGroup.Wait().NilOrError()
+			if err != nil {
+				pp.runnerErrors <- err
+			}
+		}()
+	}()
 
 	setupErrg, setupCtx := multierr.NewErrGroup(ctx)
 
@@ -216,14 +225,6 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 		return nil
 	default:
 	}
-
-	go func() {
-		defer close(pp.runnerErrors)
-		err := pp.runnerGroup.Wait().NilOrError()
-		if err != nil {
-			pp.runnerErrors <- err
-		}
-	}()
 
 	for _, join := range pp.joins {
 		join := join
