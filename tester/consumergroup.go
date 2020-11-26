@@ -300,15 +300,17 @@ func (cgs *cgSession) makeMsgKey(topic string, offset int64) string {
 
 func (cgs *cgSession) pushMessageToClaim(claim *cgClaim, msg *message) {
 	cgs.mMessages.Lock()
-	defer cgs.mMessages.Unlock()
 
 	msgKey := cgs.makeMsgKey(claim.Topic(), msg.offset)
 
 	if cgs.waitingMessages[msgKey] {
+		cgs.mMessages.Unlock()
 		panic(fmt.Sprintf("There's a duplicate message offset in the same topic/partition %s/%d: %d. The tester has a bug!", claim.Topic(), 0, msg.offset))
 	}
 
 	cgs.waitingMessages[msgKey] = true
+	cgs.mMessages.Unlock()
+
 	cgs.wgMessages.Add(1)
 
 	select {
