@@ -193,11 +193,11 @@ func (p *PartitionTable) Close() error {
 
 func (p *PartitionTable) createStorage(ctx context.Context) (*storageProxy, error) {
 	var (
-		err  error
-		errs = new(multierr.Errors)
-		st   storage.Storage
+		err   error
+		errs  = new(multierr.Errors)
+		st    storage.Storage
 		start = time.Now()
-		done = make(chan struct{})
+		done  = make(chan struct{})
 	)
 	defer close(done)
 
@@ -672,20 +672,48 @@ func (p *PartitionTable) WaitRecovered() chan struct{} {
 
 // Get returns the value for passed key
 func (p *PartitionTable) Get(key string) ([]byte, error) {
-	pstate := p.CurrentState()
-	if pstate != PartitionRunning {
-		return nil, fmt.Errorf("Partition is not running (but %v) so it's not safe to read values", pstate)
+	if err := p.readyToRead(); err != nil {
+		return nil, err
 	}
 	return p.st.Get(key)
 }
 
 // Has returns whether the storage contains passed key
 func (p *PartitionTable) Has(key string) (bool, error) {
-	pstate := p.CurrentState()
-	if pstate != PartitionRunning {
-		return false, fmt.Errorf("Partition is not running (but %v) so it's not safe to read values", pstate)
+	if err := p.readyToRead(); err != nil {
+		return false, err
 	}
 	return p.st.Has(key)
+}
+
+// Iterator returns an iterator on the table's storage.
+// If the partition_table is not in a running state, it will return an error to prevent serving
+// incomplete data
+func (p *PartitionTable) Iterator() (storage.Iterator, error) {
+	if err := p.readyToRead(); err != nil {
+		return nil, err
+	}
+
+	return p.st.Iterator()
+}
+
+// IteratorWithRange returns an iterator on the table's storage for passed range.
+// If the partition_table is not in a running state, it will return an error to prevent serving
+// incomplete data
+func (p *PartitionTable) IteratorWithRange(start []byte, limit []byte) (storage.Iterator, error) {
+	if err := p.readyToRead(); err != nil {
+		return nil, err
+	}
+
+	return p.st.IteratorWithRange(start, limit)
+}
+
+func (p *PartitionTable) readyToRead() error {
+	pstate := p.CurrentState()
+	if pstate != PartitionRunning {
+		return fmt.Errorf("Partition is not running (but %v) so it's not safe to read values", pstate)
+	}
+	return nil
 }
 
 // Set sets a key value key in the partition table by modifying the underlying storage
