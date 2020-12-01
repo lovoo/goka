@@ -371,7 +371,7 @@ func (v *View) Has(key string) (bool, error) {
 func (v *View) Iterator() (Iterator, error) {
 	iters := make([]storage.Iterator, 0, len(v.partitions))
 	for i := range v.partitions {
-		iter, err := v.partitions[i].st.Iterator()
+		iter, err := v.partitions[i].Iterator()
 		if err != nil {
 			// release already opened iterators
 			for i := range iters {
@@ -394,7 +394,7 @@ func (v *View) Iterator() (Iterator, error) {
 func (v *View) IteratorWithRange(start, limit string) (Iterator, error) {
 	iters := make([]storage.Iterator, 0, len(v.partitions))
 	for i := range v.partitions {
-		iter, err := v.partitions[i].st.IteratorWithRange([]byte(start), []byte(limit))
+		iter, err := v.partitions[i].IteratorWithRange([]byte(start), []byte(limit))
 		if err != nil {
 			// release already opened iterators
 			for i := range iters {
