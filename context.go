@@ -51,6 +51,9 @@ type Context interface {
 	// Offset returns the offset of the input message.
 	Offset() int64
 
+	// Group returns the group of the input message
+	Group() Group
+
 	// Value returns the value of the key in the group table.
 	//
 	// This method might panic to initiate an immediate shutdown of the processor
@@ -262,6 +265,10 @@ func (ctx *cbContext) Topic() Stream {
 
 func (ctx *cbContext) Offset() int64 {
 	return ctx.msg.Offset
+}
+
+func (ctx *cbContext) Group() Group {
+	return Group(ctx.graph.group)
 }
 
 func (ctx *cbContext) Partition() int32 {
