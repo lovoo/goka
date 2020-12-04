@@ -268,7 +268,7 @@ func (ctx *cbContext) Offset() int64 {
 }
 
 func (ctx *cbContext) Group() Group {
-	return Group(ctx.graph.group)
+	return ctx.graph.Group()
 }
 
 func (ctx *cbContext) Partition() int32 {
