@@ -14,11 +14,12 @@ func TestCopartitioningStrategy(t *testing.T) {
 	})
 
 	for _, ttest := range []struct {
-		name     string
-		members  map[string]sarama.ConsumerGroupMemberMetadata
-		topics   map[string][]int32
-		hasError bool
-		expected sarama.BalanceStrategyPlan
+		name      string
+		members   map[string]sarama.ConsumerGroupMemberMetadata
+		topics    map[string][]int32
+		hasError  bool
+		useStrict bool
+		expected  sarama.BalanceStrategyPlan
 	}{
 		{
 			name: "inconsistent-topic-members",
@@ -29,7 +30,8 @@ func TestCopartitioningStrategy(t *testing.T) {
 			topics: map[string][]int32{
 				"T2": {0, 1, 2},
 			},
-			hasError: true,
+			hasError:  true,
+			useStrict: true,
 		},
 		{
 			name: "not-copartitioned",
@@ -54,7 +56,29 @@ func TestCopartitioningStrategy(t *testing.T) {
 				"T1": {0, 1, 2},
 				"T2": {0, 1, 2},
 			},
-			hasError: true,
+			hasError:  true,
+			useStrict: true,
+		},
+		{
+			name: "tolerate-inconsistent-members",
+			members: map[string]sarama.ConsumerGroupMemberMetadata{
+				"M1": {Topics: []string{"T1", "T2"}},
+				"M2": {Topics: []string{"T2"}},
+			},
+			// topics are inconsistent with members
+			topics: map[string][]int32{
+				"T1": {0, 1, 2},
+				"T2": {0, 1, 2},
+			},
+			expected: sarama.BalanceStrategyPlan{
+				"M1": map[string][]int32{
+					"T1": {0, 1},
+					"T2": {0, 1},
+				},
+				"M2": map[string][]int32{
+					"T2": {2},
+				},
+			},
 		},
 		{
 			name: "single-member",
@@ -123,7 +147,13 @@ func TestCopartitioningStrategy(t *testing.T) {
 		},
 	} {
 		t.Run(ttest.name, func(t *testing.T) {
-			plan, err := CopartitioningStrategy.Plan(ttest.members, ttest.topics)
+
+			var strategy sarama.BalanceStrategy = CopartitioningStrategy
+			if ttest.useStrict {
+				strategy = StrictCopartitioningStrategy
+			}
+
+			plan, err := strategy.Plan(ttest.members, ttest.topics)
 			test.AssertEqual(t, err != nil, ttest.hasError)
 			if err == nil {
 				test.AssertTrue(t, reflect.DeepEqual(ttest.expected, plan), "expected", ttest.expected, "actual", plan)
