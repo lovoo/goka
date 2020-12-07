@@ -8,11 +8,39 @@ import (
 	"github.com/Shopify/sarama"
 )
 
-// CopartitioningStrategy is the rebalance strategy necessary to guarantee the copartitioning
-// when consuming multiple input topics with multiple processor instances
-var CopartitioningStrategy = new(copartitioningStrategy)
+var (
+	// CopartitioningStrategy is the rebalance strategy necessary to guarantee the copartitioning
+	// when consuming multiple input topics with multiple processor instances.
+	// This strategy tolerates different sets of topics per member of consumer group to allow
+	// rolling upgrades of processors.
+	//
+	// Note that the topic inconcistency needs to be only temporarily, otherwise not all topic partitions will be consumed as in
+	// the following example:
+	// Assume having topics X and Y, each with partitions [0,1,2]
+	// MemberA requests topic X
+	// MemberB requests topics X and Y, because topic Y was newly added to the processor.
+	//
+	// Then the strategy will plan as follows:
+	// MemberA: X: [0,1]
+	// MemberB: X: [2], Y:[2]
+	//
+	// That means partitions [0,1] from topic Y are not being consumed.
+	// So the assumption is that memberA will be redeployed so that after a second rebalance
+	// both members consume both topics and all partitions.
+	//
+	// If you do not use rolling upgrades, i.e. replace all members of a group simultaneously, it is
+	// safe to use the StrictCopartitioningStrategy
+	CopartitioningStrategy = new(copartitioningStrategy)
+
+	// StrictCopartitioningStrategy behaves like the copartitioning strategy but it will fail if two members of a consumer group
+	// request a different set of topics, which might indicate a bug or a reused consumer group name.
+	StrictCopartitioningStrategy = &copartitioningStrategy{
+		failOnInconsistentTopics: true,
+	}
+)
 
 type copartitioningStrategy struct {
+	failOnInconsistentTopics bool
 }
 
 // Name implements BalanceStrategy.
@@ -42,7 +70,9 @@ func (s *copartitioningStrategy) Plan(members map[string]sarama.ConsumerGroupMem
 	// (2) collect all members and check they consume the same topics
 	for memberID, meta := range members {
 		if !s.topicsEqual(allTopics, meta.Topics) {
-			return nil, fmt.Errorf("Error balancing. Not all members request the same list of topics. A group-name clash might be the reason: %#v", members)
+			if s.failOnInconsistentTopics {
+				return nil, fmt.Errorf("Error balancing. Not all members request the same list of topics. A group-name clash might be the reason: %#v", members)
+			}
 		}
 		allMembers = append(allMembers, memberID)
 	}
@@ -60,7 +90,7 @@ func (s *copartitioningStrategy) Plan(members map[string]sarama.ConsumerGroupMem
 		pos := float64(idx)
 		min := int(math.Floor(pos*step + 0.5))
 		max := int(math.Floor((pos+1)*step + 0.5))
-		for _, topic := range allTopics {
+		for _, topic := range members[memberID].Topics {
 			plan.Add(memberID, topic, allPartitions[min:max]...)
 		}
 	}
