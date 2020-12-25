@@ -177,7 +177,7 @@ func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
 		npar,
 		m.topicManagerConfig.Stream.Replication,
 		map[string]string{
-			"retention.ms": fmt.Sprintf("%d", m.topicManagerConfig.Stream.Retention),
+			"retention.ms": fmt.Sprintf("%d", m.topicManagerConfig.Stream.Retention.Milliseconds()),
 		})
 }
 
