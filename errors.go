@@ -30,6 +30,25 @@ var (
 	gokaPackageRegex = regexp.MustCompile(fmt.Sprintf(`%s(?:@[^/]+)?/[^/]+$`, reflect.TypeOf(Processor{}).PkgPath()))
 )
 
+// type to indicate that some non-transient error occurred while processing
+// the message, e.g. panic, (de|en)-coding errors or invalid usage of context.
+type errProcessing struct {
+	wrapped error
+}
+
+func (ec *errProcessing) Error() string {
+	return fmt.Sprintf("error processing message: %v", ec.wrapped)
+}
+func (ec *errProcessing) Unwrap() error {
+	return ec.wrapped
+}
+
+func newErrProcessing(err error) error {
+	return &errProcessing{
+		wrapped: err,
+	}
+}
+
 // userStacktrace returns a formatted stack trace only containing the stack trace of the user-code
 // This is mainly used to properly format the error message built after a panic happened in a
 // processor-callback.

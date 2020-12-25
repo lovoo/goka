@@ -231,10 +231,10 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	g.state.SetState(ProcStateStarting)
 
 	// collect all errors before leaving
-	errors := new(multierr.Errors)
+	merrors := new(multierr.Errors)
 	defer func() {
-		_ = errors.Collect(rerr)
-		rerr = errors.NilOrError()
+		_ = merrors.Collect(rerr)
+		rerr = merrors.NilOrError()
 	}()
 
 	// create kafka consumer
@@ -243,11 +243,30 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 		return fmt.Errorf(errBuildConsumer, err)
 	}
 
-	go func() {
-		for err := range consumerGroup.Errors() {
-			g.log.Printf("Error executing group consumer: %v", err)
+	errg.Go(func() error {
+		consumerErrors := consumerGroup.Errors()
+
+		for {
+			select {
+			case err, ok := <-consumerErrors:
+				if !ok {
+					return nil
+				}
+				var cbErr *errProcessing
+				if errors.As(err, &cbErr) {
+					g.log.Printf("error processing message (non-transient), stopping execution: %v", err)
+					return cbErr
+				}
+
+				g.log.Printf("Error executing group consumer (continuing execution): %v", err)
+			case <-ctx.Done():
+				//  drain the channel and log in case we still have errors in the channel, otherwise they would be muted.
+				for err := range consumerErrors {
+					g.log.Printf("Error executing consumer group: %v", err)
+				}
+			}
 		}
-	}()
+	})
 
 	g.saramaConsumer, err = g.opts.builders.consumerSarama(g.brokers, g.opts.clientID)
 	if err != nil {
@@ -270,7 +289,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 		g.log.Debugf("closing producer")
 		defer g.log.Debugf("producer ... closed")
 		if err := g.producer.Close(); err != nil {
-			errors.Collect(fmt.Errorf("error closing producer: %v", err))
+			merrors.Collect(fmt.Errorf("error closing producer: %v", err))
 		}
 	}()
 
@@ -545,11 +564,17 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 			select {
 			case part.input <- msg:
 			case err := <-errors:
-				return err
+				if err != nil {
+					return newErrProcessing(err)
+				}
+				return nil
 			}
 
 		case err := <-errors:
-			return err
+			if err != nil {
+				return newErrProcessing(err)
+			}
+			return nil
 		}
 	}
 }

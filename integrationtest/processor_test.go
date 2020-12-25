@@ -1,4 +1,98 @@
-package goka_test
+package integrationtest
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/lovoo/goka"
+	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/internal/test"
+	"github.com/lovoo/goka/tester"
+)
+
+// codec that fails on decode
+type failingDecode struct {
+	codec goka.Codec
+}
+
+func (fc *failingDecode) Decode(_ []byte) (interface{}, error) {
+	return nil, fmt.Errorf("Error decoding")
+}
+
+func (fc *failingDecode) Encode(msg interface{}) ([]byte, error) {
+	return fc.codec.Encode(msg)
+}
+
+// Tests that errors inside the callback lead to processor shutdown
+func TestErrorCallback(t *testing.T) {
+
+	for _, tcase := range []struct {
+		name    string
+		consume func(ctx goka.Context, msg interface{})
+		codec   goka.Codec
+	}{
+		{
+			name: "panic",
+			consume: func(ctx goka.Context, msg interface{}) {
+				panic("failing")
+			},
+			codec: new(codec.Int64),
+		},
+		{
+			name: "decode",
+			consume: func(ctx goka.Context, msg interface{}) {
+			},
+			codec: &failingDecode{
+				codec: new(codec.Int64),
+			},
+		},
+		{
+			name: "invalid-context-op",
+			consume: func(ctx goka.Context, msg interface{}) {
+				ctx.SetValue(0)
+			},
+			codec: new(codec.Int64),
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			gkt := tester.New(t)
+
+			proc, _ := goka.NewProcessor(nil,
+				goka.DefineGroup(
+					"test",
+					goka.Input("input-topic", tcase.codec, tcase.consume),
+				),
+				goka.WithTester(gkt),
+			)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var (
+				err  error
+				done = make(chan struct{})
+			)
+			go func() {
+				defer close(done)
+				err = proc.Run(ctx)
+			}()
+
+			gkt.Consume("input-topic", "a", int64(123))
+
+			select {
+			case <-done:
+				test.AssertNotNil(t, err)
+				log.Printf("error. %v", err)
+				test.AssertTrue(t, strings.Contains(err.Error(), "error processing message"))
+			case <-time.After(10 * time.Second):
+				t.Errorf("processor did not shut down as expected")
+			}
+		})
+	}
+}
 
 /*
 import (

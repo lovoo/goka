@@ -83,7 +83,11 @@ func (cg *consumerGroup) Consume(ctx context.Context, topics []string, handler s
 				return nil
 			})
 			errg.Go(func() error {
-				return handler.ConsumeClaim(session, claim)
+				err := handler.ConsumeClaim(session, claim)
+				if err != nil {
+					cg.errs <- err
+				}
+				return nil
 			})
 		}
 		cg.state.SetState(cgStateConsuming)
