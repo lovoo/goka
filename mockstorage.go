@@ -164,20 +164,6 @@ func (mr *MockStorageMockRecorder) Open() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockStorage)(nil).Open))
 }
 
-// Recovered mocks base method
-func (m *MockStorage) Recovered() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Recovered")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// Recovered indicates an expected call of Recovered
-func (mr *MockStorageMockRecorder) Recovered() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recovered", reflect.TypeOf((*MockStorage)(nil).Recovered))
-}
-
 // Set mocks base method
 func (m *MockStorage) Set(arg0 string, arg1 []byte) error {
 	m.ctrl.T.Helper()
