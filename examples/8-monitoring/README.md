@@ -79,11 +79,11 @@ creating an Emitter, multiple Processors and a web interface.
 Be sure to have Apache Kafka and Zookeeper running by starting it in the examples-folder.
 
 ```console
-examples$ make restart
+examples$ make start
 ```
 
 Then run the monitoring example with:
 
 ```console
-examples$ go run monitoring/main.go
+examples$ go run 8-monitoring/main.go
 ```

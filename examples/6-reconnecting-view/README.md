@@ -1,4 +1,4 @@
-## Reconnecting View
+# Reconnecting View
 
 This example shows a reconnecting view by observing the state changes.
 Run a local Kafka cluster by calling `make start` in folder `examples/`.

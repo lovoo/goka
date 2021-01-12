@@ -60,3 +60,8 @@ services:
       KAFKA_NUM_PARTITIONS: 6
     depends_on:
       - zoo1
+  redis:
+    container_name: redis
+    image: redis:latest
+    ports:
+      - "6379:6379"
