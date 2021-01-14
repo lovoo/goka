@@ -44,7 +44,7 @@ Goka relies on [Sarama](https://github.com/Shopify/sarama) to perform the actual
 
 In most cases, you need to modify the config, e.g. to set the Kafka Version.
 
-```
+```go
 cfg := goka.DefaultConfig()
 cfg.Version = sarama.V2_4_0_0
 goka.ReplaceGlobalConfig(cfg)
@@ -55,7 +55,7 @@ This makes all goka components use the updated config.
 If you do need specific configuration for different components, you need to pass customized builders to the 
 component's constructor, e.g.
 
-```
+```go
 cfg := goka.DefaultConfig()
 // modify the config with component-specific settings
 
