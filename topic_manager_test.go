@@ -164,6 +164,7 @@ func TestTM_Partitions(t *testing.T) {
 		var (
 			topic = "some-topic"
 		)
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
 		_, err := tm.Partitions(topic)
 		test.AssertNil(t, err)
@@ -174,6 +175,7 @@ func TestTM_Partitions(t *testing.T) {
 		var (
 			topic = "some-topic"
 		)
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, errors.New("some-error"))
 		_, err := tm.Partitions(topic)
 		test.AssertNotNil(t, err)
@@ -207,59 +209,21 @@ func TestTM_GetOffset(t *testing.T) {
 	})
 }
 
-func TestTM_checkTopicExistsWithPartitions(t *testing.T) {
-	t.Run("succeed", func(t *testing.T) {
-		tm, bm, ctrl := createTopicManager(t)
-		defer ctrl.Finish()
-		var (
-			topic = "some-topic"
-			npar  = 1
-		)
-		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
-		correct, err := tm.checkTopicExistsWithPartitions(topic, npar)
-		test.AssertNil(t, err)
-		test.AssertTrue(t, correct)
-	})
-	t.Run("unknown", func(t *testing.T) {
-		tm, bm, ctrl := createTopicManager(t)
-		defer ctrl.Finish()
-		var (
-			topic = "some-topic"
-			npar  = 1
-		)
-		bm.client.EXPECT().Partitions(topic).Return(nil, sarama.ErrUnknownTopicOrPartition)
-		correct, err := tm.checkTopicExistsWithPartitions(topic, npar)
-		test.AssertNil(t, err)
-		test.AssertTrue(t, !correct)
-	})
-	t.Run("fail", func(t *testing.T) {
-		tm, bm, ctrl := createTopicManager(t)
-		defer ctrl.Finish()
-		var (
-			topic     = "some-topic"
-			npar      = 1
-			falseNPar = 2
-		)
-		bm.client.EXPECT().Partitions(topic).Return(nil, errors.New("some-error"))
-		correct, err := tm.checkTopicExistsWithPartitions(topic, npar)
-		test.AssertNotNil(t, err)
-		test.AssertTrue(t, !correct)
-		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
-		correct, err = tm.checkTopicExistsWithPartitions(topic, falseNPar)
-		test.AssertNotNil(t, err)
-		test.AssertTrue(t, !correct)
-	})
-}
-
 func TestTM_EnsureStreamExists(t *testing.T) {
 	t.Run("exists", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
+
+		tm.topicManagerConfig.MismatchBehavior = TMConfigMismatchBehaviorFail
 		var (
 			topic = "some-topic"
 			npar  = 1
 		)
 
+		cfg := sarama.NewConfig()
+		cfg.Version = sarama.V0_10_0_0
+		bm.client.EXPECT().Config().Return(cfg)
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
 
 		err := tm.EnsureStreamExists(topic, npar)
@@ -276,7 +240,7 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 
 		tm.topicManagerConfig.Stream.Replication = rfactor
 		tm.topicManagerConfig.Stream.Retention = time.Second
-		bm.client.EXPECT().Partitions(topic).Return(nil, sarama.ErrUnknownTopicOrPartition)
+		bm.client.EXPECT().Topics().Return(nil, nil)
 		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(nil)
 
 		err := tm.EnsureStreamExists(topic, npar)
@@ -291,7 +255,7 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 			retErr = errors.New("some-error")
 		)
 
-		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, retErr)
+		bm.client.EXPECT().Topics().Return(nil, retErr)
 
 		err := tm.EnsureStreamExists(topic, npar)
 		test.AssertNotNil(t, err)
@@ -333,7 +297,7 @@ func TestTM_createTopic(t *testing.T) {
 }
 
 func TestTM_EnsureTopicExists(t *testing.T) {
-	t.Run("exists", func(t *testing.T) {
+	t.Run("exists_nocheck", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		var (
@@ -345,9 +309,138 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 			}
 		)
 
+		cfg := sarama.NewConfig()
+		cfg.Version = sarama.V0_10_0_0
+		bm.client.EXPECT().Config().Return(cfg)
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
 
 		err := tm.EnsureTopicExists(topic, npar, rfactor, config)
+		test.AssertNil(t, err)
+	})
+	t.Run("exists_diff_partitions_ignore", func(t *testing.T) {
+		tm, bm, ctrl := createTopicManager(t)
+		defer ctrl.Finish()
+		var (
+			topic = "some-topic"
+			npar  = 1
+		)
+
+		tm.topicManagerConfig.MismatchBehavior = TMConfigMismatchBehaviorIgnore
+
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+		bm.client.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
+
+		err := tm.EnsureStreamExists(topic, npar)
+		test.AssertNil(t, err)
+	})
+	t.Run("exists_diff_partitions_fail", func(t *testing.T) {
+		tm, bm, ctrl := createTopicManager(t)
+		defer ctrl.Finish()
+		var (
+			topic = "some-topic"
+			npar  = 1
+		)
+
+		tm.topicManagerConfig.MismatchBehavior = TMConfigMismatchBehaviorFail
+
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+		bm.client.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
+
+		err := tm.EnsureTopicExists(topic, npar, 1, map[string]string{})
+		test.AssertNotNil(t, err)
+	})
+	t.Run("exists_diff_config", func(t *testing.T) {
+		tm, bm, ctrl := createTopicManager(t)
+		defer ctrl.Finish()
+		var (
+			topic = "some-topic"
+			npar  = 1
+		)
+		// make the tm fail on mismatch:
+		tm.topicManagerConfig.MismatchBehavior = TMConfigMismatchBehaviorFail
+
+		cfg := sarama.NewConfig()
+		cfg.Version = sarama.V0_11_0_0
+		bm.client.EXPECT().Config().Return(cfg)
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
+		bm.admin.EXPECT().DescribeConfig(sarama.ConfigResource{
+			Type: sarama.TopicResource,
+			Name: topic,
+		}).Return([]sarama.ConfigEntry{{Name: "a", Value: "b"}}, nil)
+		err := tm.EnsureTopicExists(topic, npar, 1, map[string]string{"a": "diff-value"})
+		test.AssertNotNil(t, err)
+	})
+	t.Run("exists_diff_rfactor", func(t *testing.T) {
+		tm, bm, ctrl := createTopicManager(t)
+		defer ctrl.Finish()
+		var (
+			topic = "some-topic"
+			npar  = 1
+		)
+		// make the tm fail on mismatch:
+		tm.topicManagerConfig.MismatchBehavior = TMConfigMismatchBehaviorFail
+
+		cfg := sarama.NewConfig()
+		cfg.Version = sarama.V0_11_0_0
+		bm.client.EXPECT().Config().Return(cfg)
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
+		bm.admin.EXPECT().DescribeConfig(sarama.ConfigResource{
+			Type: sarama.TopicResource,
+			Name: topic,
+		}).Return(nil, nil)
+		bm.admin.EXPECT().DescribeTopics([]string{topic}).Return([]*sarama.TopicMetadata{
+			{
+				Name: topic,
+				Partitions: []*sarama.PartitionMetadata{
+					// two topics with different replicas,
+					// TM will select the one with the fewest replicas and
+					// compare with what is requested
+					{Replicas: []int32{0}},
+					{Replicas: []int32{0, 1}},
+				},
+			},
+		}, nil)
+
+		// fails because rfactor is requested as 2, but the smallest one is 1
+		err := tm.EnsureTopicExists(topic, npar, 2, map[string]string{})
+		test.AssertNotNil(t, err)
+	})
+	t.Run("exists_same", func(t *testing.T) {
+		tm, bm, ctrl := createTopicManager(t)
+		defer ctrl.Finish()
+		var (
+			topic = "some-topic"
+			npar  = 1
+		)
+		// make the tm fail on mismatch:
+		tm.topicManagerConfig.MismatchBehavior = TMConfigMismatchBehaviorFail
+
+		cfg := sarama.NewConfig()
+		cfg.Version = sarama.V0_11_0_0
+		bm.client.EXPECT().Config().Return(cfg)
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
+		bm.admin.EXPECT().DescribeConfig(sarama.ConfigResource{
+			Type: sarama.TopicResource,
+			Name: topic,
+		}).Return([]sarama.ConfigEntry{{Name: "a", Value: "b"}}, nil)
+		bm.admin.EXPECT().DescribeTopics([]string{topic}).Return([]*sarama.TopicMetadata{
+			{
+				Name: topic,
+				Partitions: []*sarama.PartitionMetadata{
+					// two topics with different replicas,
+					// TM will select the one with the fewest replicas and
+					// compare with what is requested
+					{Replicas: []int32{0, 1}},
+				},
+			},
+		}, nil)
+
+		// fails because rfactor is requested as 2, but the smallest one is 1
+		err := tm.EnsureTopicExists(topic, npar, 2, map[string]string{"a": "b"})
 		test.AssertNil(t, err)
 	})
 	t.Run("create", func(t *testing.T) {
@@ -362,7 +455,7 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 			}
 		)
 
-		bm.client.EXPECT().Partitions(topic).Return(nil, sarama.ErrUnknownTopicOrPartition)
+		bm.client.EXPECT().Topics().Return([]string{}, nil)
 		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(nil)
 
 		err := tm.EnsureTopicExists(topic, npar, rfactor, config)
@@ -381,9 +474,35 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 			retErr error = errors.New("some-error")
 		)
 
-		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, retErr)
-
+		// client.Topics() fails
+		bm.client.EXPECT().Topics().Return(nil, retErr)
 		err := tm.EnsureTopicExists(topic, npar, rfactor, config)
 		test.AssertNotNil(t, err)
+
+		// client.Partitions() fails
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+		bm.client.EXPECT().Partitions(topic).Return(nil, retErr)
+		err = tm.EnsureTopicExists(topic, npar, rfactor, config)
+		test.AssertNotNil(t, err)
+
+		// client.DescribeConfig() fails
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
+		cfg := sarama.NewConfig()
+		cfg.Version = sarama.V0_11_0_0
+		bm.client.EXPECT().Config().Return(cfg)
+		bm.admin.EXPECT().DescribeConfig(gomock.Any()).Return(nil, retErr)
+		err = tm.EnsureTopicExists(topic, npar, rfactor, config)
+		test.AssertNotNil(t, err)
+
+		// client.DescribeTopics() fails
+		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
+		bm.client.EXPECT().Config().Return(cfg)
+		bm.admin.EXPECT().DescribeConfig(gomock.Any()).Return([]sarama.ConfigEntry{{Name: "a", Value: "a"}}, nil)
+		bm.admin.EXPECT().DescribeTopics(gomock.Any()).Return(nil, retErr)
+		err = tm.EnsureTopicExists(topic, npar, rfactor, config)
+		test.AssertNotNil(t, err)
+
 	})
 }

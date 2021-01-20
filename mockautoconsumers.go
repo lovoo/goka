@@ -634,11 +634,5 @@ func (cg *MockConsumerGroup) Close() error {
 
 	// close old errs chan and create new one
 	close(cg.errs)
-	cg.errs = make(chan error)
-
-	cg.offset = 0
-	cg.currentGeneration = 0
-	cg.sessions = make(map[string]*MockConsumerGroupSession)
-	cg.failOnConsume = nil
 	return nil
 }

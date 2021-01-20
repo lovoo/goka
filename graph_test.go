@@ -77,6 +77,14 @@ func TestGroupGraph_Validate(t *testing.T) {
 
 }
 
+func TestGroupGraph_chainEdges(t *testing.T) {
+	test.AssertEqual(t, len(chainEdges()), 0)
+	test.AssertEqual(t, len(chainEdges(Edges{}, Edges{})), 0)
+	test.AssertEqual(t, chainEdges(Edges{Join("a", nil)}, Edges{}), Edges{Join("a", nil)})
+	test.AssertEqual(t, chainEdges(Edges{Join("a", nil)}, Edges{Join("a", nil), Join("b", nil)}), Edges{Join("a", nil), Join("a", nil), Join("b", nil)})
+
+}
+
 func TestGroupGraph_codec(t *testing.T) {
 	g := DefineGroup("group",
 		Input("input-topic", c, cb),

@@ -36,11 +36,6 @@ type topicManager struct {
 	topicManagerConfig *TopicManagerConfig
 }
 
-const (
-	tableDefaultCleanupPolicy  = "compact"
-	streamDefaultCleanupPolicy = "delete"
-)
-
 // NewTopicManager creates a new topic manager using the sarama library
 func NewTopicManager(brokers []string, saramaConfig *sarama.Config, topicManagerConfig *TopicManagerConfig) (TopicManager, error) {
 
@@ -143,7 +138,9 @@ func (m *topicManager) createTopic(topic string, npar, rfactor int, config map[s
 	topicDetail.ConfigEntries = make(map[string]*string)
 
 	for k, v := range config {
-		topicDetail.ConfigEntries[k] = &v
+		// need to make a copy, or the config values will contain only one value
+		value := v
+		topicDetail.ConfigEntries[k] = &value
 	}
 
 	err := m.admin.CreateTopic(topic, topicDetail, false)
@@ -184,72 +181,41 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 
 	// partitions do not match
 	if hasTopic && len(partitions) != npar {
-		err := m.handleConfigMismatch(fmt.Sprintf("partition count mismatch for topic %s. Need %d, but existing topic has %d", topic, npar, len(partitions)))
+		return m.handleConfigMismatch(fmt.Sprintf("partition count mismatch for topic %s. Need %d, but existing topic has %d", topic, npar, len(partitions)))
+	}
+
+	// check additional config values via the cluster admin if our current version supports it
+	if hasTopic && m.adminSupported() {
+		cfgMap, err := m.getTopicConfigMap(topic)
 		if err != nil {
 			return err
 		}
-	}
 
-	// check additional config values via clusteradmin if our current version supports it
-	if hasTopic && m.adminSupported() {
-		cfg, err := m.admin.DescribeConfig(sarama.ConfigResource{
-			Type: sarama.TopicResource,
-			Name: topic,
-		})
-
-		// now it does not exist anymore -- this means the cluster is somehow unstable
-		if err != nil {
-			return fmt.Errorf("Error getting config for topic %s", topic)
-		}
-
-		// remap the config values to a map
-		cfgMap := make(map[string]sarama.ConfigEntry, len(cfg))
-		for _, cfgEntry := range cfg {
-			cfgMap[cfgEntry.Name] = cfgEntry
-		}
-
+		// check for all user-passed config values whether they're as expected
 		for key, value := range config {
 			entry, ok := cfgMap[key]
 			if !ok {
-				err := m.handleConfigMismatch(fmt.Sprintf("config for topic %s did not contain requested key %s", topic, key))
-				if err != nil {
-					return err
-				}
+				return m.handleConfigMismatch(fmt.Sprintf("config for topic %s did not contain requested key %s", topic, key))
 			}
 			if entry.Value != value {
-				err := m.handleConfigMismatch(fmt.Sprintf("unexpected config value for topic %s. Expected %s=%s. Got %s=%s", topic, key, value, key, entry.Value))
-				if err != nil {
-					return err
-				}
+				return m.handleConfigMismatch(fmt.Sprintf("unexpected config value for topic %s. Expected %s=%s. Got %s=%s", topic, key, value, key, entry.Value))
 			}
 		}
 
-		topicsMeta, err := m.admin.DescribeTopics([]string{topic})
+		// check if the number of replicas match what we expect
+		topicMinReplicas, err := m.getTopicMinReplicas(topic)
 		if err != nil {
-			return fmt.Errorf("Error describing topic %s", topic)
+			return err
 		}
-		if len(topicsMeta) != 1 {
-			return fmt.Errorf("Cannot find meta data for topic %s", topic)
-		}
-
-		topicMeta := topicsMeta[0]
-		for _, part := range topicMeta.Partitions {
-			if len(part.Replicas) != rfactor {
-				err := m.handleConfigMismatch(fmt.Sprintf("unexpected replication factor for topic %s. Expected %d, got %d",
-					topic,
-					rfactor,
-					len(part.Replicas)))
-				if err != nil {
-					return err
-				}
-				// in case we did not return the error (i.e. we logged or ignored),
-				// let's stop here, otherwise we'll get a log for each partition
-				break
-			}
+		if topicMinReplicas != rfactor {
+			return m.handleConfigMismatch(fmt.Sprintf("unexpected replication factor for topic %s. Expected %d, got %d",
+				topic,
+				rfactor,
+				topicMinReplicas))
 		}
 	}
 
-	// already exists, no need to do anything
+	// already exists, no need to do create
 	if hasTopic {
 		return nil
 	}
@@ -264,8 +230,45 @@ func (m *topicManager) adminSupported() bool {
 	return m.client.Config().Version.IsAtLeast(sarama.V0_11_0_0)
 }
 
-func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
+func (m *topicManager) getTopicConfigMap(topic string) (map[string]sarama.ConfigEntry, error) {
+	cfg, err := m.admin.DescribeConfig(sarama.ConfigResource{
+		Type: sarama.TopicResource,
+		Name: topic,
+	})
 
+	// now it does not exist anymore -- this means the cluster is somehow unstable
+	if err != nil {
+		return nil, fmt.Errorf("Error getting config for topic %s", topic)
+	}
+
+	// remap the config values to a map
+	cfgMap := make(map[string]sarama.ConfigEntry, len(cfg))
+	for _, cfgEntry := range cfg {
+		cfgMap[cfgEntry.Name] = cfgEntry
+	}
+	return cfgMap, nil
+}
+
+func (m *topicManager) getTopicMinReplicas(topic string) (int, error) {
+	topicsMeta, err := m.admin.DescribeTopics([]string{topic})
+	if err != nil {
+		return 0, fmt.Errorf("Error describing topic %s", topic)
+	}
+	if len(topicsMeta) != 1 {
+		return 0, fmt.Errorf("Cannot find meta data for topic %s", topic)
+	}
+
+	topicMeta := topicsMeta[0]
+	var replicasMin int
+	for _, part := range topicMeta.Partitions {
+		if replicasMin == 0 || len(part.Replicas) < replicasMin {
+			replicasMin = len(part.Replicas)
+		}
+	}
+	return replicasMin, nil
+}
+
+func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
 	return m.ensureExists(
 		topic,
 		npar,
