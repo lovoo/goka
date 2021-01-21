@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"errors"
 	"fmt"
 	reflect "reflect"
 	"regexp"
@@ -13,6 +14,7 @@ var (
 	errBuildConsumer = "error creating Kafka consumer: %v"
 	errBuildProducer = "error creating Kafka producer: %v"
 	errApplyOptions  = "error applying options: %v"
+	errTopicNotFound = errors.New("requested topic was not found")
 )
 
 var (
