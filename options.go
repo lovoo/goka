@@ -519,3 +519,15 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
 }
+
+type ctxOptions struct{
+	emitHeaders map[string][]byte
+}
+
+type ContextOption func(*ctxOptions)
+
+func (opt *ctxOptions) applyOptions(opts ...ContextOption) {
+	for _, o := range opts {
+		o(opt)
+	}
+}

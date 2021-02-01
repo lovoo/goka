@@ -494,7 +494,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 		msg:              msg,
 		syncFailer:       syncFailer,
 		asyncFailer:      asyncFailer,
-		emitter:          pp.producer.Emit,
+		emitter:          pp.producer.EmitWithHeaders,
 		table:            pp.table,
 	}
 
