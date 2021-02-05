@@ -170,12 +170,6 @@ type cbContext struct {
 	wg     *sync.WaitGroup
 }
 
-func WithCtxEmitHeaders(headers map[string][]byte) ContextOption{
-	return func(opts *ctxOptions){
-		opts.emitHeaders = headers
-	}
-}
-
 // Emit sends a message asynchronously to a topic.
 func (ctx *cbContext) Emit(topic Stream, key string, value interface{}, options ...ContextOption) {
 	opts := new(ctxOptions)
