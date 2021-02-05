@@ -519,3 +519,24 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 		opt.builders.topicmgr = DefaultTopicManagerBuilder
 	}
 }
+
+type ctxOptions struct{
+	emitHeaders map[string][]byte
+}
+
+// ContextOption defines a configuration option to be used when performing
+// operations on a context
+type ContextOption func(*ctxOptions)
+
+// WithCtxEmitHeaders sets kafka headers to use when emitting to kafka
+func WithCtxEmitHeaders(headers map[string][]byte) ContextOption{
+	return func(opts *ctxOptions){
+		opts.emitHeaders = headers
+	}
+}
+
+func (opt *ctxOptions) applyOptions(opts ...ContextOption) {
+	for _, o := range opts {
+		o(opt)
+	}
+}
