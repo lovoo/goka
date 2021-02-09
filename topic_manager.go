@@ -144,7 +144,8 @@ func (m *topicManager) createTopic(topic string, npar, rfactor int, config map[s
 	topicDetail.ConfigEntries = make(map[string]*string)
 
 	for k, v := range config {
-		// need to make a copy, or the config values will contain only one value
+		// configEntries is a map to `*string`, so we have to make a copy of the value
+		// here or end up having the same value for all, since `v` has the same address everywhere
 		value := v
 		topicDetail.ConfigEntries[k] = &value
 	}
@@ -165,14 +166,14 @@ func (m *topicManager) handleConfigMismatch(message string) error {
 		return nil
 	case TMConfigMismatchBehaviorFail:
 		return fmt.Errorf("%s", message)
+		// ignores per default
+	default:
+		return nil
 	}
-	// default is to ignore
-	return nil
 }
 
 func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[string]string) error {
 
-	var hasTopic bool
 	partitions, err := m.Partitions(topic)
 
 	if err != nil {
@@ -180,18 +181,23 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 			return fmt.Errorf("error checking topic: %v", err)
 		}
 	}
-
-	if len(partitions) > 0 {
-		hasTopic = true
+	// no topic yet, let's create it
+	if len(partitions) == 0 {
+		return m.createTopic(topic,
+			npar,
+			rfactor,
+			config)
 	}
 
+	// we have a topic, let's check their values
+
 	// partitions do not match
-	if hasTopic && len(partitions) != npar {
+	if len(partitions) != npar {
 		return m.handleConfigMismatch(fmt.Sprintf("partition count mismatch for topic %s. Need %d, but existing topic has %d", topic, npar, len(partitions)))
 	}
 
 	// check additional config values via the cluster admin if our current version supports it
-	if hasTopic && m.adminSupported() {
+	if m.adminSupported() {
 		cfgMap, err := m.getTopicConfigMap(topic)
 		if err != nil {
 			return err
@@ -221,15 +227,7 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 		}
 	}
 
-	// already exists, no need to do create
-	if hasTopic {
-		return nil
-	}
-
-	return m.createTopic(topic,
-		npar,
-		rfactor,
-		config)
+	return nil
 }
 
 func (m *topicManager) adminSupported() bool {

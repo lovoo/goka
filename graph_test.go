@@ -74,7 +74,6 @@ func TestGroupGraph_Validate(t *testing.T) {
 	)
 	err = g.Validate()
 	test.AssertStringContains(t, err.Error(), "loop stream")
-
 }
 
 func TestGroupGraph_chainEdges(t *testing.T) {
@@ -82,7 +81,6 @@ func TestGroupGraph_chainEdges(t *testing.T) {
 	test.AssertEqual(t, len(chainEdges(Edges{}, Edges{})), 0)
 	test.AssertEqual(t, chainEdges(Edges{Join("a", nil)}, Edges{}), Edges{Join("a", nil)})
 	test.AssertEqual(t, chainEdges(Edges{Join("a", nil)}, Edges{Join("a", nil), Join("b", nil)}), Edges{Join("a", nil), Join("a", nil), Join("b", nil)})
-
 }
 
 func TestGroupGraph_codec(t *testing.T) {
@@ -95,7 +93,6 @@ func TestGroupGraph_codec(t *testing.T) {
 		codec := g.codec(topic)
 		test.AssertEqual(t, codec, c)
 	}
-
 }
 
 func TestGroupGraph_callback(t *testing.T) {
