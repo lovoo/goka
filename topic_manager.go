@@ -3,10 +3,10 @@ package goka
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 )
 
@@ -31,14 +31,18 @@ type TopicManager interface {
 }
 
 type topicManager struct {
-	brokers            []string
-	broker             Broker
+	admin              sarama.ClusterAdmin
 	client             sarama.Client
 	topicManagerConfig *TopicManagerConfig
 }
 
 // NewTopicManager creates a new topic manager using the sarama library
 func NewTopicManager(brokers []string, saramaConfig *sarama.Config, topicManagerConfig *TopicManagerConfig) (TopicManager, error) {
+
+	if !saramaConfig.Version.IsAtLeast(sarama.V0_10_0_0) {
+		return nil, fmt.Errorf("goka's topic manager needs kafka version v0.10.0.0 or higher to function. Version is %s", saramaConfig.Version.String())
+	}
+
 	client, err := sarama.NewClient(brokers, saramaConfig)
 	if err != nil {
 		return nil, fmt.Errorf("Error creating the kafka client: %v", err)
@@ -66,10 +70,14 @@ func newTopicManager(brokers []string, saramaConfig *sarama.Config, topicManager
 		return nil, err
 	}
 
+	admin, err := sarama.NewClusterAdminFromClient(client)
+	if err != nil {
+		return nil, fmt.Errorf("error creating cluster admin: %v", err)
+	}
+
 	return &topicManager{
-		brokers:            brokers,
+		admin:              admin,
 		client:             client,
-		broker:             broker,
 		topicManagerConfig: topicManagerConfig,
 	}, nil
 }
@@ -105,70 +113,163 @@ func (m *topicManager) Close() error {
 }
 
 func (m *topicManager) Partitions(topic string) ([]int32, error) {
-	return m.client.Partitions(topic)
+	// refresh metadata, otherwise we might get an outdated number of partitions.
+	// we cannot call it for that specific topic,
+	// otherwise we'd create it if auto.create.topics.enable==true, which we want to avoid
+	if err := m.client.RefreshMetadata(); err != nil {
+		return nil, fmt.Errorf("error refreshing metadata %v", err)
+	}
+	topics, err := m.client.Topics()
+	if err != nil {
+		return nil, err
+	}
+	for _, tpc := range topics {
+		// topic exists, let's list the partitions.
+		if tpc == topic {
+			return m.client.Partitions(topic)
+		}
+	}
+	return nil, errTopicNotFound
 }
 
 func (m *topicManager) GetOffset(topic string, partitionID int32, time int64) (int64, error) {
 	return m.client.GetOffset(topic, partitionID, time)
 }
 
-func (m *topicManager) checkTopicExistsWithPartitions(topic string, npar int) (bool, error) {
-	par, err := m.client.Partitions(topic)
-	if err != nil {
-		if err == sarama.ErrUnknownTopicOrPartition {
-			return false, nil
-		}
-		return false, fmt.Errorf("Error checking partitions for topic %s: %v", topic, err)
-	}
-	if len(par) != npar {
-		return false, fmt.Errorf("topic %s has %d partitions instead of %d", topic, len(par), npar)
-	}
-	return true, nil
-}
-
 func (m *topicManager) createTopic(topic string, npar, rfactor int, config map[string]string) error {
+	m.topicManagerConfig.Logger.Debugf("creating topic %s with npar=%d, rfactor=%d, config=%#v", topic, npar, rfactor, config)
 	topicDetail := &sarama.TopicDetail{}
 	topicDetail.NumPartitions = int32(npar)
 	topicDetail.ReplicationFactor = int16(rfactor)
 	topicDetail.ConfigEntries = make(map[string]*string)
 
 	for k, v := range config {
-		topicDetail.ConfigEntries[k] = &v
+		// configEntries is a map to `*string`, so we have to make a copy of the value
+		// here or end up having the same value for all, since `v` has the same address everywhere
+		value := v
+		topicDetail.ConfigEntries[k] = &value
 	}
 
-	topicDetails := make(map[string]*sarama.TopicDetail)
-	topicDetails[topic] = topicDetail
-
-	request := sarama.CreateTopicsRequest{
-		Timeout:      time.Second * 15,
-		TopicDetails: topicDetails,
-	}
-	response, err := m.broker.CreateTopics(&request)
-
+	err := m.admin.CreateTopic(topic, topicDetail, false)
 	if err != nil {
-		var errs []string
-		for k, topicErr := range response.TopicErrors {
-			errs = append(errs, fmt.Sprintf("%s: %s (%v)", k, topicErr.Err.Error(), topicErr.ErrMsg))
-		}
-		return fmt.Errorf("error creating topic %s, npar=%d, rfactor=%d, config=%#v: %v\ntopic errors:\n%s",
-			topic, npar, rfactor, config, err, strings.Join(errs, "\n"))
+		return fmt.Errorf("error creating topic %s, npar=%d, rfactor=%d, config=%#v: %v",
+			topic, npar, rfactor, config, err)
 	}
 
 	return nil
 }
 
-func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[string]string) error {
-	exists, err := m.checkTopicExistsWithPartitions(topic, npar)
-	if err != nil {
-		return fmt.Errorf("error checking topic exists: %v", err)
-	}
-	if exists {
+func (m *topicManager) handleConfigMismatch(message string) error {
+	switch m.topicManagerConfig.MismatchBehavior {
+	case TMConfigMismatchBehaviorWarn:
+		m.topicManagerConfig.Logger.Printf("Warning: %s", message)
+		return nil
+	case TMConfigMismatchBehaviorFail:
+		return fmt.Errorf("%s", message)
+		// ignores per default
+	default:
 		return nil
 	}
-	return m.createTopic(topic,
-		npar,
-		rfactor,
-		config)
+}
+
+func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[string]string) error {
+
+	partitions, err := m.Partitions(topic)
+
+	if err != nil {
+		if err != errTopicNotFound {
+			return fmt.Errorf("error checking topic: %v", err)
+		}
+	}
+	// no topic yet, let's create it
+	if len(partitions) == 0 {
+		return m.createTopic(topic,
+			npar,
+			rfactor,
+			config)
+	}
+
+	// we have a topic, let's check their values
+
+	// partitions do not match
+	if len(partitions) != npar {
+		return m.handleConfigMismatch(fmt.Sprintf("partition count mismatch for topic %s. Need %d, but existing topic has %d", topic, npar, len(partitions)))
+	}
+
+	// check additional config values via the cluster admin if our current version supports it
+	if m.adminSupported() {
+		cfgMap, err := m.getTopicConfigMap(topic)
+		if err != nil {
+			return err
+		}
+
+		// check for all user-passed config values whether they're as expected
+		for key, value := range config {
+			entry, ok := cfgMap[key]
+			if !ok {
+				return m.handleConfigMismatch(fmt.Sprintf("config for topic %s did not contain requested key %s", topic, key))
+			}
+			if entry.Value != value {
+				return m.handleConfigMismatch(fmt.Sprintf("unexpected config value for topic %s. Expected %s=%s. Got %s=%s", topic, key, value, key, entry.Value))
+			}
+		}
+
+		// check if the number of replicas match what we expect
+		topicMinReplicas, err := m.getTopicMinReplicas(topic)
+		if err != nil {
+			return err
+		}
+		if topicMinReplicas != rfactor {
+			return m.handleConfigMismatch(fmt.Sprintf("unexpected replication factor for topic %s. Expected %d, got %d",
+				topic,
+				rfactor,
+				topicMinReplicas))
+		}
+	}
+
+	return nil
+}
+
+func (m *topicManager) adminSupported() bool {
+	return m.client.Config().Version.IsAtLeast(sarama.V0_11_0_0)
+}
+
+func (m *topicManager) getTopicConfigMap(topic string) (map[string]sarama.ConfigEntry, error) {
+	cfg, err := m.admin.DescribeConfig(sarama.ConfigResource{
+		Type: sarama.TopicResource,
+		Name: topic,
+	})
+
+	// now it does not exist anymore -- this means the cluster is somehow unstable
+	if err != nil {
+		return nil, fmt.Errorf("Error getting config for topic %s", topic)
+	}
+
+	// remap the config values to a map
+	cfgMap := make(map[string]sarama.ConfigEntry, len(cfg))
+	for _, cfgEntry := range cfg {
+		cfgMap[cfgEntry.Name] = cfgEntry
+	}
+	return cfgMap, nil
+}
+
+func (m *topicManager) getTopicMinReplicas(topic string) (int, error) {
+	topicsMeta, err := m.admin.DescribeTopics([]string{topic})
+	if err != nil {
+		return 0, fmt.Errorf("Error describing topic %s", topic)
+	}
+	if len(topicsMeta) != 1 {
+		return 0, fmt.Errorf("Cannot find meta data for topic %s", topic)
+	}
+
+	topicMeta := topicsMeta[0]
+	var replicasMin int
+	for _, part := range topicMeta.Partitions {
+		if replicasMin == 0 || len(part.Replicas) < replicasMin {
+			replicasMin = len(part.Replicas)
+		}
+	}
+	return replicasMin, nil
 }
 
 func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
@@ -177,7 +278,8 @@ func (m *topicManager) EnsureStreamExists(topic string, npar int) error {
 		npar,
 		m.topicManagerConfig.Stream.Replication,
 		map[string]string{
-			"retention.ms": fmt.Sprintf("%d", m.topicManagerConfig.Stream.Retention.Milliseconds()),
+			"cleanup.policy": m.topicManagerConfig.streamCleanupPolicy(),
+			"retention.ms":   fmt.Sprintf("%d", m.topicManagerConfig.Stream.Retention.Milliseconds()),
 		})
 }
 
@@ -190,33 +292,77 @@ func (m *topicManager) EnsureTopicExists(topic string, npar, rfactor int, config
 }
 
 func (m *topicManager) EnsureTableExists(topic string, npar int) error {
+
 	return m.ensureExists(
 		topic,
 		npar,
 		m.topicManagerConfig.Table.Replication,
 		map[string]string{
-			"cleanup.policy": "compact",
+			"cleanup.policy": m.topicManagerConfig.tableCleanupPolicy(),
 		})
 }
 
-// TopicManagerConfig contains the configuration to access the Zookeeper servers
-// as well as the desired options of to create tables and stream topics.
+// TMConfigMismatchBehavior configures how configuration mismatches of a topic (replication, num partitions, compaction) should be
+// treated
+type TMConfigMismatchBehavior int
+
+const (
+	// TMConfigMismatchBehaviorIgnore ignore wrong config values
+	TMConfigMismatchBehaviorIgnore TMConfigMismatchBehavior = 0
+
+	// TMConfigMismatchBehaviorWarn warns if the topic is configured differently than requested
+	TMConfigMismatchBehaviorWarn TMConfigMismatchBehavior = 1
+
+	// TMConfigMismatchBehaviorFail makes checking the topic fail, if the configuration different than requested
+	TMConfigMismatchBehaviorFail TMConfigMismatchBehavior = 2
+)
+
+// TopicManagerConfig contains options of to create tables and stream topics.
 type TopicManagerConfig struct {
-	Table struct {
+	Logger logger.Logger
+	Table  struct {
 		Replication int
+		// CleanupPolicy allows to overwrite the default cleanup policy for streams.
+		// Defaults to 'compact' if not set
+		CleanupPolicy string
 	}
 	Stream struct {
 		Replication int
 		Retention   time.Duration
+		// CleanupPolicy allows to overwrite the default cleanup policy for streams.
+		// Defaults to 'delete' if not set
+		CleanupPolicy string
 	}
+
+	MismatchBehavior TMConfigMismatchBehavior
+}
+
+func (tmc *TopicManagerConfig) streamCleanupPolicy() string {
+
+	if tmc.Stream.CleanupPolicy != "" {
+		return tmc.Stream.CleanupPolicy
+	}
+	return "delete"
+}
+func (tmc *TopicManagerConfig) tableCleanupPolicy() string {
+
+	if tmc.Table.CleanupPolicy != "" {
+		return tmc.Table.CleanupPolicy
+	}
+	return "compact"
 }
 
 // NewTopicManagerConfig provides a default configuration for auto-creation
 // with replication factor of 1 and rentention time of 1 hour.
+// Use this function rather than creating TopicManagerConfig from scratch to
+// initialize the config with reasonable defaults
 func NewTopicManagerConfig() *TopicManagerConfig {
 	cfg := new(TopicManagerConfig)
 	cfg.Table.Replication = 2
 	cfg.Stream.Replication = 2
 	cfg.Stream.Retention = 1 * time.Hour
+
+	cfg.MismatchBehavior = TMConfigMismatchBehaviorIgnore
+	cfg.Logger = logger.Default().Prefix("topic_manager")
 	return cfg
 }

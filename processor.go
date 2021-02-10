@@ -670,13 +670,9 @@ func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, 
 		return 0, err
 	}
 
-	// TODO(diogo): add output topics
 	if ls := gg.LoopStream(); ls != nil {
-		ensureStreams := []string{ls.Topic()}
-		for _, t := range ensureStreams {
-			if err = tm.EnsureStreamExists(t, npar); err != nil {
-				return 0, err
-			}
+		if err = tm.EnsureStreamExists(ls.Topic(), npar); err != nil {
+			return 0, err
 		}
 	}
 
@@ -710,7 +706,7 @@ func ensureCopartitioned(tm TopicManager, topics []string) (int, error) {
 			npar = len(partitions)
 		}
 		if len(partitions) != npar {
-			return 0, fmt.Errorf("Topic %s does not have %d partitions", topic, npar)
+			return 0, fmt.Errorf("topics are not copartitioned! Topic '%s' does not have %d partitions like the rest but %d", topic, npar, len(partitions))
 		}
 	}
 	return npar, nil

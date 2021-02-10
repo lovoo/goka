@@ -99,12 +99,12 @@ func (gg *GroupGraph) isOutputTopic(topic Stream) bool {
 
 // inputs returns all input topics (tables and streams)
 func (gg *GroupGraph) inputs() Edges {
-	return append(append(gg.inputStreams, gg.inputTables...), gg.crossTables...)
+	return chainEdges(gg.inputStreams, gg.inputTables, gg.crossTables)
 }
 
 // copartitioned returns all copartitioned topics (joint tables and input streams)
 func (gg *GroupGraph) copartitioned() Edges {
-	return append(gg.inputStreams, gg.inputTables...)
+	return chainEdges(gg.inputStreams, gg.inputTables)
 }
 
 func (gg *GroupGraph) codec(topic string) Codec {
@@ -196,8 +196,7 @@ func (gg *GroupGraph) Validate() error {
 	if len(gg.inputStreams) == 0 {
 		return errors.New("no input stream in group graph")
 	}
-	for _, t := range append(gg.outputStreams,
-		append(gg.inputStreams, append(gg.inputTables, gg.crossTables...)...)...) {
+	for _, t := range chainEdges(gg.outputStreams, gg.inputStreams, gg.inputTables, gg.crossTables) {
 		if t.Topic() == loopName(gg.Group()) {
 			return errors.New("should not directly use loop stream")
 		}
@@ -218,6 +217,21 @@ type Edge interface {
 
 // Edges is a slice of edge objects.
 type Edges []Edge
+
+// chainEdges chains edges together to avoid error-prone
+// append(edges, moreEdges...) constructs in the graph
+func chainEdges(edgeList ...Edges) Edges {
+	var sum int
+	for _, edges := range edgeList {
+		sum += len(edges)
+	}
+	chained := make(Edges, 0, sum)
+
+	for _, edges := range edgeList {
+		chained = append(chained, edges...)
+	}
+	return chained
+}
 
 // Topics returns the names of the topics of the edges.
 func (e Edges) Topics() []string {

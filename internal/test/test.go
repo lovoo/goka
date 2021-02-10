@@ -15,7 +15,8 @@ func AssertNil(t Fataler, actual interface{}) {
 	value := reflect.ValueOf(actual)
 	if value.IsValid() {
 		if !value.IsNil() {
-			t.Fatalf("Expected value to be nil, but was not nil in %s", string(debug.Stack()))
+
+			t.Fatalf("Expected value to be nil, but was not nil (%v) in %s", actual, string(debug.Stack()))
 		}
 	}
 }
