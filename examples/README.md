@@ -32,17 +32,29 @@ In Addition it shows how to
 
 [Example](https://github.com/lovoo/goka/tree/master/examples/2-clicks/)
 
+### More complex examples
+The following examples show the combination of multiple processors, views, etc.
+
+[Messaging Example](https://github.com/lovoo/goka/tree/master/examples/3-messaging/)
+
+By generating a random folder for storage, this example can be executed in parallel multiple times to get a feeling for the rebalancing that's happening under the hood.
+
+[Example]https://github.com/lovoo/goka/tree/master/examples/5-multiple/)
+
+
 ###  Monitoring
 Shows how to use the monitoring- and query-interface of goka.
 
-TODO
-
-[Example](https://github.com/lovoo/goka/tree/master/examples/monitoring)
+[Example](https://github.com/lovoo/goka/tree/master/examples/8-monitoring)
 
 
 ###  Testing
 Shows how to (unit-)test programs using goka.
 
-TODO
+[Example](https://github.com/lovoo/goka/tree/master/examples/4-tests)
 
-[Example](https://github.com/lovoo/goka/tree/master/examples/testing)
+### DeferCommit
+
+Demonstrates the rather new context function to defer (postpone) the commit of a callback.
+
+[Example](https://github.com/lovoo/goka/tree/master/examples/9-defer-commit)
