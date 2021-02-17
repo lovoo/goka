@@ -234,7 +234,7 @@ func main() {
 	}
 
 	if err := errg.Wait().NilOrError(); err != nil {
-		log.Fatalf("Error running monitoring example: %v", err)
+		log.Fatalf("Error running example: %v", err)
 	} else {
 		log.Printf("Example gracefully shutdown")
 	}
