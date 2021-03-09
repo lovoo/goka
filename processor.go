@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+
 	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
@@ -147,7 +148,7 @@ func (g *Processor) isStateless() bool {
 ///////////////////////////////////////////////////////////////////////////////
 
 // Get returns a read-only copy of a value from the group table if the
-// respective partition is owned by the processor instace.
+// respective partition is owned by the processor instance.
 // Get can be called by multiple goroutines concurrently.
 // Get can be only used with stateful processors (ie, when group table is
 // enabled) and after Recovered returns true.
@@ -212,6 +213,38 @@ func (g *Processor) hash(key string) (int32, error) {
 		return 0, errors.New("can't hash with 0 partitions")
 	}
 	return hash % int32(g.partitionCount), nil
+}
+
+// Iterator creates a read-only Iterator, which provides a snapshot of the current processor table.
+func (g *Processor) Iterator() (Iterator, error) {
+	if g.isStateless() {
+		return nil, fmt.Errorf("can't create iterator for a stateless processor")
+	}
+
+	// we only have access to the storage if the processor is running
+	if !g.state.IsState(ProcStateRunning) {
+		return nil, fmt.Errorf("can't create iterator, processor isn't running")
+	}
+
+	iters := make([]storage.Iterator, 0, len(g.partitions))
+	for i := range g.partitions {
+		iter, err := g.partitions[i].table.Iterator()
+		if err != nil {
+			// release already opened iterators
+			for i := range iters {
+				iters[i].Release()
+			}
+
+			return nil, fmt.Errorf("error opening partition iterator: %v", err)
+		}
+
+		iters = append(iters, iter)
+	}
+
+	return &iterator{
+		iter:  storage.NewMultiIterator(iters),
+		codec: g.graph.GroupTable().Codec(),
+	}, nil
 }
 
 // Run starts the processor using passed context.
