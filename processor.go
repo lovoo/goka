@@ -216,7 +216,7 @@ func (g *Processor) hash(key string) (int32, error) {
 }
 
 // Iterator creates a read-only Iterator, which provides a snapshot of the current processor table.
-func (g *Processor) Iterator() (Iterator, error) {
+func (g *Processor) Snapshot() (*SnapshotProvider, error) {
 	if g.isStateless() {
 		return nil, fmt.Errorf("can't create iterator for a stateless processor")
 	}
@@ -241,10 +241,12 @@ func (g *Processor) Iterator() (Iterator, error) {
 		iters = append(iters, iter)
 	}
 
-	return &iterator{
+	it := &iterator{
 		iter:  storage.NewMultiIterator(iters),
 		codec: g.graph.GroupTable().Codec(),
-	}, nil
+	}
+
+	return NewSnapshotProvider(it, g.state, g.log), nil
 }
 
 // Run starts the processor using passed context.
