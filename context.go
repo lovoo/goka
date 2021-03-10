@@ -122,15 +122,15 @@ type Context interface {
 	Fail(err error)
 
 	// Context returns the underlying context used to start the processor or a
-	// subcontext.
+	// subcontext. Returned context.Context can safely be passed to asynchronous code and goroutines.
 	Context() context.Context
 
 	// DeferCommit makes the callback omit the final commit when the callback returns.
 	// It returns a function that *must* be called eventually to mark the message processing as finished.
 	// If the function is not called, the processor might reprocess the message in future.
 	// Note when calling DeferCommit multiple times, all returned functions must be called.
-	// *Important*: this context is only safe to use within this goroutine, so do not pass it to an
-	// asynchronously called callback.
+	// *Important*: the context where `DeferCommit` is called, is only safe to use within this callback,
+	// never pass it into asynchronous code or goroutines.
 	DeferCommit() func(error)
 }
 
