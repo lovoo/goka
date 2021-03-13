@@ -12,6 +12,26 @@ import (
 	"github.com/Shopify/sarama"
 )
 
+type emitOption struct {
+	headers map[string][]byte
+}
+
+// EmitOption defines a configuration option for emitting messages
+type EmitOption func(*emitOption)
+
+// WithHeaders sets kafka headers to use when emitting to kafka
+func WithHeaders(headers map[string][]byte) EmitOption {
+	return func(opts *emitOption) {
+		opts.headers = headers
+	}
+}
+
+func (opt *emitOption) applyOptions(opts ...EmitOption) {
+	for _, o := range opts {
+		o(opt)
+	}
+}
+
 type debugLogger interface {
 	Printf(s string, args ...interface{})
 }
@@ -130,14 +150,16 @@ func (tt *Tester) EmitterProducerBuilder() goka.ProducerBuilder {
 // handleEmit handles an Emit-call on the producerMock.
 // This takes care of queueing calls
 // to handled topics or putting the emitted messages in the emitted-messages-list
-func (tt *Tester) handleEmit(topic string, key string, value []byte) *goka.Promise {
+func (tt *Tester) handleEmit(topic string, key string, value []byte, options ...EmitOption) *goka.Promise {
+	opts := new(emitOption)
+	opts.applyOptions(options...)
 	_, finisher := goka.NewPromiseWithFinisher()
-	offset := tt.pushMessage(topic, key, value)
+	offset := tt.pushMessage(topic, key, value, opts.headers)
 	return finisher(&sarama.ProducerMessage{Offset: offset}, nil)
 }
 
-func (tt *Tester) pushMessage(topic string, key string, data []byte) int64 {
-	return tt.getOrCreateQueue(topic).push(key, data)
+func (tt *Tester) pushMessage(topic string, key string, data []byte, headers map[string][]byte) int64 {
+	return tt.getOrCreateQueue(topic).push(key, data, headers)
 }
 
 func (tt *Tester) ProducerBuilder() goka.ProducerBuilder {
@@ -357,18 +379,20 @@ func (tt *Tester) waitForClients() {
 
 // Consume pushes a message for topic/key to be consumed by all processors/views
 // whoever is using it being registered to the Tester
-func (tt *Tester) Consume(topic string, key string, msg interface{}) {
+func (tt *Tester) Consume(topic string, key string, msg interface{}, options ...EmitOption) {
 	tt.waitStartup()
 
+	opts := new(emitOption)
+	opts.applyOptions(options...)
 	value := reflect.ValueOf(msg)
 	if msg == nil || (value.Kind() == reflect.Ptr && value.IsNil()) {
-		tt.pushMessage(topic, key, nil)
+		tt.pushMessage(topic, key, nil, opts.headers)
 	} else {
 		data, err := tt.codecForTopic(topic).Encode(msg)
 		if err != nil {
 			panic(fmt.Errorf("Error encoding value %v: %v", msg, err))
 		}
-		tt.pushMessage(topic, key, data)
+		tt.pushMessage(topic, key, data, opts.headers)
 	}
 
 	tt.waitForClients()
