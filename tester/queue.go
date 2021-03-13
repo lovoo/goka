@@ -5,9 +5,10 @@ import (
 )
 
 type message struct {
-	offset int64
-	key    string
-	value  []byte
+	offset  int64
+	key     string
+	value   []byte
+	headers map[string][]byte
 }
 
 type queue struct {
@@ -32,14 +33,15 @@ func (q *queue) Hwm() int64 {
 	return hwm
 }
 
-func (q *queue) push(key string, value []byte) int64 {
+func (q *queue) push(key string, value []byte, headers map[string][]byte) int64 {
 	q.Lock()
 	defer q.Unlock()
 	offset := q.hwm
 	q.messages = append(q.messages, &message{
-		offset: offset,
-		key:    key,
-		value:  value,
+		offset:  offset,
+		key:     key,
+		value:   value,
+		headers: headers,
 	})
 	q.hwm++
 	return offset
