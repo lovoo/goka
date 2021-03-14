@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
@@ -32,7 +31,7 @@ type Backoff interface {
 // It allows to setup and recover/catchup the table contents from kafka,
 // allow updates via Get/Set/Delete accessors
 type PartitionTable struct {
-	log            logger.Logger
+	log            logger
 	topic          string
 	partition      int32
 	state          *Signal
@@ -77,7 +76,7 @@ func newPartitionTable(topic string,
 	tmgr TopicManager,
 	updateCallback UpdateCallback,
 	builder storage.Builder,
-	log logger.Logger,
+	log logger,
 	backoff Backoff,
 	backoffResetTimeout time.Duration) *PartitionTable {
 

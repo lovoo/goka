@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/web/templates"
 
 	"github.com/gorilla/mux"
@@ -44,7 +43,7 @@ func DefaultHumanizer() Humanizer {
 
 // Server is a provides HTTP routes for querying the group table.
 type Server struct {
-	log logger.Logger
+	log goka.Logger
 	m   sync.RWMutex
 
 	basePath  string
@@ -56,7 +55,7 @@ type Server struct {
 // NewServer creates a server with the given options.
 func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
 	srv := &Server{
-		log:       logger.Default(),
+		log:       goka.DefaultLogger(),
 		basePath:  basePath,
 		loader:    &templates.BinLoader{},
 		sources:   make(map[string]goka.Getter),

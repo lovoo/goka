@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
@@ -37,7 +36,7 @@ type ProcessCallback func(ctx Context, msg interface{})
 // A group is composed by multiple processor instances.
 type Processor struct {
 	opts    *poptions
-	log     logger.Logger
+	log     logger
 	brokers []string
 
 	rebalanceCallback RebalanceCallback
@@ -71,7 +70,6 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 		// default options comes first
 		[]ProcessorOption{
 			WithClientID(fmt.Sprintf("goka-processor-%s", gg.Group())),
-			WithLogger(logger.Default()),
 			WithUpdateCallback(DefaultUpdate),
 			WithPartitionChannelSize(defaultPartitionChannelSize),
 			WithStorageBuilder(storage.DefaultBuilder(DefaultProcessorStoragePath(gg.Group()))),

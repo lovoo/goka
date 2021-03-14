@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/web/templates"
 
 	"net/http"
@@ -22,7 +21,7 @@ var baseTemplates = append(templates.BaseTemplates, "web/templates/monitor/menu.
 // Server is the main type used by client sot interact with the monitoring
 // functionality of goka.
 type Server struct {
-	log logger.Logger
+	log goka.Logger
 	m   sync.RWMutex
 
 	basePath   string
@@ -33,7 +32,7 @@ type Server struct {
 // NewServer creates a new Server
 func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
 	srv := &Server{
-		log:      logger.Default(),
+		log:      goka.DefaultLogger(),
 		basePath: basePath,
 	}
 

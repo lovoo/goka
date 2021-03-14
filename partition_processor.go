@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 )
 
@@ -43,7 +42,7 @@ type commitCallback func(msg *sarama.ConsumerMessage, meta string)
 type PartitionProcessor struct {
 	callbacks map[string]ProcessCallback
 
-	log logger.Logger
+	log logger
 
 	table   *PartitionTable
 	joins   map[string]*PartitionTable
@@ -84,7 +83,7 @@ type PartitionProcessor struct {
 func newPartitionProcessor(partition int32,
 	graph *GroupGraph,
 	commit commitCallback,
-	logger logger.Logger,
+	logger logger,
 	opts *poptions,
 	runMode PPRunMode,
 	lookupTables map[string]*View,

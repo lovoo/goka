@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 )
 
@@ -319,7 +318,7 @@ const (
 
 // TopicManagerConfig contains options of to create tables and stream topics.
 type TopicManagerConfig struct {
-	Logger logger.Logger
+	Logger logger
 	Table  struct {
 		Replication int
 		// CleanupPolicy allows to overwrite the default cleanup policy for streams.
@@ -363,6 +362,6 @@ func NewTopicManagerConfig() *TopicManagerConfig {
 	cfg.Stream.Retention = 1 * time.Hour
 
 	cfg.MismatchBehavior = TMConfigMismatchBehaviorIgnore
-	cfg.Logger = logger.Default().Prefix("topic_manager")
+	cfg.Logger = defaultLogger.Prefix("topic_manager")
 	return cfg
 }

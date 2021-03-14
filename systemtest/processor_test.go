@@ -43,6 +43,8 @@ func TestHotStandby(t *testing.T) {
 	err = tm.EnsureTableExists(string(joinTable), 2)
 	test.AssertNil(t, err)
 
+	time.Sleep(1 * time.Second)
+
 	proc1Storages := newStorageTracker()
 
 	proc1, err := goka.NewProcessor([]string{*broker},
@@ -343,7 +345,7 @@ func TestRebalance(t *testing.T) {
 
 	errg, ctx := multierr.NewErrGroup(context.Background())
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 5; i++ {
 		i := i
 		errg.Go(func() error {
 			p := createProc(i)
