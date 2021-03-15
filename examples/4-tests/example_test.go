@@ -339,3 +339,57 @@ func Test_Failing(t *testing.T) {
 		})
 	}
 }
+
+// Scenario (7)
+// One processor with only one input and one output.  Kafka headers are sent in both scenarios
+func Test_7InputOutputWithHeaders(t *testing.T) {
+	var (
+		gkt              = tester.New(t)
+		processorHeaders map[string][]byte
+		outputHeaders    map[string][]byte
+	)
+
+	// create a new processor, registering the tester
+	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
+		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+			processorHeaders = ctx.Headers()
+			ctx.Emit("output", ctx.Key(), fmt.Sprintf("forwarded: %v", msg), goka.WithCtxEmitHeaders(
+				map[string][]byte{
+					"Header1": []byte("to output"),
+				}))
+		}),
+		goka.Output("output", new(codec.String)),
+	),
+		goka.WithTester(gkt),
+	)
+
+	// start it
+	go proc.Run(context.Background())
+
+	// create a new message tracker so we can check that the message was being emitted.
+	// If we created the message tracker after the Consume, there wouldn't be a message.
+	mt := gkt.NewQueueTracker("output")
+
+	// send some message
+	gkt.Consume("input", "key", "some-message", tester.WithHeaders(
+		map[string][]byte{
+			"Header2": []byte("To Processor"),
+		}),
+	)
+
+	// make sure received the message in the output
+	outputHeaders, key, value, valid := mt.NextWithHeaders()
+	test.AssertTrue(t, valid)
+	test.AssertEqual(t, key, "key")
+	test.AssertEqual(t, value, "forwarded: some-message")
+
+	// Check headers sent by Emit...
+	headerValue, ok := outputHeaders["Header1"]
+	test.AssertTrue(t, ok)
+	test.AssertEqual(t, string(headerValue), "to output")
+
+	// Check headers sent to processor
+	headerValue, ok = processorHeaders["Header2"]
+	test.AssertTrue(t, ok)
+	test.AssertEqual(t, string(headerValue), "To Processor")
+}

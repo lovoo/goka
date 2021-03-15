@@ -2,6 +2,8 @@ package tester
 
 import (
 	"sync"
+
+	"github.com/Shopify/sarama"
 )
 
 type message struct {
@@ -9,6 +11,18 @@ type message struct {
 	key     string
 	value   []byte
 	headers map[string][]byte
+}
+
+func (m *message) SaramaHeaders() []*sarama.RecordHeader {
+	headers := make([]*sarama.RecordHeader, len(m.headers))
+	idx := 0
+	for k, v := range m.headers {
+		headers[idx] = &sarama.RecordHeader{
+			Key:   []byte(k),
+			Value: v,
+		}
+	}
+	return headers
 }
 
 type queue struct {
@@ -87,30 +101,43 @@ func newQueueTracker(tester *Tester, t T, topic string) *QueueTracker {
 // function was called (or MoveToEnd)
 // It uses the known codec for the topic to decode the message
 func (mt *QueueTracker) Next() (string, interface{}, bool) {
+	_, key, msg, hasNext := mt.NextWithHeaders()
+	return key, msg, hasNext
+}
 
-	key, msgRaw, hasNext := mt.NextRaw()
+// NextWithHeaders returns the next message since the last time this
+// function was called (or MoveToEnd).  This includes headers
+// It uses the known codec for the topic to decode the message
+func (mt *QueueTracker) NextWithHeaders() (map[string][]byte, string, interface{}, bool) {
+	headers, key, msgRaw, hasNext := mt.NextRawWithHeaders()
 
 	if !hasNext {
-		return key, msgRaw, hasNext
+		return headers, key, msgRaw, hasNext
 	}
 
 	decoded, err := mt.tester.codecForTopic(mt.topic).Decode(msgRaw)
 	if err != nil {
 		mt.t.Fatalf("Error decoding message: %v", err)
 	}
-	return key, decoded, true
+	return headers, key, decoded, true
 }
 
 // NextRaw returns the next message similar to Next(), but without the decoding
 func (mt *QueueTracker) NextRaw() (string, []byte, bool) {
+	_, key, value, hasNext := mt.NextRawWithHeaders()
+	return key, value, hasNext
+}
+
+// NextRaw returns the next message similar to Next(), but without the decoding
+func (mt *QueueTracker) NextRawWithHeaders() (map[string][]byte, string, []byte, bool) {
 	q := mt.tester.getOrCreateQueue(mt.topic)
 	if int(mt.nextOffset) >= q.size() {
-		return "", nil, false
+		return map[string][]byte{}, "", nil, false
 	}
 	msg := q.message(int(mt.nextOffset))
 
 	mt.nextOffset++
-	return msg.key, msg.value, true
+	return msg.headers, msg.key, msg.value, true
 }
 
 // Seek moves the index pointer of the queue tracker to passed offset

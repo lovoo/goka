@@ -319,10 +319,11 @@ func (cgs *cgSession) pushMessageToClaim(claim *cgClaim, msg *message) {
 
 	select {
 	case claim.msgs <- &sarama.ConsumerMessage{
-		Key:    []byte(msg.key),
-		Value:  msg.value,
-		Topic:  claim.Topic(),
-		Offset: msg.offset,
+		Headers: msg.SaramaHeaders(),
+		Key:     []byte(msg.key),
+		Value:   msg.value,
+		Topic:   claim.Topic(),
+		Offset:  msg.offset,
 	}:
 	// context closed already, so don't push as no consumer will be listening
 	case <-cgs.ctx.Done():
