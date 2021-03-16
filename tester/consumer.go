@@ -107,16 +107,8 @@ type partConsumerMock struct {
 func (pcm *partConsumerMock) catchup() int {
 	var numCatchup int
 	for _, msg := range pcm.queue.messagesFromOffset(pcm.hwm) {
-		headers := make([]*sarama.RecordHeader, len(msg.headers))
-		idx := 0
-		for k, v := range msg.headers {
-			headers[idx] = &sarama.RecordHeader{
-				Key:   []byte(k),
-				Value: v,
-			}
-		}
 		pcm.messages <- &sarama.ConsumerMessage{
-			Headers:   msg.SaramaHeaders(),
+			Headers:   msg.saramaHeaders(),
 			Key:       []byte(msg.key),
 			Value:     msg.value,
 			Topic:     pcm.queue.topic,
