@@ -373,7 +373,8 @@ func Test_7InputOutputWithHeaders(t *testing.T) {
 	// send some message
 	gkt.Consume("input", "key", "some-message", tester.WithHeaders(
 		map[string][]byte{
-			"Header2": []byte("To Processor"),
+			"Header1": []byte("value 1"),
+			"Header2": []byte("value 2"),
 		}),
 	)
 
@@ -389,7 +390,11 @@ func Test_7InputOutputWithHeaders(t *testing.T) {
 	test.AssertEqual(t, string(headerValue), "to output")
 
 	// Check headers sent to processor
+	headerValue, ok = processorHeaders["Header1"]
+	test.AssertTrue(t, ok)
+	test.AssertEqual(t, string(headerValue), "value 1")
+
 	headerValue, ok = processorHeaders["Header2"]
 	test.AssertTrue(t, ok)
-	test.AssertEqual(t, string(headerValue), "To Processor")
+	test.AssertEqual(t, string(headerValue), "value 2")
 }

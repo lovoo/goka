@@ -15,13 +15,12 @@ type message struct {
 
 // Convert message headers to an array of SaramaHeaders
 func (m *message) saramaHeaders() []*sarama.RecordHeader {
-	headers := make([]*sarama.RecordHeader, len(m.headers))
-	idx := 0
+	headers := make([]*sarama.RecordHeader, 0, len(m.headers))
 	for k, v := range m.headers {
-		headers[idx] = &sarama.RecordHeader{
+		headers = append(headers, &sarama.RecordHeader{
 			Key:   []byte(k),
 			Value: v,
-		}
+		})
 	}
 	return headers
 }
