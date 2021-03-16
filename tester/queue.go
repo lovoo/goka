@@ -13,7 +13,8 @@ type message struct {
 	headers map[string][]byte
 }
 
-func (m *message) SaramaHeaders() []*sarama.RecordHeader {
+// Convert message headers to an array of SaramaHeaders
+func (m *message) saramaHeaders() []*sarama.RecordHeader {
 	headers := make([]*sarama.RecordHeader, len(m.headers))
 	idx := 0
 	for k, v := range m.headers {
