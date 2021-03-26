@@ -353,10 +353,16 @@ func Test_7InputOutputWithHeaders(t *testing.T) {
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
 		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
 			processorHeaders = ctx.Headers()
-			ctx.Emit("output", ctx.Key(), fmt.Sprintf("forwarded: %v", msg), goka.WithCtxEmitHeaders(
-				map[string][]byte{
-					"Header1": []byte("to output"),
-				}))
+			ctx.Emit("output", ctx.Key(), fmt.Sprintf("forwarded: %v", msg),
+				goka.WithCtxEmitHeaders(
+					map[string][]byte{
+						"Header1": []byte("to output"),
+					}),
+				goka.WithCtxEmitHeaders(
+					map[string][]byte{
+						"Header2": []byte("to output2"),
+					}),
+			)
 		}),
 		goka.Output("output", new(codec.String)),
 	),
@@ -385,16 +391,10 @@ func Test_7InputOutputWithHeaders(t *testing.T) {
 	test.AssertEqual(t, value, "forwarded: some-message")
 
 	// Check headers sent by Emit...
-	headerValue, ok := outputHeaders["Header1"]
-	test.AssertTrue(t, ok)
-	test.AssertEqual(t, string(headerValue), "to output")
+	test.AssertEqual(t, string(outputHeaders["Header1"]), "to output")
+	test.AssertEqual(t, string(outputHeaders["Header2"]), "to output2")
 
 	// Check headers sent to processor
-	headerValue, ok = processorHeaders["Header1"]
-	test.AssertTrue(t, ok)
-	test.AssertEqual(t, string(headerValue), "value 1")
-
-	headerValue, ok = processorHeaders["Header2"]
-	test.AssertTrue(t, ok)
-	test.AssertEqual(t, string(headerValue), "value 2")
+	test.AssertEqual(t, string(processorHeaders["Header1"]), "value 1")
+	test.AssertEqual(t, string(processorHeaders["Header2"]), "value 2")
 }

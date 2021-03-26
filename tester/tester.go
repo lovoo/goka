@@ -22,7 +22,13 @@ type EmitOption func(*emitOption)
 // WithHeaders sets kafka headers to use when emitting to kafka
 func WithHeaders(headers map[string][]byte) EmitOption {
 	return func(opts *emitOption) {
-		opts.headers = headers
+		if opts.headers == nil {
+			opts.headers = make(map[string][]byte)
+		}
+
+		for k, v := range headers {
+			opts.headers[k] = v
+		}
 	}
 }
 

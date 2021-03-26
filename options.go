@@ -520,7 +520,7 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 	}
 }
 
-type ctxOptions struct{
+type ctxOptions struct {
 	emitHeaders map[string][]byte
 }
 
@@ -529,9 +529,14 @@ type ctxOptions struct{
 type ContextOption func(*ctxOptions)
 
 // WithCtxEmitHeaders sets kafka headers to use when emitting to kafka
-func WithCtxEmitHeaders(headers map[string][]byte) ContextOption{
-	return func(opts *ctxOptions){
-		opts.emitHeaders = headers
+func WithCtxEmitHeaders(headers map[string][]byte) ContextOption {
+	return func(opts *ctxOptions) {
+		if opts.emitHeaders == nil {
+			opts.emitHeaders = make(map[string][]byte, len(headers))
+		}
+		for k, v := range headers {
+			opts.emitHeaders[k] = v
+		}
 	}
 }
 
