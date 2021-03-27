@@ -357,10 +357,12 @@ func Test_7InputOutputWithHeaders(t *testing.T) {
 				goka.WithCtxEmitHeaders(
 					map[string][]byte{
 						"Header1": []byte("to output"),
+						"Header2": []byte("to output2"),
 					}),
 				goka.WithCtxEmitHeaders(
 					map[string][]byte{
-						"Header2": []byte("to output2"),
+						"Header2": []byte("to output3"),
+						"Header3": []byte("to output4"),
 					}),
 			)
 		}),
@@ -382,6 +384,11 @@ func Test_7InputOutputWithHeaders(t *testing.T) {
 			"Header1": []byte("value 1"),
 			"Header2": []byte("value 2"),
 		}),
+		tester.WithHeaders(
+			map[string][]byte{
+				"Header2": []byte("value 3"),
+				"Header3": []byte("value 4"),
+			}),
 	)
 
 	// make sure received the message in the output
@@ -392,9 +399,11 @@ func Test_7InputOutputWithHeaders(t *testing.T) {
 
 	// Check headers sent by Emit...
 	test.AssertEqual(t, string(outputHeaders["Header1"]), "to output")
-	test.AssertEqual(t, string(outputHeaders["Header2"]), "to output2")
+	test.AssertEqual(t, string(outputHeaders["Header2"]), "to output3")
+	test.AssertEqual(t, string(outputHeaders["Header3"]), "to output4")
 
 	// Check headers sent to processor
 	test.AssertEqual(t, string(processorHeaders["Header1"]), "value 1")
-	test.AssertEqual(t, string(processorHeaders["Header2"]), "value 2")
+	test.AssertEqual(t, string(processorHeaders["Header2"]), "value 3")
+	test.AssertEqual(t, string(processorHeaders["Header3"]), "value 4")
 }
