@@ -76,6 +76,8 @@ type TableStats struct {
 
 	Status PartitionStatus
 
+	RunMode PPRunMode
+
 	Recovery *RecoveryStats
 
 	Input  *InputStats
@@ -213,8 +215,8 @@ type ProcessorStats struct {
 
 func newProcessorStats(partitions int) *ProcessorStats {
 	stats := &ProcessorStats{
-		Group:  make(map[int32]*PartitionProcStats),
-		Lookup: make(map[string]*ViewStats),
+		Group:  make(map[int32]*PartitionProcStats, partitions),
+		Lookup: make(map[string]*ViewStats, partitions),
 	}
 
 	return stats

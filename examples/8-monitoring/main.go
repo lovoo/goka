@@ -24,9 +24,10 @@ import (
 )
 
 var (
-	brokers             = []string{"localhost:9092"}
-	topic   goka.Stream = "user-click"
-	group   goka.Group  = "mini-group"
+	brokers               = []string{"localhost:9092"}
+	topic     goka.Stream = "user-click"
+	group     goka.Group  = "mini-group"
+	joinGroup goka.Group  = group + "-join"
 )
 
 // A user is the object that is stored in the processor's group table
@@ -120,7 +121,7 @@ func runStatelessProcessor(ctx context.Context, monitor *monitor.Server) error {
 }
 
 func runJoinProcessor(ctx context.Context, monitor *monitor.Server) error {
-	g := goka.DefineGroup(group+"-join",
+	g := goka.DefineGroup(joinGroup,
 		goka.Input(topic,
 			new(codec.String),
 			func(ctx goka.Context, msg interface{}) {
@@ -151,7 +152,7 @@ func runJoinProcessor(ctx context.Context, monitor *monitor.Server) error {
 func runProcessor(ctx context.Context, monitor *monitor.Server, query *query.Server) error {
 	g := goka.DefineGroup(group,
 		goka.Input(topic, new(codec.String), process),
-		goka.Join(goka.GroupTable(goka.Group(string(group)+"-join")), new(codec.String)),
+		goka.Join(goka.GroupTable(joinGroup), new(codec.String)),
 		goka.Persist(new(userCodec)),
 	)
 	p, err := goka.NewProcessor(brokers, g)
@@ -236,6 +237,10 @@ func main() {
 	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 	cfg.Version = sarama.V2_4_0_0
 	goka.ReplaceGlobalConfig(cfg)
+
+	tmgr, _ := goka.NewTopicManager(brokers, goka.DefaultConfig(), goka.NewTopicManagerConfig())
+	tmgr.EnsureStreamExists(string(topic), 2)
+	tmgr.EnsureTableExists(string(goka.GroupTable(group)), 2)
 
 	root := mux.NewRouter()
 	pprofInit(root)

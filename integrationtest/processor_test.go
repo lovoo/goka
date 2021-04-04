@@ -94,6 +94,84 @@ func TestErrorCallback(t *testing.T) {
 	}
 }
 
+func TestHeaders(t *testing.T) {
+	var (
+		gkt              = tester.New(t)
+		processorHeaders map[string][]byte
+		outputHeaders    map[string][]byte
+	)
+
+	// create a new processor, registering the tester
+	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
+		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+			processorHeaders = ctx.Headers()
+			ctx.Emit("output", ctx.Key(), fmt.Sprintf("forwarded: %v", msg),
+				goka.WithCtxEmitHeaders(
+					map[string][]byte{
+						"Header1": []byte("to output"),
+						"Header2": []byte("to output2"),
+					}),
+				goka.WithCtxEmitHeaders(
+					map[string][]byte{
+						"Header2": []byte("to output3"),
+						"Header3": []byte("to output4"),
+					}),
+			)
+		}),
+		goka.Output("output", new(codec.String)),
+	),
+		goka.WithTester(gkt),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	// start it
+	go func() {
+		defer close(done)
+		err := proc.Run(ctx)
+		if err != nil {
+			t.Errorf("error running processor: %v", err)
+		}
+	}()
+
+	// create a new message tracker so we can check that the message was being emitted.
+	// If we created the message tracker after the Consume, there wouldn't be a message.
+	mt := gkt.NewQueueTracker("output")
+
+	// send some message
+	gkt.Consume("input", "key", "some-message", tester.WithHeaders(
+		map[string][]byte{
+			"Header1": []byte("value 1"),
+			"Header2": []byte("value 2"),
+		}),
+		tester.WithHeaders(
+			map[string][]byte{
+				"Header2": []byte("value 3"),
+				"Header3": []byte("value 4"),
+			}),
+	)
+
+	// make sure received the message in the output
+	outputHeaders, key, value, valid := mt.NextWithHeaders()
+	test.AssertTrue(t, valid)
+	test.AssertEqual(t, key, "key")
+	test.AssertEqual(t, value, "forwarded: some-message")
+
+	// Check headers sent by Emit...
+	test.AssertEqual(t, string(outputHeaders["Header1"]), "to output")
+	test.AssertEqual(t, string(outputHeaders["Header2"]), "to output3")
+	test.AssertEqual(t, string(outputHeaders["Header3"]), "to output4")
+
+	// Check headers sent to processor
+	test.AssertEqual(t, string(processorHeaders["Header1"]), "value 1")
+	test.AssertEqual(t, string(processorHeaders["Header2"]), "value 3")
+	test.AssertEqual(t, string(processorHeaders["Header3"]), "value 4")
+
+	cancel()
+	<-done
+}
+
 /*
 import (
 	"context"

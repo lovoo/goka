@@ -110,8 +110,6 @@ func TestProcessor_Run(t *testing.T) {
 
 		groupBuilder, cg := createTestConsumerGroupBuilder(t)
 		consBuilder, cons := createTestConsumerBuilder(t)
-		_ = cg
-		_ = cons
 
 		graph := DefineGroup("test",
 			Input("input", new(codec.Int64), accumulate),
@@ -181,8 +179,6 @@ func TestProcessor_Run(t *testing.T) {
 
 		groupBuilder, cg := createTestConsumerGroupBuilder(t)
 		consBuilder, cons := createTestConsumerBuilder(t)
-		_ = cg
-		_ = cons
 
 		graph := DefineGroup("test",
 			// input passes to loopback
@@ -237,9 +233,7 @@ func TestProcessor_Run(t *testing.T) {
 		bm.producer.EXPECT().Close().Times(1)
 
 		groupBuilder, cg := createTestConsumerGroupBuilder(t)
-		consBuilder, cons := createTestConsumerBuilder(t)
-		_ = cg
-		_ = cons
+		consBuilder, _ := createTestConsumerBuilder(t)
 
 		graph := DefineGroup("test",
 			// not really used, we're failing anyway

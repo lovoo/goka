@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/lovoo/goka/internal/test"
 )
@@ -41,4 +42,23 @@ func TestErrGroup_Go(t *testing.T) {
 	test.AssertStringContains(t, err.Error(), "some error2")
 	test.AssertNotNil(t, ctx.Err())
 	test.AssertStringContains(t, ctx.Err().Error(), "context canceled")
+}
+
+func TestErrGroup_Empty(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	errg, errgCtx := NewErrGroup(ctx)
+
+	test.AssertNil(t, errg.Wait().NilOrError())
+	select {
+	case <-errgCtx.Done():
+	default:
+		t.Errorf("context of errgroup was not cancelled after err group terminated")
+	}
+
+	select {
+	case <-ctx.Done():
+		t.Errorf("context timed out")
+	default:
+	}
 }

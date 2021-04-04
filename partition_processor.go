@@ -23,6 +23,20 @@ const (
 	PPStateStopping
 )
 
+// PPRunMode configures how the partition processor participates as part of the processor
+type PPRunMode int
+
+const (
+	// default mode: the processor recovers once and consumes messages
+	runModeActive PPRunMode = iota
+	// the processor keeps recovering. This is used for hot standby.
+	runModePassive
+	// the processor only recovers once and then stops. This is used for recover-ahead-option
+	runModeRecoverOnly
+)
+
+type commitCallback func(msg *sarama.ConsumerMessage, meta string)
+
 // PartitionProcessor handles message processing of one partition by serializing
 // messages from different input topics.
 // It also handles joined tables as well as lookup views (managed by `Processor`).
@@ -50,6 +64,8 @@ type PartitionProcessor struct {
 	// finishes.
 	runnerErrors chan error
 
+	runMode PPRunMode
+
 	consumer sarama.Consumer
 	tmgr     TopicManager
 
@@ -59,7 +75,7 @@ type PartitionProcessor struct {
 	updateStats     chan func()
 	cancelStatsLoop context.CancelFunc
 
-	session  sarama.ConsumerGroupSession
+	commit   commitCallback
 	producer Producer
 
 	opts *poptions
@@ -67,9 +83,10 @@ type PartitionProcessor struct {
 
 func newPartitionProcessor(partition int32,
 	graph *GroupGraph,
-	session sarama.ConsumerGroupSession,
+	commit commitCallback,
 	logger logger.Logger,
 	opts *poptions,
+	runMode PPRunMode,
 	lookupTables map[string]*View,
 	consumer sarama.Consumer,
 	producer Producer,
@@ -129,7 +146,8 @@ func newPartitionProcessor(partition int32,
 		responseStats:   make(chan *PartitionProcStats, 1),
 		updateStats:     make(chan func(), 10),
 		cancelStatsLoop: cancel,
-		session:         session,
+		commit:          commit,
+		runMode:         runMode,
 	}
 
 	go partProc.runStatsLoop(statsLoopCtx)
@@ -164,8 +182,12 @@ func (pp *PartitionProcessor) Errors() <-chan error {
 	return pp.runnerErrors
 }
 
-// Setup initializes the processor after a rebalance
-func (pp *PartitionProcessor) Setup(ctx context.Context) error {
+// Start initializes the partition processor
+// * recover the table
+// * recover all join tables
+// * run the join-tables in catchup mode
+// * start the processor processing loop to receive messages
+func (pp *PartitionProcessor) Start(ctx context.Context) error {
 	ctx, pp.cancelRunnerGroup = context.WithCancel(ctx)
 
 	var runnerCtx context.Context
@@ -226,6 +248,13 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 	default:
 	}
 
+	// at this point, we have successfully recovered all joins and the table of the partition-processor.
+	// If the partition-processor was started to do only that (e.g. for group-recover-ahead), we
+	// will return here
+	if pp.runMode == runModeRecoverOnly {
+		return nil
+	}
+
 	for _, join := range pp.joins {
 		join := join
 		pp.runnerGroup.Go(func() error {
@@ -235,7 +264,20 @@ func (pp *PartitionProcessor) Setup(ctx context.Context) error {
 
 	// now run the processor in a runner-group
 	pp.runnerGroup.Go(func() error {
-		err := pp.run(runnerCtx)
+		var err error
+		// depending on the run mode, we'll do
+		switch pp.runMode {
+		// (a) start the processor's message run loop so it is ready to receive and process messages
+		case runModeActive:
+			err = pp.run(runnerCtx)
+			// (b) run the processor table in catchup mode so it keeps updating it's state.
+		case runModePassive:
+			if pp.table != nil {
+				err = pp.table.CatchupForever(runnerCtx, false)
+			}
+		default:
+			return fmt.Errorf("processor has invalid run mode")
+		}
 		if err != nil {
 			pp.log.Debugf("Run failed with error: %v", err)
 		}
@@ -431,6 +473,9 @@ func (pp *PartitionProcessor) collectStats(ctx context.Context) *PartitionProcSt
 		topic, join := topic, join
 		errg.Go(func() error {
 			joinStats := join.fetchStats(ctx)
+			if joinStats != nil {
+				joinStats.RunMode = pp.runMode
+			}
 			m.Lock()
 			defer m.Unlock()
 			stats.Joined[topic] = joinStats
@@ -441,6 +486,9 @@ func (pp *PartitionProcessor) collectStats(ctx context.Context) *PartitionProcSt
 	if pp.table != nil {
 		errg.Go(func() error {
 			stats.TableStats = pp.table.fetchStats(ctx)
+			if stats.TableStats != nil {
+				stats.TableStats.RunMode = pp.runMode
+			}
 			return nil
 		})
 	}
@@ -489,7 +537,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 		trackOutputStats: pp.enqueueTrackOutputStats,
 		pviews:           pp.joins,
 		views:            pp.lookups,
-		commit:           func() { pp.session.MarkMessage(msg, "") },
+		commit:           func() { pp.commit(msg, "") },
 		wg:               wg,
 		msg:              msg,
 		syncFailer:       syncFailer,
@@ -508,7 +556,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	case msg.Value == nil && pp.opts.nilHandling == NilIgnore:
 		// mark the message upstream so we don't receive it again.
 		// this is usually only an edge case in unit tests, as kafka probably never sends us nil messages
-		pp.session.MarkMessage(msg, "")
+		pp.commit(msg, "")
 		// otherwise drop it.
 		return nil
 	case msg.Value == nil && pp.opts.nilHandling == NilProcess:
