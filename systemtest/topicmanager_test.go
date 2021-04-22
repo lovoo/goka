@@ -1,4 +1,4 @@
-package integrationtest
+package systemtest
 
 import (
 	"crypto/rand"
@@ -15,6 +15,7 @@ import (
 
 var (
 	systemtest = flag.Bool("systemtest", false, "set to run systemtests that require a running kafka-version")
+	broker     = flag.String("broker", "localhost:9092", "bootstrap broker to use for local testing")
 )
 
 func TestTopicManagerCreate(t *testing.T) {
@@ -25,7 +26,7 @@ func TestTopicManagerCreate(t *testing.T) {
 	cfg := sarama.NewConfig()
 	cfg.Version = sarama.V0_11_0_0
 
-	tm, err := goka.TopicManagerBuilderWithConfig(cfg, goka.NewTopicManagerConfig())([]string{"localhost:9092"})
+	tm, err := goka.TopicManagerBuilderWithConfig(cfg, goka.NewTopicManagerConfig())([]string{*broker})
 	test.AssertNil(t, err)
 
 	err = tm.EnsureTopicExists("test10", 4, 2, nil)
@@ -46,10 +47,10 @@ func TestTopicManager_v11(t *testing.T) {
 	tmc.Table.Replication = 1
 	tmc.MismatchBehavior = goka.TMConfigMismatchBehaviorFail
 
-	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)([]string{"localhost:9092"})
+	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)([]string{*broker})
 	test.AssertNil(t, err)
 
-	client, _ := sarama.NewClient([]string{"localhost:9092"}, cfg)
+	client, _ := sarama.NewClient([]string{*broker}, cfg)
 	admin, _ := sarama.NewClusterAdminFromClient(client)
 
 	t.Run("ensure-new-stream", func(t *testing.T) {
