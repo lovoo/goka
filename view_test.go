@@ -71,7 +71,7 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 	opts := &voptions{
 		log:        logger.Default(),
 		tableCodec: new(codec.String),
-		updateCallback: func(s storage.Storage, partition int32, key string, value []byte) error {
+		updateCallback: func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
 			if err := DefaultUpdate(s, partition, key, value); err != nil {
 				return err
 			}
@@ -174,7 +174,7 @@ func TestView_Get(t *testing.T) {
 			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
-				update: func(s storage.Storage, partition int32, key string, value []byte) error {
+				update: func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
 					return nil
 				},
 			}
@@ -203,7 +203,7 @@ func TestView_Get(t *testing.T) {
 			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
-				update: func(s storage.Storage, partition int32, key string, value []byte) error {
+				update: func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
 					return nil
 				},
 			}
@@ -231,7 +231,7 @@ func TestView_Get(t *testing.T) {
 			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
-				update: func(s storage.Storage, partition int32, key string, value []byte) error {
+				update: func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
 					return nil
 				},
 			}
@@ -526,7 +526,7 @@ func TestView_Run(t *testing.T) {
 			consumer  = defaultSaramaAutoConsumerMock(t)
 			partition int32
 			count     int64
-			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte) error {
+			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
 				atomic.AddInt64(&count, 1)
 				return nil
 			}
