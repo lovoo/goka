@@ -78,14 +78,7 @@ func (p *producer) Emit(topic string, key string, value []byte) *Promise {
 func (p *producer) EmitWithHeaders(topic string, key string, value []byte, headers map[string][]byte) *Promise {
 	promise := NewPromise()
 
-	recordHeaders := make([]sarama.RecordHeader, 0, len(headers))
-	for key, value := range headers {
-		recordHeaders = append(recordHeaders,
-			sarama.RecordHeader{
-				Key:   []byte(key),
-				Value: value,
-			})
-	}
+	recordHeaders := ToSaramaHeaders(headers)
 
 	p.producer.Input() <- &sarama.ProducerMessage{
 		Topic:    topic,

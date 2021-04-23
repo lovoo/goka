@@ -543,6 +543,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 		syncFailer:       syncFailer,
 		asyncFailer:      asyncFailer,
 		emitter:          pp.producer.EmitWithHeaders,
+		emitterDefaultHeaders: pp.opts.producerDefaultHeaders,
 		table:            pp.table,
 	}
 

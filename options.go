@@ -86,6 +86,7 @@ type poptions struct {
 	backoffResetTime     time.Duration
 	hotStandby           bool
 	recoverAhead         bool
+	producerDefaultHeaders map[string][]byte
 
 	builders struct {
 		storage        storage.Builder
@@ -211,6 +212,14 @@ func WithGroupGraphHook(hook func(gg *GroupGraph)) ProcessorOption {
 func WithBackoffResetTimeout(duration time.Duration) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.backoffResetTime = duration
+	}
+}
+
+// WithProducerDefaultHeaders configures the producer with default headers
+// which are included with every emit.
+func WithProducerDefaultHeaders(headers map[string][]byte) ProcessorOption {
+	return func(p *poptions, graph *GroupGraph) {
+		p.producerDefaultHeaders = headers
 	}
 }
 
@@ -472,7 +481,8 @@ type eoptions struct {
 	log      logger.Logger
 	clientID string
 
-	hasher func() hash.Hash32
+	hasher         func() hash.Hash32
+	defaultHeaders map[string][]byte
 
 	builders struct {
 		topicmgr TopicManagerBuilder
@@ -525,6 +535,15 @@ func WithEmitterTester(t Tester) EmitterOption {
 		t.RegisterEmitter(topic, codec)
 	}
 }
+
+// WithEmitterDefaultHeaders configures the emitter with default headers
+// which are included with every emit.
+func WithEmitterDefaultHeaders(headers map[string][]byte) EmitterOption {
+	return func(o *eoptions, _ Stream, _ Codec) {
+		o.defaultHeaders = headers
+	}
+}
+
 func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOption) {
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()

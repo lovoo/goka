@@ -140,7 +140,9 @@ type cbContext struct {
 	// commit commits the message in the consumer session
 	commit func()
 
-	emitter     emitter
+	emitter     	      emitter
+	emitterDefaultHeaders map[string][]byte
+
 	asyncFailer func(err error)
 	syncFailer  func(err error)
 
@@ -223,7 +225,7 @@ func (ctx *cbContext) Loopback(key string, value interface{}, options ...Context
 
 func (ctx *cbContext) emit(topic string, key string, value []byte, headers map[string][]byte) {
 	ctx.counters.emits++
-	ctx.emitter(topic, key, value, headers).Then(func(err error) {
+	ctx.emitter(topic, key, value, MergeHeaders(ctx.emitterDefaultHeaders, headers)).Then(func(err error) {
 		if err != nil {
 			err = fmt.Errorf("error emitting to %s: %v", topic, err)
 		}
@@ -286,10 +288,7 @@ func (ctx *cbContext) Partition() int32 {
 func (ctx *cbContext) Headers() map[string][]byte {
 
 	if ctx.headers == nil {
-		ctx.headers = make(map[string][]byte)
-		for _, header := range ctx.msg.Headers {
-			ctx.headers[string(header.Key)] = header.Value
-		}
+		ctx.headers = FromSaramaHeaders(ctx.msg.Headers)
 	}
 	return ctx.headers
 }

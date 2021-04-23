@@ -16,7 +16,8 @@ type Emitter struct {
 	codec    Codec
 	producer Producer
 
-	topic string
+	topic          string
+	defaultHeaders map[string][]byte
 
 	wg   sync.WaitGroup
 	mu   sync.RWMutex
@@ -45,10 +46,11 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 	}
 
 	return &Emitter{
-		codec:    codec,
-		producer: prod,
-		topic:    string(topic),
-		done:     make(chan struct{}),
+		codec:          codec,
+		producer:       prod,
+		topic:          string(topic),
+		defaultHeaders: opts.defaultHeaders,
+		done:           make(chan struct{}),
 	}, nil
 }
 
@@ -80,10 +82,11 @@ func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers map[strin
 		e.mu.RUnlock()
 	}
 
-	if headers == nil {
+	if headers == nil && e.defaultHeaders == nil {
 		return e.producer.Emit(e.topic, key, data).Then(e.emitDone), nil
 	}
-	return e.producer.EmitWithHeaders(e.topic, key, data, headers).Then(e.emitDone), nil
+
+	return e.producer.EmitWithHeaders(e.topic, key, data, MergeHeaders(e.defaultHeaders, headers)).Then(e.emitDone), nil
 }
 
 // Emit sends a message for passed key using the emitter's codec.
