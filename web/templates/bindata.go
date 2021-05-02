@@ -12,7 +12,6 @@
 
 package templates
 
-
 import (
 	"bytes"
 	"compress/gzip"
@@ -44,7 +43,6 @@ func bindataRead(data []byte, name string) ([]byte, error) {
 
 	return buf.Bytes(), nil
 }
-
 
 type asset struct {
 	bytes []byte
@@ -95,8 +93,6 @@ func bindataWebTemplatesCommonBaseGoHtmlBytes() ([]byte, error) {
 	)
 }
 
-
-
 func bindataWebTemplatesCommonBaseGoHtml() (*asset, error) {
 	bytes, err := bindataWebTemplatesCommonBaseGoHtmlBytes()
 	if err != nil {
@@ -104,11 +100,11 @@ func bindataWebTemplatesCommonBaseGoHtml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{
-		name: "web/templates/common/base.go.html",
-		size: 141,
+		name:        "web/templates/common/base.go.html",
+		size:        141,
 		md5checksum: "",
-		mode: os.FileMode(420),
-		modTime: time.Unix(1559056733, 0),
+		mode:        os.FileMode(420),
+		modTime:     time.Unix(1559056733, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -125,8 +121,6 @@ func bindataWebTemplatesCommonHeadGoHtmlBytes() ([]byte, error) {
 	)
 }
 
-
-
 func bindataWebTemplatesCommonHeadGoHtml() (*asset, error) {
 	bytes, err := bindataWebTemplatesCommonHeadGoHtmlBytes()
 	if err != nil {
@@ -134,11 +128,11 @@ func bindataWebTemplatesCommonHeadGoHtml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{
-		name: "web/templates/common/head.go.html",
-		size: 1280,
+		name:        "web/templates/common/head.go.html",
+		size:        1280,
 		md5checksum: "",
-		mode: os.FileMode(420),
-		modTime: time.Unix(1559056733, 0),
+		mode:        os.FileMode(420),
+		modTime:     time.Unix(1559056733, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -155,8 +149,6 @@ func bindataWebTemplatesCommonMenuGoHtmlBytes() ([]byte, error) {
 	)
 }
 
-
-
 func bindataWebTemplatesCommonMenuGoHtml() (*asset, error) {
 	bytes, err := bindataWebTemplatesCommonMenuGoHtmlBytes()
 	if err != nil {
@@ -164,11 +156,11 @@ func bindataWebTemplatesCommonMenuGoHtml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{
-		name: "web/templates/common/menu.go.html",
-		size: 369,
+		name:        "web/templates/common/menu.go.html",
+		size:        369,
 		md5checksum: "",
-		mode: os.FileMode(420),
-		modTime: time.Unix(1559056733, 0),
+		mode:        os.FileMode(420),
+		modTime:     time.Unix(1559056733, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -185,8 +177,6 @@ func bindataWebTemplatesIndexIndexGoHtmlBytes() ([]byte, error) {
 	)
 }
 
-
-
 func bindataWebTemplatesIndexIndexGoHtml() (*asset, error) {
 	bytes, err := bindataWebTemplatesIndexIndexGoHtmlBytes()
 	if err != nil {
@@ -194,11 +184,11 @@ func bindataWebTemplatesIndexIndexGoHtml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{
-		name: "web/templates/index/index.go.html",
-		size: 477,
+		name:        "web/templates/index/index.go.html",
+		size:        477,
 		md5checksum: "",
-		mode: os.FileMode(420),
-		modTime: time.Unix(1559056733, 0),
+		mode:        os.FileMode(420),
+		modTime:     time.Unix(1559056733, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -215,8 +205,6 @@ func bindataWebTemplatesMonitorDetailsprocessorGoHtmlBytes() ([]byte, error) {
 	)
 }
 
-
-
 func bindataWebTemplatesMonitorDetailsprocessorGoHtml() (*asset, error) {
 	bytes, err := bindataWebTemplatesMonitorDetailsprocessorGoHtmlBytes()
 	if err != nil {
@@ -224,11 +212,11 @@ func bindataWebTemplatesMonitorDetailsprocessorGoHtml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{
-		name: "web/templates/monitor/details_processor.go.html",
-		size: 19427,
+		name:        "web/templates/monitor/details_processor.go.html",
+		size:        19427,
 		md5checksum: "",
-		mode: os.FileMode(420),
-		modTime: time.Unix(1618393948, 0),
+		mode:        os.FileMode(420),
+		modTime:     time.Unix(1618393948, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -245,8 +233,6 @@ func bindataWebTemplatesMonitorDetailsviewGoHtmlBytes() ([]byte, error) {
 	)
 }
 
-
-
 func bindataWebTemplatesMonitorDetailsviewGoHtml() (*asset, error) {
 	bytes, err := bindataWebTemplatesMonitorDetailsviewGoHtmlBytes()
 	if err != nil {
@@ -254,11 +240,11 @@ func bindataWebTemplatesMonitorDetailsviewGoHtml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{
-		name: "web/templates/monitor/details_view.go.html",
-		size: 4378,
+		name:        "web/templates/monitor/details_view.go.html",
+		size:        4378,
 		md5checksum: "",
-		mode: os.FileMode(420),
-		modTime: time.Unix(1602774383, 0),
+		mode:        os.FileMode(420),
+		modTime:     time.Unix(1602774383, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -275,8 +261,6 @@ func bindataWebTemplatesMonitorIndexGoHtmlBytes() ([]byte, error) {
 	)
 }
 
-
-
 func bindataWebTemplatesMonitorIndexGoHtml() (*asset, error) {
 	bytes, err := bindataWebTemplatesMonitorIndexGoHtmlBytes()
 	if err != nil {
@@ -284,11 +268,11 @@ func bindataWebTemplatesMonitorIndexGoHtml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{
-		name: "web/templates/monitor/index.go.html",
-		size: 2283,
+		name:        "web/templates/monitor/index.go.html",
+		size:        2283,
 		md5checksum: "",
-		mode: os.FileMode(420),
-		modTime: time.Unix(1559056733, 0),
+		mode:        os.FileMode(420),
+		modTime:     time.Unix(1559056733, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -305,8 +289,6 @@ func bindataWebTemplatesMonitorMenuGoHtmlBytes() ([]byte, error) {
 	)
 }
 
-
-
 func bindataWebTemplatesMonitorMenuGoHtml() (*asset, error) {
 	bytes, err := bindataWebTemplatesMonitorMenuGoHtmlBytes()
 	if err != nil {
@@ -314,11 +296,11 @@ func bindataWebTemplatesMonitorMenuGoHtml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{
-		name: "web/templates/monitor/menu.go.html",
-		size: 299,
+		name:        "web/templates/monitor/menu.go.html",
+		size:        299,
 		md5checksum: "",
-		mode: os.FileMode(420),
-		modTime: time.Unix(1559056733, 0),
+		mode:        os.FileMode(420),
+		modTime:     time.Unix(1559056733, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -335,8 +317,6 @@ func bindataWebTemplatesQueryIndexGoHtmlBytes() ([]byte, error) {
 	)
 }
 
-
-
 func bindataWebTemplatesQueryIndexGoHtml() (*asset, error) {
 	bytes, err := bindataWebTemplatesQueryIndexGoHtmlBytes()
 	if err != nil {
@@ -344,18 +324,17 @@ func bindataWebTemplatesQueryIndexGoHtml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{
-		name: "web/templates/query/index.go.html",
-		size: 2479,
+		name:        "web/templates/query/index.go.html",
+		size:        2479,
 		md5checksum: "",
-		mode: os.FileMode(420),
-		modTime: time.Unix(1559056733, 0),
+		mode:        os.FileMode(420),
+		modTime:     time.Unix(1559056733, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
 
 	return a, nil
 }
-
 
 //
 // Asset loads and returns the asset for the given name.
@@ -455,18 +434,18 @@ func AssetDir(name string) ([]string, error) {
 			node = node.Children[p]
 			if node == nil {
 				return nil, &os.PathError{
-					Op: "open",
+					Op:   "open",
 					Path: name,
-					Err: os.ErrNotExist,
+					Err:  os.ErrNotExist,
 				}
 			}
 		}
 	}
 	if node.Func != nil {
 		return nil, &os.PathError{
-			Op: "open",
+			Op:   "open",
 			Path: name,
-			Err: os.ErrNotExist,
+			Err:  os.ErrNotExist,
 		}
 	}
 	rv := make([]string, 0, len(node.Children))
@@ -475,7 +454,6 @@ func AssetDir(name string) ([]string, error) {
 	}
 	return rv, nil
 }
-
 
 type bintree struct {
 	Func     func() (*asset, error)
@@ -495,9 +473,9 @@ var _bintree = &bintree{Func: nil, Children: map[string]*bintree{
 			}},
 			"monitor": {Func: nil, Children: map[string]*bintree{
 				"details_processor.go.html": {Func: bindataWebTemplatesMonitorDetailsprocessorGoHtml, Children: map[string]*bintree{}},
-				"details_view.go.html": {Func: bindataWebTemplatesMonitorDetailsviewGoHtml, Children: map[string]*bintree{}},
-				"index.go.html": {Func: bindataWebTemplatesMonitorIndexGoHtml, Children: map[string]*bintree{}},
-				"menu.go.html": {Func: bindataWebTemplatesMonitorMenuGoHtml, Children: map[string]*bintree{}},
+				"details_view.go.html":      {Func: bindataWebTemplatesMonitorDetailsviewGoHtml, Children: map[string]*bintree{}},
+				"index.go.html":             {Func: bindataWebTemplatesMonitorIndexGoHtml, Children: map[string]*bintree{}},
+				"menu.go.html":              {Func: bindataWebTemplatesMonitorMenuGoHtml, Children: map[string]*bintree{}},
 			}},
 			"query": {Func: nil, Children: map[string]*bintree{
 				"index.go.html": {Func: bindataWebTemplatesQueryIndexGoHtml, Children: map[string]*bintree{}},
