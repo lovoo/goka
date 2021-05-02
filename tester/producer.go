@@ -2,6 +2,7 @@ package tester
 
 import (
 	"github.com/lovoo/goka"
+	"github.com/lovoo/goka/headers"
 )
 
 // emitHandler abstracts a function that allows to overwrite kafkamock's Emit function to
@@ -21,7 +22,7 @@ func newProducerMock(emitter emitHandler) *producerMock {
 // Emit emits messages to arbitrary topics.
 // The mock simply forwards the emit to the KafkaMock which takes care of queueing calls
 // to handled topics or putting the emitted messages in the emitted-messages-list
-func (p *producerMock) EmitWithHeaders(topic string, key string, value []byte, header map[string][]byte) *goka.Promise {
+func (p *producerMock) EmitWithHeaders(topic string, key string, value []byte, header headers.Headers) *goka.Promise {
 	return p.emitter(topic, key, value, WithHeaders(header))
 }
 
@@ -47,7 +48,7 @@ type flushingProducer struct {
 }
 
 // Emit using the underlying producer
-func (e *flushingProducer) EmitWithHeaders(topic string, key string, value []byte, header map[string][]byte) *goka.Promise {
+func (e *flushingProducer) EmitWithHeaders(topic string, key string, value []byte, header headers.Headers) *goka.Promise {
 	prom := e.producer.EmitWithHeaders(topic, key, value, header)
 	e.tester.waitForClients()
 	return prom

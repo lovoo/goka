@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"github.com/lovoo/goka/headers"
 	"strings"
 
 	"github.com/syndtr/goleveldb/leveldb/util"
@@ -11,7 +12,7 @@ import (
 type memiter struct {
 	current int
 	keys    []string
-	storage map[string][]byte
+	storage headers.Headers
 }
 
 func (i *memiter) exhausted() bool {
@@ -52,7 +53,7 @@ func (i *memiter) Release() {
 }
 
 func (i *memiter) Seek(key []byte) bool {
-	seek := make(map[string][]byte)
+	seek := make(headers.Headers)
 	keys := []string{}
 	for k, v := range i.storage {
 		if strings.Contains(k, string(key)) {
@@ -67,7 +68,7 @@ func (i *memiter) Seek(key []byte) bool {
 }
 
 type memory struct {
-	storage   map[string][]byte
+	storage   headers.Headers
 	offset    *int64
 	recovered bool
 }
@@ -75,7 +76,7 @@ type memory struct {
 // NewMemory returns a new in-memory storage.
 func NewMemory() Storage {
 	return &memory{
-		storage:   make(map[string][]byte),
+		storage:   make(headers.Headers),
 		recovered: false,
 	}
 }

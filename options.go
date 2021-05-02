@@ -2,6 +2,7 @@ package goka
 
 import (
 	"fmt"
+	"github.com/lovoo/goka/headers"
 	"hash"
 	"hash/fnv"
 	"log"
@@ -15,7 +16,7 @@ import (
 
 // UpdateCallback is invoked upon arrival of a message for a table partition.
 // The partition storage shall be updated in the callback.
-// Headers can converted to a map using FromSaramaHeaders function.
+// Headers can converted to a map using FromSarama function.
 type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error
 
 // RebalanceCallback is invoked when the processor receives a new partition assignment.
@@ -79,15 +80,15 @@ type poptions struct {
 	log      logger.Logger
 	clientID string
 
-	updateCallback       UpdateCallback
-	rebalanceCallback    RebalanceCallback
-	partitionChannelSize int
-	hasher               func() hash.Hash32
-	nilHandling          NilHandling
-	backoffResetTime     time.Duration
-	hotStandby           bool
-	recoverAhead         bool
-	producerDefaultHeaders map[string][]byte
+	updateCallback         UpdateCallback
+	rebalanceCallback      RebalanceCallback
+	partitionChannelSize   int
+	hasher                 func() hash.Hash32
+	nilHandling            NilHandling
+	backoffResetTime       time.Duration
+	hotStandby             bool
+	recoverAhead           bool
+	producerDefaultHeaders headers.Headers
 
 	builders struct {
 		storage        storage.Builder
@@ -218,9 +219,9 @@ func WithBackoffResetTimeout(duration time.Duration) ProcessorOption {
 
 // WithProducerDefaultHeaders configures the producer with default headers
 // which are included with every emit.
-func WithProducerDefaultHeaders(headers map[string][]byte) ProcessorOption {
+func WithProducerDefaultHeaders(hdr headers.Headers) ProcessorOption {
 	return func(p *poptions, graph *GroupGraph) {
-		p.producerDefaultHeaders = headers
+		p.producerDefaultHeaders = hdr
 	}
 }
 
@@ -483,7 +484,7 @@ type eoptions struct {
 	clientID string
 
 	hasher         func() hash.Hash32
-	defaultHeaders map[string][]byte
+	defaultHeaders headers.Headers
 
 	builders struct {
 		topicmgr TopicManagerBuilder
@@ -539,9 +540,9 @@ func WithEmitterTester(t Tester) EmitterOption {
 
 // WithEmitterDefaultHeaders configures the emitter with default headers
 // which are included with every emit.
-func WithEmitterDefaultHeaders(headers map[string][]byte) EmitterOption {
+func WithEmitterDefaultHeaders(hdr headers.Headers) EmitterOption {
 	return func(o *eoptions, _ Stream, _ Codec) {
-		o.defaultHeaders = headers
+		o.defaultHeaders = hdr
 	}
 }
 
@@ -564,7 +565,7 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 }
 
 type ctxOptions struct {
-	emitHeaders map[string][]byte
+	emitHeaders headers.Headers
 }
 
 // ContextOption defines a configuration option to be used when performing
@@ -572,12 +573,12 @@ type ctxOptions struct {
 type ContextOption func(*ctxOptions)
 
 // WithCtxEmitHeaders sets kafka headers to use when emitting to kafka
-func WithCtxEmitHeaders(headers map[string][]byte) ContextOption {
+func WithCtxEmitHeaders(hdr headers.Headers) ContextOption {
 	return func(opts *ctxOptions) {
 		if opts.emitHeaders == nil {
-			opts.emitHeaders = make(map[string][]byte, len(headers))
+			opts.emitHeaders = make(headers.Headers, len(hdr))
 		}
-		for k, v := range headers {
+		for k, v := range hdr {
 			opts.emitHeaders[k] = v
 		}
 	}

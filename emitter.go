@@ -3,6 +3,7 @@ package goka
 import (
 	"errors"
 	"fmt"
+	"github.com/lovoo/goka/headers"
 	"sync"
 )
 
@@ -17,7 +18,7 @@ type Emitter struct {
 	producer Producer
 
 	topic          string
-	defaultHeaders map[string][]byte
+	defaultHeaders headers.Headers
 
 	wg   sync.WaitGroup
 	mu   sync.RWMutex
@@ -57,7 +58,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 func (e *Emitter) emitDone(err error) { e.wg.Done() }
 
 // EmitWithHeaders sends a message with the given headers for the passed key using the emitter's codec.
-func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers map[string][]byte) (*Promise, error) {
+func (e *Emitter) EmitWithHeaders(key string, msg interface{}, hdr headers.Headers) (*Promise, error) {
 	var (
 		err  error
 		data []byte
@@ -82,11 +83,11 @@ func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers map[strin
 		e.mu.RUnlock()
 	}
 
-	if headers == nil && e.defaultHeaders == nil {
+	if hdr == nil && e.defaultHeaders == nil {
 		return e.producer.Emit(e.topic, key, data).Then(e.emitDone), nil
 	}
 
-	return e.producer.EmitWithHeaders(e.topic, key, data, MergeHeaders(e.defaultHeaders, headers)).Then(e.emitDone), nil
+	return e.producer.EmitWithHeaders(e.topic, key, data, e.defaultHeaders.Merged(hdr)).Then(e.emitDone), nil
 }
 
 // Emit sends a message for passed key using the emitter's codec.
@@ -95,12 +96,12 @@ func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
 }
 
 // EmitSyncWithHeaders sends a message with the given headers to passed topic and key.
-func (e *Emitter) EmitSyncWithHeaders(key string, msg interface{}, headers map[string][]byte) error {
+func (e *Emitter) EmitSyncWithHeaders(key string, msg interface{}, hdr headers.Headers) error {
 	var (
 		err     error
 		promise *Promise
 	)
-	promise, err = e.EmitWithHeaders(key, msg, headers)
+	promise, err = e.EmitWithHeaders(key, msg, hdr)
 
 	if err != nil {
 		return err
