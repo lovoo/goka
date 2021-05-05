@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lovoo/goka/headers"
 	"sync"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 	"github.com/lovoo/goka/multierr"
 )
 
-type emitter func(topic string, key string, value []byte, headers map[string][]byte) *Promise
+type emitter func(topic string, key string, value []byte, hdr headers.Headers) *Promise
 
 // Context provides access to the processor's table and emit capabilities to
 // arbitrary topics in kafka.
@@ -62,7 +63,7 @@ type Context interface {
 	Value() interface{}
 
 	// Headers returns the headers of the input message
-	Headers() map[string][]byte
+	Headers() headers.Headers
 
 	// SetValue updates the value of the key in the group table.
 	// It stores the value in the local cache and sends the
@@ -140,13 +141,15 @@ type cbContext struct {
 	// commit commits the message in the consumer session
 	commit func()
 
-	emitter     emitter
+	emitter               emitter
+	emitterDefaultHeaders headers.Headers
+
 	asyncFailer func(err error)
 	syncFailer  func(err error)
 
 	// Headers as passed from sarama. Note that this field will be filled
 	// lazily after the first call to Headers
-	headers map[string][]byte
+	headers headers.Headers
 
 	table *PartitionTable
 	// joins
@@ -221,9 +224,9 @@ func (ctx *cbContext) Loopback(key string, value interface{}, options ...Context
 	ctx.emit(l.Topic(), key, data, opts.emitHeaders)
 }
 
-func (ctx *cbContext) emit(topic string, key string, value []byte, headers map[string][]byte) {
+func (ctx *cbContext) emit(topic string, key string, value []byte, hdr headers.Headers) {
 	ctx.counters.emits++
-	ctx.emitter(topic, key, value, headers).Then(func(err error) {
+	ctx.emitter(topic, key, value, ctx.emitterDefaultHeaders.Merged(hdr)).Then(func(err error) {
 		if err != nil {
 			err = fmt.Errorf("error emitting to %s: %v", topic, err)
 		}
@@ -283,13 +286,10 @@ func (ctx *cbContext) Partition() int32 {
 	return ctx.msg.Partition
 }
 
-func (ctx *cbContext) Headers() map[string][]byte {
+func (ctx *cbContext) Headers() headers.Headers {
 
 	if ctx.headers == nil {
-		ctx.headers = make(map[string][]byte)
-		for _, header := range ctx.msg.Headers {
-			ctx.headers[string(header.Key)] = header.Value
-		}
+		ctx.headers = headers.FromSarama(ctx.msg.Headers)
 	}
 	return ctx.headers
 }
@@ -351,7 +351,7 @@ func (ctx *cbContext) valueForKey(key string) (interface{}, error) {
 	return value, nil
 }
 
-func (ctx *cbContext) deleteKey(key string, headers map[string][]byte) error {
+func (ctx *cbContext) deleteKey(key string, hdr headers.Headers) error {
 	if ctx.graph.GroupTable() == nil {
 		return fmt.Errorf("Cannot access state in stateless processor")
 	}
@@ -362,7 +362,7 @@ func (ctx *cbContext) deleteKey(key string, headers map[string][]byte) error {
 	}
 
 	ctx.counters.emits++
-	ctx.emitter(ctx.graph.GroupTable().Topic(), key, nil, headers).Then(func(err error) {
+	ctx.emitter(ctx.graph.GroupTable().Topic(), key, nil, hdr).Then(func(err error) {
 		ctx.emitDone(err)
 	})
 
@@ -370,7 +370,7 @@ func (ctx *cbContext) deleteKey(key string, headers map[string][]byte) error {
 }
 
 // setValueForKey sets a value for a key in the processor state.
-func (ctx *cbContext) setValueForKey(key string, value interface{}, headers map[string][]byte) error {
+func (ctx *cbContext) setValueForKey(key string, value interface{}, hdr headers.Headers) error {
 	if ctx.graph.GroupTable() == nil {
 		return fmt.Errorf("Cannot access state in stateless processor")
 	}
@@ -391,7 +391,7 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}, headers map[
 
 	table := ctx.graph.GroupTable().Topic()
 	ctx.counters.emits++
-	ctx.emitter(table, key, encodedValue, headers).ThenWithMessage(func(msg *sarama.ProducerMessage, err error) {
+	ctx.emitter(table, key, encodedValue, hdr).ThenWithMessage(func(msg *sarama.ProducerMessage, err error) {
 		if err == nil && msg != nil {
 			err = ctx.table.storeNewestOffset(msg.Offset)
 		}

@@ -2,6 +2,7 @@ package goka
 
 import (
 	"fmt"
+	"github.com/lovoo/goka/headers"
 	"hash"
 	"hash/fnv"
 	"log"
@@ -15,7 +16,8 @@ import (
 
 // UpdateCallback is invoked upon arrival of a message for a table partition.
 // The partition storage shall be updated in the callback.
-type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte) error
+// Headers can converted to a map using FromSarama function.
+type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error
 
 // RebalanceCallback is invoked when the processor receives a new partition assignment.
 type RebalanceCallback func(a Assignment)
@@ -46,7 +48,7 @@ func DefaultViewStoragePath() string {
 // during recovery of processors and during the normal operation of views.
 // DefaultUpdate can be used in the function passed to WithUpdateCallback and
 // WithViewCallback.
-func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte) error {
+func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte, _ ...*sarama.RecordHeader) error {
 	if value == nil {
 		return s.Delete(key)
 	}
@@ -78,14 +80,15 @@ type poptions struct {
 	log      logger.Logger
 	clientID string
 
-	updateCallback       UpdateCallback
-	rebalanceCallback    RebalanceCallback
-	partitionChannelSize int
-	hasher               func() hash.Hash32
-	nilHandling          NilHandling
-	backoffResetTime     time.Duration
-	hotStandby           bool
-	recoverAhead         bool
+	updateCallback         UpdateCallback
+	rebalanceCallback      RebalanceCallback
+	partitionChannelSize   int
+	hasher                 func() hash.Hash32
+	nilHandling            NilHandling
+	backoffResetTime       time.Duration
+	hotStandby             bool
+	recoverAhead           bool
+	producerDefaultHeaders headers.Headers
 
 	builders struct {
 		storage        storage.Builder
@@ -211,6 +214,14 @@ func WithGroupGraphHook(hook func(gg *GroupGraph)) ProcessorOption {
 func WithBackoffResetTimeout(duration time.Duration) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.backoffResetTime = duration
+	}
+}
+
+// WithProducerDefaultHeaders configures the producer with default headers
+// which are included with every emit.
+func WithProducerDefaultHeaders(hdr headers.Headers) ProcessorOption {
+	return func(p *poptions, graph *GroupGraph) {
+		p.producerDefaultHeaders = hdr
 	}
 }
 
@@ -472,7 +483,8 @@ type eoptions struct {
 	log      logger.Logger
 	clientID string
 
-	hasher func() hash.Hash32
+	hasher         func() hash.Hash32
+	defaultHeaders headers.Headers
 
 	builders struct {
 		topicmgr TopicManagerBuilder
@@ -525,6 +537,15 @@ func WithEmitterTester(t Tester) EmitterOption {
 		t.RegisterEmitter(topic, codec)
 	}
 }
+
+// WithEmitterDefaultHeaders configures the emitter with default headers
+// which are included with every emit.
+func WithEmitterDefaultHeaders(hdr headers.Headers) EmitterOption {
+	return func(o *eoptions, _ Stream, _ Codec) {
+		o.defaultHeaders = hdr
+	}
+}
+
 func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOption) {
 	opt.clientID = defaultClientID
 	opt.log = logger.Default()
@@ -544,7 +565,7 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 }
 
 type ctxOptions struct {
-	emitHeaders map[string][]byte
+	emitHeaders headers.Headers
 }
 
 // ContextOption defines a configuration option to be used when performing
@@ -552,12 +573,12 @@ type ctxOptions struct {
 type ContextOption func(*ctxOptions)
 
 // WithCtxEmitHeaders sets kafka headers to use when emitting to kafka
-func WithCtxEmitHeaders(headers map[string][]byte) ContextOption {
+func WithCtxEmitHeaders(hdr headers.Headers) ContextOption {
 	return func(opts *ctxOptions) {
 		if opts.emitHeaders == nil {
-			opts.emitHeaders = make(map[string][]byte, len(headers))
+			opts.emitHeaders = make(headers.Headers, len(hdr))
 		}
-		for k, v := range headers {
+		for k, v := range hdr {
 			opts.emitHeaders[k] = v
 		}
 	}

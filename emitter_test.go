@@ -2,6 +2,7 @@ package goka
 
 import (
 	"errors"
+	"github.com/lovoo/goka/headers"
 	"hash"
 	"strconv"
 	"testing"
@@ -115,6 +116,23 @@ func TestEmitter_Emit(t *testing.T) {
 
 		_, err := emitter.Emit(key, intVal)
 		test.AssertNotNil(t, err)
+	})
+	t.Run("default_headers", func(t *testing.T) {
+		emitter, bm, ctrl := createEmitter(t)
+		emitter.defaultHeaders = headers.Headers{"header-key": []byte("header-val")}
+		defer ctrl.Finish()
+
+		var (
+			key          = "some-key"
+			intVal int64 = 1312
+			data         = []byte(strconv.FormatInt(intVal, 10))
+		)
+
+		bm.producer.EXPECT().EmitWithHeaders(emitter.topic, key, data, emitter.defaultHeaders).
+			Return(NewPromise().finish(nil, nil))
+		promise, err := emitter.Emit(key, intVal)
+		test.AssertNil(t, err)
+		test.AssertNotNil(t, promise)
 	})
 }
 

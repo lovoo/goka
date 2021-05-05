@@ -534,16 +534,17 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 		ctx:   ctx,
 		graph: pp.graph,
 
-		trackOutputStats: pp.enqueueTrackOutputStats,
-		pviews:           pp.joins,
-		views:            pp.lookups,
-		commit:           func() { pp.commit(msg, "") },
-		wg:               wg,
-		msg:              msg,
-		syncFailer:       syncFailer,
-		asyncFailer:      asyncFailer,
-		emitter:          pp.producer.EmitWithHeaders,
-		table:            pp.table,
+		trackOutputStats:      pp.enqueueTrackOutputStats,
+		pviews:                pp.joins,
+		views:                 pp.lookups,
+		commit:                func() { pp.commit(msg, "") },
+		wg:                    wg,
+		msg:                   msg,
+		syncFailer:            syncFailer,
+		asyncFailer:           asyncFailer,
+		emitter:               pp.producer.EmitWithHeaders,
+		emitterDefaultHeaders: pp.opts.producerDefaultHeaders,
+		table:                 pp.table,
 	}
 
 	var (

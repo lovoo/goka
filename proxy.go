@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/storage"
 )
 
@@ -28,8 +29,8 @@ func (s *storageProxy) Close() error {
 	return s.closedOnce.Do(s.Storage.Close)
 }
 
-func (s *storageProxy) Update(k string, v []byte) error {
-	return s.update(s.Storage, s.partition, k, v)
+func (s *storageProxy) Update(k string, v []byte, headers ...*sarama.RecordHeader) error {
+	return s.update(s.Storage, s.partition, k, v, headers...)
 }
 
 func (s *storageProxy) Stateless() bool {

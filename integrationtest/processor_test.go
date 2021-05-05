@@ -3,6 +3,7 @@ package integrationtest
 import (
 	"context"
 	"fmt"
+	"github.com/lovoo/goka/headers"
 	"log"
 	"strings"
 	"testing"
@@ -97,8 +98,8 @@ func TestErrorCallback(t *testing.T) {
 func TestHeaders(t *testing.T) {
 	var (
 		gkt              = tester.New(t)
-		processorHeaders map[string][]byte
-		outputHeaders    map[string][]byte
+		processorHeaders headers.Headers
+		outputHeaders    headers.Headers
 	)
 
 	// create a new processor, registering the tester
@@ -107,12 +108,12 @@ func TestHeaders(t *testing.T) {
 			processorHeaders = ctx.Headers()
 			ctx.Emit("output", ctx.Key(), fmt.Sprintf("forwarded: %v", msg),
 				goka.WithCtxEmitHeaders(
-					map[string][]byte{
+					headers.Headers{
 						"Header1": []byte("to output"),
 						"Header2": []byte("to output2"),
 					}),
 				goka.WithCtxEmitHeaders(
-					map[string][]byte{
+					headers.Headers{
 						"Header2": []byte("to output3"),
 						"Header3": []byte("to output4"),
 					}),
@@ -141,12 +142,12 @@ func TestHeaders(t *testing.T) {
 
 	// send some message
 	gkt.Consume("input", "key", "some-message", tester.WithHeaders(
-		map[string][]byte{
+		headers.Headers{
 			"Header1": []byte("value 1"),
 			"Header2": []byte("value 2"),
 		}),
 		tester.WithHeaders(
-			map[string][]byte{
+			headers.Headers{
 				"Header2": []byte("value 3"),
 				"Header3": []byte("value 4"),
 			}),
