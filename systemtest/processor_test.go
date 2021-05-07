@@ -3,6 +3,8 @@ package systemtest
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"testing"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/multierr"
+	"github.com/lovoo/goka/storage"
 )
 
 // Tests the processor option WithHotStandby. This requires a (local) running kafka cluster.
@@ -168,6 +171,7 @@ func TestRecoverAhead(t *testing.T) {
 
 	tmc := goka.NewTopicManagerConfig()
 	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
 	cfg := goka.DefaultConfig()
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)([]string{*broker})
 	test.AssertNil(t, err)
@@ -279,5 +283,74 @@ func TestRecoverAhead(t *testing.T) {
 
 	// stop everything and wait until it's shut down
 	cancel()
+	test.AssertNil(t, errg.Wait().NilOrError())
+}
+
+// TestRebalance runs some processors to test rebalance. It's merely a
+// runs-without-errors test, not a real functional test.
+func TestRebalance(t *testing.T) {
+	var (
+		group       goka.Group = "goka-systemtest-rebalance"
+		inputStream string     = string(group) + "-input"
+		basepath               = "/tmp/goka-rebalance-test"
+	)
+
+	test.AssertNil(t, os.RemoveAll(basepath))
+
+	tmc := goka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+	cfg := goka.DefaultConfig()
+	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)([]string{*broker})
+	test.AssertNil(t, err)
+
+	err = tm.EnsureStreamExists(inputStream, 20)
+	test.AssertNil(t, err)
+
+	em, err := goka.NewEmitter([]string{*broker}, goka.Stream(inputStream), new(codec.String))
+	test.AssertNil(t, err)
+
+	go func() {
+		defer em.Finish()
+		i := 0
+		for {
+			i++
+			test.AssertNil(t, em.EmitSync(fmt.Sprintf("%d", i), "value"))
+			time.Sleep(50 * time.Microsecond)
+		}
+	}()
+
+	createProc := func(id int) *goka.Processor {
+		proc, err := goka.NewProcessor([]string{*broker},
+			goka.DefineGroup(
+				group,
+				goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg interface{}) { ctx.SetValue(msg) }),
+				goka.Persist(new(codec.String)),
+			),
+			goka.WithRecoverAhead(),
+			goka.WithHotStandby(),
+			goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
+			goka.WithStorageBuilder(storage.DefaultBuilder(fmt.Sprintf("%s/proc-%d", basepath, id))),
+		)
+
+		test.AssertNil(t, err)
+		return proc
+	}
+
+	errg, ctx := multierr.NewErrGroup(context.Background())
+
+	for i := 0; i < 20; i++ {
+		i := i
+		errg.Go(func() error {
+			p := createProc(i)
+			ctx, cancel := context.WithTimeout(ctx, time.Duration(16)*time.Second)
+			defer cancel()
+			log.Printf("Starting processor %d", i)
+			defer log.Printf("Stopping processor %d", i)
+			return p.Run(ctx)
+		})
+		time.Sleep(2 * time.Second)
+	}
+
 	test.AssertNil(t, errg.Wait().NilOrError())
 }
