@@ -105,7 +105,7 @@ func newPartitionTable(topic string,
 	return pt
 }
 
-// SetupAndRecover sets up the partition storage and recovers to HWM
+// SetupAndRecover  sets up the partition storage and recovers to HWM
 func (p *PartitionTable) SetupAndRecover(ctx context.Context, restartOnError bool) error {
 
 	err := p.setup(ctx)
@@ -464,7 +464,6 @@ func (p *PartitionTable) drainConsumer(cons sarama.PartitionConsumer, errs *mult
 				}
 				errs.Collect(err)
 			}
-			return nil
 		}
 	})
 
@@ -480,7 +479,6 @@ func (p *PartitionTable) drainConsumer(cons sarama.PartitionConsumer, errs *mult
 					return nil
 				}
 			}
-			return nil
 		}
 	})
 
