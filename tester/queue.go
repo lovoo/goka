@@ -1,17 +1,17 @@
 package tester
 
 import (
-	"github.com/lovoo/goka/headers"
 	"sync"
 
 	"github.com/Shopify/sarama"
+	"github.com/lovoo/goka"
 )
 
 type message struct {
 	offset  int64
 	key     string
 	value   []byte
-	headers headers.Headers
+	headers goka.Headers
 }
 
 // Convert message headers to an array of SaramaHeaders
@@ -48,7 +48,7 @@ func (q *queue) Hwm() int64 {
 	return hwm
 }
 
-func (q *queue) push(key string, value []byte, hdr headers.Headers) int64 {
+func (q *queue) push(key string, value []byte, hdr goka.Headers) int64 {
 	q.Lock()
 	defer q.Unlock()
 	offset := q.hwm
@@ -109,7 +109,7 @@ func (mt *QueueTracker) Next() (string, interface{}, bool) {
 // NextWithHeaders returns the next message since the last time this
 // function was called (or MoveToEnd).  This includes headers
 // It uses the known codec for the topic to decode the message
-func (mt *QueueTracker) NextWithHeaders() (headers.Headers, string, interface{}, bool) {
+func (mt *QueueTracker) NextWithHeaders() (goka.Headers, string, interface{}, bool) {
 	hdr, key, msgRaw, hasNext := mt.NextRawWithHeaders()
 
 	if !hasNext {
@@ -130,10 +130,10 @@ func (mt *QueueTracker) NextRaw() (string, []byte, bool) {
 }
 
 // NextRawWithHeaders returns the next message similar to Next(), but without the decoding
-func (mt *QueueTracker) NextRawWithHeaders() (headers.Headers, string, []byte, bool) {
+func (mt *QueueTracker) NextRawWithHeaders() (goka.Headers, string, []byte, bool) {
 	q := mt.tester.getOrCreateQueue(mt.topic)
 	if int(mt.nextOffset) >= q.size() {
-		return headers.Headers{}, "", nil, false
+		return goka.Headers{}, "", nil, false
 	}
 	msg := q.message(int(mt.nextOffset))
 

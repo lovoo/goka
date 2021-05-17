@@ -2,7 +2,6 @@ package goka
 
 import (
 	"fmt"
-	"github.com/lovoo/goka/headers"
 	"hash"
 	"hash/fnv"
 	"log"
@@ -88,7 +87,7 @@ type poptions struct {
 	backoffResetTime       time.Duration
 	hotStandby             bool
 	recoverAhead           bool
-	producerDefaultHeaders headers.Headers
+	producerDefaultHeaders Headers
 
 	builders struct {
 		storage        storage.Builder
@@ -219,7 +218,7 @@ func WithBackoffResetTimeout(duration time.Duration) ProcessorOption {
 
 // WithProducerDefaultHeaders configures the producer with default headers
 // which are included with every emit.
-func WithProducerDefaultHeaders(hdr headers.Headers) ProcessorOption {
+func WithProducerDefaultHeaders(hdr Headers) ProcessorOption {
 	return func(p *poptions, graph *GroupGraph) {
 		p.producerDefaultHeaders = hdr
 	}
@@ -484,7 +483,7 @@ type eoptions struct {
 	clientID string
 
 	hasher         func() hash.Hash32
-	defaultHeaders headers.Headers
+	defaultHeaders Headers
 
 	builders struct {
 		topicmgr TopicManagerBuilder
@@ -540,7 +539,7 @@ func WithEmitterTester(t Tester) EmitterOption {
 
 // WithEmitterDefaultHeaders configures the emitter with default headers
 // which are included with every emit.
-func WithEmitterDefaultHeaders(hdr headers.Headers) EmitterOption {
+func WithEmitterDefaultHeaders(hdr Headers) EmitterOption {
 	return func(o *eoptions, _ Stream, _ Codec) {
 		o.defaultHeaders = hdr
 	}
@@ -565,7 +564,7 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 }
 
 type ctxOptions struct {
-	emitHeaders headers.Headers
+	emitHeaders Headers
 }
 
 // ContextOption defines a configuration option to be used when performing
@@ -573,10 +572,10 @@ type ctxOptions struct {
 type ContextOption func(*ctxOptions)
 
 // WithCtxEmitHeaders sets kafka headers to use when emitting to kafka
-func WithCtxEmitHeaders(hdr headers.Headers) ContextOption {
+func WithCtxEmitHeaders(hdr Headers) ContextOption {
 	return func(opts *ctxOptions) {
 		if opts.emitHeaders == nil {
-			opts.emitHeaders = make(headers.Headers, len(hdr))
+			opts.emitHeaders = make(Headers, len(hdr))
 		}
 		for k, v := range hdr {
 			opts.emitHeaders[k] = v

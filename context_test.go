@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lovoo/goka/headers"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +18,7 @@ import (
 )
 
 func newEmitter(err error, done func(err error)) emitter {
-	return func(topic string, key string, value []byte, hdr headers.Headers) *Promise {
+	return func(topic string, key string, value []byte, hdr Headers) *Promise {
 		p := NewPromise()
 		if done != nil {
 			p.Then(done)
@@ -29,7 +28,7 @@ func newEmitter(err error, done func(err error)) emitter {
 }
 
 func newEmitterW(wg *sync.WaitGroup, err error, done func(err error)) emitter {
-	return func(topic string, key string, value []byte, hdr headers.Headers) *Promise {
+	return func(topic string, key string, value []byte, hdr Headers) *Promise {
 		wg.Add(1)
 		p := NewPromise()
 		if done != nil {
@@ -60,7 +59,7 @@ func TestContext_Emit(t *testing.T) {
 	})
 
 	ctx.start()
-	ctx.emit("emit-topic", "key", []byte("value"), headers.Headers{})
+	ctx.emit("emit-topic", "key", []byte("value"), Headers{})
 	ctx.finish(nil)
 
 	// we can now for all callbacks -- it should also guarantee a memory fence
@@ -165,7 +164,7 @@ func TestContext_EmitError(t *testing.T) {
 	})
 
 	ctx.start()
-	ctx.emit("emit-topic", "key", []byte("value"), headers.Headers{})
+	ctx.emit("emit-topic", "key", []byte("value"), Headers{})
 	ctx.finish(nil)
 
 	// we can now for all callbacks -- it should also guarantee a memory fence
@@ -251,7 +250,7 @@ func TestContext_Delete(t *testing.T) {
 	ctx.emitter = newEmitter(nil, nil)
 
 	ctx.start()
-	err := ctx.deleteKey(key, headers.Headers{})
+	err := ctx.deleteKey(key, Headers{})
 	test.AssertNil(t, err)
 	ctx.finish(nil)
 
@@ -281,7 +280,7 @@ func TestContext_DeleteStateless(t *testing.T) {
 	}
 	ctx.emitter = newEmitter(nil, nil)
 
-	err := ctx.deleteKey(key, headers.Headers{})
+	err := ctx.deleteKey(key, Headers{})
 	test.AssertTrue(t, strings.Contains(err.Error(), "Cannot access state in stateless processor"))
 }
 
@@ -314,7 +313,7 @@ func TestContext_DeleteStorageError(t *testing.T) {
 
 	ctx.emitter = newEmitter(nil, nil)
 
-	err := ctx.deleteKey(key, headers.Headers{})
+	err := ctx.deleteKey(key, Headers{})
 	test.AssertTrue(t, strings.Contains(err.Error(), "error deleting key (key) from storage: storage error"))
 }
 
@@ -352,7 +351,7 @@ func TestContext_Set(t *testing.T) {
 	ctx.emitter = newEmitter(nil, nil)
 
 	ctx.start()
-	err := ctx.setValueForKey(key, value, headers.Headers{})
+	err := ctx.setValueForKey(key, value, Headers{})
 	test.AssertNil(t, err)
 	ctx.finish(nil)
 
@@ -374,7 +373,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 		group  Group = "some-group"
 		key          = "key"
 		value        = "value"
-		hdr          = headers.Headers{"key": []byte("headerValue")}
+		hdr          = Headers{"key": []byte("headerValue")}
 		offset       = int64(123)
 		wg           = new(sync.WaitGroup)
 		st           = NewMockStorage(ctrl)
@@ -399,7 +398,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 		graph:            graph,
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
-		emitter: func(tp string, k string, v []byte, h headers.Headers) *Promise {
+		emitter: func(tp string, k string, v []byte, h Headers) *Promise {
 			wg.Add(1)
 			test.AssertEqual(t, tp, graph.GroupTable().Topic())
 			test.AssertEqual(t, string(k), key)
@@ -452,17 +451,17 @@ func TestContext_SetErrors(t *testing.T) {
 		asyncFailer:      failer,
 	}
 
-	err := ctx.setValueForKey(key, nil, headers.Headers{})
+	err := ctx.setValueForKey(key, nil, Headers{})
 	test.AssertNotNil(t, err)
 	test.AssertTrue(t, strings.Contains(err.Error(), "cannot set nil"))
 
-	err = ctx.setValueForKey(key, 123, headers.Headers{}) // cannot encode 123 as string
+	err = ctx.setValueForKey(key, 123, Headers{}) // cannot encode 123 as string
 	test.AssertNotNil(t, err)
 	test.AssertTrue(t, strings.Contains(err.Error(), "error encoding"))
 
 	st.EXPECT().Set(key, []byte(value)).Return(errors.New("some-error"))
 
-	err = ctx.setValueForKey(key, value, headers.Headers{})
+	err = ctx.setValueForKey(key, value, Headers{})
 	test.AssertNotNil(t, err)
 	test.AssertTrue(t, strings.Contains(err.Error(), "some-error"))
 
@@ -497,7 +496,7 @@ func TestContext_Loopback(t *testing.T) {
 	var (
 		key   = "key"
 		value = "value"
-		hdr   = headers.Headers{"key": []byte("headerValue")}
+		hdr   = Headers{"key": []byte("headerValue")}
 		cnt   = 0
 	)
 
@@ -506,7 +505,7 @@ func TestContext_Loopback(t *testing.T) {
 		graph:            graph,
 		msg:              &sarama.ConsumerMessage{},
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
-		emitter: func(tp string, k string, v []byte, h headers.Headers) *Promise {
+		emitter: func(tp string, k string, v []byte, h Headers) *Promise {
 			cnt++
 			test.AssertEqual(t, tp, graph.LoopStream().Topic())
 			test.AssertEqual(t, string(k), key)

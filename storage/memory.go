@@ -3,9 +3,9 @@ package storage
 import (
 	"bytes"
 	"fmt"
-	"github.com/lovoo/goka/headers"
 	"strings"
 
+	"github.com/lovoo/goka/headers"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 

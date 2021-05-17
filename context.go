@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lovoo/goka/headers"
 	"sync"
 	"time"
+
+	"github.com/lovoo/goka/headers"
 
 	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/multierr"
 )
 
-type emitter func(topic string, key string, value []byte, hdr headers.Headers) *Promise
+type emitter func(topic string, key string, value []byte, hdr Headers) *Promise
 
 // Context provides access to the processor's table and emit capabilities to
 // arbitrary topics in kafka.
@@ -63,7 +64,7 @@ type Context interface {
 	Value() interface{}
 
 	// Headers returns the headers of the input message
-	Headers() headers.Headers
+	Headers() Headers
 
 	// SetValue updates the value of the key in the group table.
 	// It stores the value in the local cache and sends the
@@ -142,14 +143,14 @@ type cbContext struct {
 	commit func()
 
 	emitter               emitter
-	emitterDefaultHeaders headers.Headers
+	emitterDefaultHeaders Headers
 
 	asyncFailer func(err error)
 	syncFailer  func(err error)
 
 	// Headers as passed from sarama. Note that this field will be filled
 	// lazily after the first call to Headers
-	headers headers.Headers
+	headers Headers
 
 	table *PartitionTable
 	// joins
@@ -224,7 +225,7 @@ func (ctx *cbContext) Loopback(key string, value interface{}, options ...Context
 	ctx.emit(l.Topic(), key, data, opts.emitHeaders)
 }
 
-func (ctx *cbContext) emit(topic string, key string, value []byte, hdr headers.Headers) {
+func (ctx *cbContext) emit(topic string, key string, value []byte, hdr Headers) {
 	ctx.counters.emits++
 	ctx.emitter(topic, key, value, ctx.emitterDefaultHeaders.Merged(hdr)).Then(func(err error) {
 		if err != nil {
@@ -286,7 +287,7 @@ func (ctx *cbContext) Partition() int32 {
 	return ctx.msg.Partition
 }
 
-func (ctx *cbContext) Headers() headers.Headers {
+func (ctx *cbContext) Headers() Headers {
 
 	if ctx.headers == nil {
 		ctx.headers = headers.FromSarama(ctx.msg.Headers)
@@ -351,7 +352,7 @@ func (ctx *cbContext) valueForKey(key string) (interface{}, error) {
 	return value, nil
 }
 
-func (ctx *cbContext) deleteKey(key string, hdr headers.Headers) error {
+func (ctx *cbContext) deleteKey(key string, hdr Headers) error {
 	if ctx.graph.GroupTable() == nil {
 		return fmt.Errorf("Cannot access state in stateless processor")
 	}
@@ -370,7 +371,7 @@ func (ctx *cbContext) deleteKey(key string, hdr headers.Headers) error {
 }
 
 // setValueForKey sets a value for a key in the processor state.
-func (ctx *cbContext) setValueForKey(key string, value interface{}, hdr headers.Headers) error {
+func (ctx *cbContext) setValueForKey(key string, value interface{}, hdr Headers) error {
 	if ctx.graph.GroupTable() == nil {
 		return fmt.Errorf("Cannot access state in stateless processor")
 	}
