@@ -2,7 +2,6 @@ package tester
 
 import (
 	"fmt"
-	"github.com/lovoo/goka/headers"
 	"hash"
 	"reflect"
 	"sync"
@@ -14,17 +13,17 @@ import (
 )
 
 type emitOption struct {
-	headers headers.Headers
+	headers goka.Headers
 }
 
 // EmitOption defines a configuration option for emitting messages
 type EmitOption func(*emitOption)
 
 // WithHeaders sets kafka headers to use when emitting to kafka
-func WithHeaders(hdr headers.Headers) EmitOption {
+func WithHeaders(hdr goka.Headers) EmitOption {
 	return func(opts *emitOption) {
 		if opts.headers == nil {
-			opts.headers = make(headers.Headers)
+			opts.headers = make(goka.Headers)
 		}
 
 		for k, v := range hdr {
@@ -165,7 +164,7 @@ func (tt *Tester) handleEmit(topic string, key string, value []byte, options ...
 	return finisher(&sarama.ProducerMessage{Offset: offset}, nil)
 }
 
-func (tt *Tester) pushMessage(topic string, key string, data []byte, hdr headers.Headers) int64 {
+func (tt *Tester) pushMessage(topic string, key string, data []byte, hdr goka.Headers) int64 {
 	return tt.getOrCreateQueue(topic).push(key, data, hdr)
 }
 

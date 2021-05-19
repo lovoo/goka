@@ -289,6 +289,10 @@ func TestRecoverAhead(t *testing.T) {
 // TestRebalance runs some processors to test rebalance. It's merely a
 // runs-without-errors test, not a real functional test.
 func TestRebalance(t *testing.T) {
+	if !*systemtest {
+		t.Skipf("Ignoring systemtest. pass '-args -systemtest' to `go test` to include them")
+	}
+
 	var (
 		group       goka.Group = "goka-systemtest-rebalance"
 		inputStream string     = string(group) + "-input"

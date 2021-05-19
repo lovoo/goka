@@ -7,7 +7,6 @@ package goka
 import (
 	sarama "github.com/Shopify/sarama"
 	gomock "github.com/golang/mock/gomock"
-	"github.com/lovoo/goka/headers"
 	reflect "reflect"
 )
 
@@ -172,7 +171,7 @@ func (mr *MockProducerMockRecorder) Emit(arg0, arg1, arg2 interface{}) *gomock.C
 }
 
 // EmitWithHeaders mocks base method
-func (m *MockProducer) EmitWithHeaders(arg0, arg1 string, arg2 []byte, arg3 headers.Headers) *Promise {
+func (m *MockProducer) EmitWithHeaders(arg0, arg1 string, arg2 []byte, arg3 Headers) *Promise {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EmitWithHeaders", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*Promise)

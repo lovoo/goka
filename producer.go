@@ -2,7 +2,6 @@ package goka
 
 import (
 	"fmt"
-	"github.com/lovoo/goka/headers"
 	"sync"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 type Producer interface {
 	// Emit sends a message to topic.
 	Emit(topic string, key string, value []byte) *Promise
-	EmitWithHeaders(topic string, key string, value []byte, hdr headers.Headers) *Promise
+	EmitWithHeaders(topic string, key string, value []byte, hdr Headers) *Promise
 	Close() error
 }
 
@@ -76,7 +75,7 @@ func (p *producer) Emit(topic string, key string, value []byte) *Promise {
 
 // EmitWithHeaders emits a key-value pair with headers to topic and returns a Promise that
 // can be checked for errors asynchronously
-func (p *producer) EmitWithHeaders(topic string, key string, value []byte, hdr headers.Headers) *Promise {
+func (p *producer) EmitWithHeaders(topic string, key string, value []byte, hdr Headers) *Promise {
 	promise := NewPromise()
 
 	p.producer.Input() <- &sarama.ProducerMessage{
