@@ -14,7 +14,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/internal/test"
-	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 )
 
@@ -69,7 +68,7 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 	bm := newBuilderMock(ctrl)
 	viewTestRecoveredMessages = 0
 	opts := &voptions{
-		log:        logger.Default(),
+		log:        defaultLogger,
 		tableCodec: new(codec.String),
 		updateCallback: func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
 			if err := DefaultUpdate(s, partition, key, value); err != nil {
@@ -540,7 +539,7 @@ func TestView_Run(t *testing.T) {
 			bm.tmgr,
 			updateCB,
 			bm.getStorageBuilder(),
-			logger.Default(),
+			defaultLogger,
 			NewSimpleBackoff(time.Second*10),
 			time.Minute,
 		)
@@ -595,7 +594,7 @@ func TestView_Run(t *testing.T) {
 			bm.tmgr,
 			updateCB,
 			bm.getStorageBuilder(),
-			logger.Default(),
+			defaultLogger,
 			NewSimpleBackoff(time.Second*10),
 			time.Minute,
 		)

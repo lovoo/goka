@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
@@ -44,7 +43,7 @@ type View struct {
 	brokers    []string
 	topic      string
 	opts       *voptions
-	log        logger.Logger
+	log        logger
 	partitions []*PartitionTable
 	consumer   sarama.Consumer
 	tmgr       TopicManager
@@ -57,7 +56,6 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 		// default options comes first
 		[]ViewOption{
 			WithViewClientID(fmt.Sprintf("goka-view-%s", topic)),
-			WithViewLogger(logger.Default()),
 			WithViewCallback(DefaultUpdate),
 			WithViewStorageBuilder(storage.DefaultBuilder(DefaultViewStoragePath())),
 		},

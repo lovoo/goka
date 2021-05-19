@@ -14,7 +14,6 @@ import (
 
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/internal/test"
-	"github.com/lovoo/goka/logger"
 )
 
 func newEmitter(err error, done func(err error)) emitter {
@@ -536,7 +535,7 @@ func TestContext_Join(t *testing.T) {
 		msg:   &sarama.ConsumerMessage{Key: []byte(key)},
 		pviews: map[string]*PartitionTable{
 			string(table): {
-				log: logger.Default(),
+				log: defaultLogger,
 				st: &storageProxy{
 					Storage: st,
 				},

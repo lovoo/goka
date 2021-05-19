@@ -11,7 +11,6 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/internal/test"
-	"github.com/lovoo/goka/logger"
 	"github.com/lovoo/goka/storage"
 )
 
@@ -32,7 +31,7 @@ func defaultPT(
 		bm.tmgr,
 		updateCallback,
 		bm.getStorageBuilder(),
-		logger.Default(),
+		defaultLogger,
 		NewSimpleBackoff(time.Second*10),
 		time.Minute,
 	), bm, ctrl
@@ -879,7 +878,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 			nil,
 			updateCB,
 		)
-		logger.Debug(true, false)
+		Debug(true, false)
 		defer ctrl.Finish()
 		pt.consumer = consumer
 		bm.mst.EXPECT().Open().Return(nil)

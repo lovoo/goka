@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
-	"github.com/lovoo/goka/logger"
+	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/web/templates"
 )
 
@@ -17,7 +17,7 @@ type component struct {
 }
 
 type Server struct {
-	log logger.Logger
+	log goka.Logger
 	m   sync.RWMutex
 
 	basePath   string
@@ -30,7 +30,7 @@ type ComponentPathProvider interface {
 
 func NewServer(basePath string, router *mux.Router) *Server {
 	srv := &Server{
-		log:      logger.Default(),
+		log:      goka.DefaultLogger(),
 		basePath: basePath,
 	}
 
