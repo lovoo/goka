@@ -3,15 +3,17 @@ package storage
 import (
 	"fmt"
 	"strconv"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
-	ldbiter "github.com/syndtr/goleveldb/leveldb/iterator"
-	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 const (
-	offsetKey = "__offset"
+	offsetKey                    = "__offset"
+	recoveryCommitOffsetInterval = 30 * time.Second
 )
 
 // Iterator provides iteration access to the stored values.
@@ -81,34 +83,24 @@ type Storage interface {
 	IteratorWithRange(start, limit []byte) (Iterator, error)
 }
 
-// store is the common interface between a transaction and db instance
-type store interface {
-	Has([]byte, *opt.ReadOptions) (bool, error)
-	Get([]byte, *opt.ReadOptions) ([]byte, error)
-	Put([]byte, []byte, *opt.WriteOptions) error
-	Delete([]byte, *opt.WriteOptions) error
-	NewIterator(*util.Range, *opt.ReadOptions) ldbiter.Iterator
-}
-
 type storage struct {
-	// store is the active store, either db or tx
-	store store
-	db    *leveldb.DB
-	// tx is the transaction used for recovery
-	tx *leveldb.Transaction
+	offset    int64
+	recovered chan struct{}
+	close     chan struct{}
+	closeWg   sync.WaitGroup
+	closed    chan struct{}
+
+	db *leveldb.DB
 }
 
 // New creates a new Storage backed by LevelDB.
 func New(db *leveldb.DB) (Storage, error) {
-	tx, err := db.OpenTransaction()
-	if err != nil {
-		return nil, fmt.Errorf("error opening leveldb transaction: %v", err)
-	}
 
 	return &storage{
-		store: tx,
-		db:    db,
-		tx:    tx,
+		db:        db,
+		recovered: make(chan struct{}),
+		close:     make(chan struct{}),
+		closed:    make(chan struct{}),
 	}, nil
 }
 
@@ -120,7 +112,7 @@ func (s *storage) Iterator() (Iterator, error) {
 	}
 
 	return &iterator{
-		iter: s.store.NewIterator(nil, nil),
+		iter: s.db.NewIterator(nil, nil),
 		snap: snap,
 	}, nil
 }
@@ -134,29 +126,23 @@ func (s *storage) IteratorWithRange(start, limit []byte) (Iterator, error) {
 
 	if limit != nil && len(limit) > 0 {
 		return &iterator{
-			iter: s.store.NewIterator(&util.Range{Start: start, Limit: limit}, nil),
+			iter: s.db.NewIterator(&util.Range{Start: start, Limit: limit}, nil),
 			snap: snap,
 		}, nil
 	}
 	return &iterator{
-		iter: s.store.NewIterator(util.BytesPrefix(start), nil),
+		iter: s.db.NewIterator(util.BytesPrefix(start), nil),
 		snap: snap,
 	}, nil
 
 }
 
 func (s *storage) Has(key string) (bool, error) {
-	return s.store.Has([]byte(key), nil)
+	return s.db.Has([]byte(key), nil)
 }
 
 func (s *storage) Get(key string) ([]byte, error) {
-	if has, err := s.store.Has([]byte(key), nil); err != nil {
-		return nil, fmt.Errorf("error checking for existence in leveldb (key %s): %v", key, err)
-	} else if !has {
-		return nil, nil
-	}
-
-	value, err := s.store.Get([]byte(key), nil)
+	value, err := s.db.Get([]byte(key), nil)
 	if err == leveldb.ErrNotFound {
 		return nil, nil
 	} else if err != nil {
@@ -166,6 +152,20 @@ func (s *storage) Get(key string) ([]byte, error) {
 }
 
 func (s *storage) GetOffset(defValue int64) (int64, error) {
+	// if we're recovered, read offset from the storage, otherwise
+	// read our local copy, as it is probably newer
+	select {
+	case <-s.recovered:
+	default:
+
+		localOffset := atomic.LoadInt64(&s.offset)
+		// if it's 0, it's either really 0 or just has never been loaded from storage,
+		// so only return if != 0
+		if localOffset != 0 {
+			return localOffset, nil
+		}
+	}
+
 	data, err := s.Get(offsetKey)
 	if err != nil {
 		return 0, err
@@ -184,18 +184,29 @@ func (s *storage) GetOffset(defValue int64) (int64, error) {
 }
 
 func (s *storage) Set(key string, value []byte) error {
-	if err := s.store.Put([]byte(key), value, nil); err != nil {
+	if err := s.db.Put([]byte(key), value, nil); err != nil {
 		return fmt.Errorf("error setting to leveldb (key %s): %v", key, err)
 	}
 	return nil
 }
 
-func (s *storage) SetOffset(offset int64) error {
+func (s *storage) putOffset(offset int64) error {
 	return s.Set(offsetKey, []byte(strconv.FormatInt(offset, 10)))
 }
 
+func (s *storage) SetOffset(offset int64) error {
+	atomic.StoreInt64(&s.offset, offset)
+
+	select {
+	case <-s.recovered:
+		return s.putOffset(offset)
+	default:
+	}
+	return nil
+}
+
 func (s *storage) Delete(key string) error {
-	if err := s.store.Delete([]byte(key), nil); err != nil {
+	if err := s.db.Delete([]byte(key), nil); err != nil {
 		return fmt.Errorf("error deleting from leveldb (key %s): %v", key, err)
 	}
 
@@ -203,29 +214,48 @@ func (s *storage) Delete(key string) error {
 }
 
 func (s *storage) MarkRecovered() error {
-	if s.store == s.db {
-		return nil
+	curOffset := atomic.LoadInt64(&s.offset)
+	if curOffset != 0 {
+		err := s.putOffset(curOffset)
+		if err != nil {
+			return err
+		}
 	}
-
-	s.store = s.db
-	return s.tx.Commit()
-}
-
-func (s *storage) Recovered() bool {
-	return s.store == s.db
+	close(s.recovered)
+	return nil
 }
 
 func (s *storage) Open() error {
-	// we do the initialization during the building step, so no need to do anything here
+	go func() {
+		syncTicker := time.NewTicker(recoveryCommitOffsetInterval)
+		defer syncTicker.Stop()
+
+		for {
+			select {
+			case <-s.close:
+				return
+			case <-s.recovered:
+				return
+			case <-syncTicker.C:
+				curOffset := atomic.LoadInt64(&s.offset)
+				if curOffset != 0 {
+					s.putOffset(curOffset)
+				}
+			}
+		}
+	}()
+
 	return nil
 }
 
 func (s *storage) Close() error {
-	if s.store == s.tx {
-		if err := s.tx.Commit(); err != nil {
-			return fmt.Errorf("error closing transaction: %v", err)
-		}
+	close(s.close)
+	defer close(s.closed)
+	curOffset := atomic.LoadInt64(&s.offset)
+	if curOffset != 0 {
+		s.putOffset(curOffset)
 	}
+	s.closeWg.Wait()
 
 	return s.db.Close()
 }

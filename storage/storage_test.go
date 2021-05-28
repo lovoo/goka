@@ -2,8 +2,10 @@ package storage
 
 import (
 	"io/ioutil"
+	"os"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/lovoo/goka/internal/test"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -179,4 +181,80 @@ func TestSetGet(t *testing.T) {
 
 	recoveredValue := string(value)
 	test.AssertEqual(t, recoveredValue, "example-message")
+}
+
+func TestLeveldbStorage(t *testing.T) {
+
+	path, err := ioutil.TempDir("", "goka_storage_leveldb_test")
+	test.AssertNil(t, err)
+
+	newStorage := func(delete bool, t *testing.T) Storage {
+
+		if delete {
+			os.RemoveAll(path)
+		}
+
+		db, err := leveldb.OpenFile(path, nil)
+		test.AssertNil(t, err)
+
+		st, err := New(db)
+		test.AssertNil(t, err)
+		return st
+	}
+
+	t.Run("getset", func(t *testing.T) {
+		st := newStorage(true, t)
+
+		st.Open()
+		time.Sleep(1 * time.Second)
+		offset, err := st.GetOffset(0)
+		test.AssertEqual(t, offset, int64(0))
+		test.AssertNil(t, err)
+
+		test.AssertNil(t, st.SetOffset(100))
+		offset, err = st.GetOffset(0)
+		test.AssertEqual(t, offset, int64(100))
+		test.AssertNil(t, err)
+	})
+
+	t.Run("set-reopen", func(t *testing.T) {
+		st := newStorage(true, t)
+
+		st.Open()
+		time.Sleep(1 * time.Second)
+		offset, err := st.GetOffset(0)
+		test.AssertEqual(t, offset, int64(0))
+		test.AssertNil(t, err)
+
+		test.AssertNil(t, st.SetOffset(100))
+		test.AssertNil(t, st.Close())
+
+		st = newStorage(false, t)
+		offset, err = st.GetOffset(0)
+		test.AssertEqual(t, offset, int64(100))
+		test.AssertNil(t, err)
+	})
+
+	t.Run("mark-recovered-reopen", func(t *testing.T) {
+		st := newStorage(true, t)
+
+		st.Open()
+		time.Sleep(1 * time.Second)
+		offset, err := st.GetOffset(0)
+		test.AssertEqual(t, offset, int64(0))
+		test.AssertNil(t, err)
+
+		test.AssertNil(t, st.SetOffset(100))
+
+		st.MarkRecovered()
+
+		test.AssertNil(t, st.SetOffset(101))
+
+		test.AssertNil(t, st.Close())
+		st = newStorage(false, t)
+		offset, err = st.GetOffset(0)
+		test.AssertEqual(t, offset, int64(101))
+		test.AssertNil(t, err)
+
+	})
 }
