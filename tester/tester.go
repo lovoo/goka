@@ -392,10 +392,11 @@ func (tt *Tester) GetTableKeys(table goka.Table) []string {
 	topic := string(table)
 	st, exists := tt.storages[topic]
 	if !exists {
-		panic(fmt.Errorf("topic %s does not exist", topic))
+		tt.t.Fatalf("topic %s does not exist", topic)
 	}
 
 	it, _ := st.Iterator()
+	defer it.Release()
 	for it.Next() {
 		keys = append(keys, string(it.Key()))
 	}
