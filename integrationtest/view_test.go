@@ -39,13 +39,25 @@ func TestView(t *testing.T) {
 
 		// try to get some non-existent key
 		val, err = view.Get("not-existent")
+		test.AssertNil(t, err)
 		test.AssertNil(t, val)
 		test.AssertNil(t, nil)
 
 		// get the value we set earlier
 		val, err = view.Get("key")
+		test.AssertNil(t, err)
 		test.AssertEqual(t, val.(string), "value")
 		test.AssertNil(t, nil)
+
+		// get all the keys from table "test"
+		keys := gkt.GetTableKeys("test")
+		// at the moment we only have one key "key"
+		test.AssertEqual(t, keys, []string{"key"})
+
+		// set a second key
+		gkt.SetTableValue("test", "key2", "value")
+		keys = gkt.GetTableKeys("test")
+		test.AssertEqual(t, keys, []string{"key", "key2"})
 
 		// stop the view and wait for it to finish up
 		cancel()

@@ -383,6 +383,26 @@ func (tt *Tester) waitForClients() {
 	logger.Printf("waiting for consumers done")
 }
 
+// GetTableKeys returns a Table's keys.
+func (tt *Tester) GetTableKeys(table goka.Table) []string {
+	tt.mStorages.Lock()
+	defer tt.mStorages.Unlock()
+
+	keys := make([]string, 0)
+	topic := string(table)
+	st, exists := tt.storages[topic]
+	if !exists {
+		panic(fmt.Errorf("topic %s does not exist", topic))
+	}
+
+	it, _ := st.Iterator()
+	for it.Next() {
+		keys = append(keys, string(it.Key()))
+	}
+
+	return keys
+}
+
 // Consume pushes a message for topic/key to be consumed by all processors/views
 // whoever is using it being registered to the Tester
 func (tt *Tester) Consume(topic string, key string, msg interface{}, options ...EmitOption) {
