@@ -39,6 +39,7 @@ type GroupGraph struct {
 	outputStreams []Edge
 	loopStream    []Edge
 	groupTable    []Edge
+	visitors      []*visitor
 
 	codecs    map[string]Codec
 	callbacks map[string]ProcessCallback
@@ -164,6 +165,8 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 			e.setGroup(group)
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.groupTable = append(gg.groupTable, e)
+		case *visitor:
+			gg.visitors = append(gg.visitors, e)
 		}
 	}
 
@@ -203,6 +206,9 @@ func (gg *GroupGraph) Validate() error {
 		if t.Topic() == tableName(gg.Group()) {
 			return errors.New("should not directly use group table")
 		}
+	}
+	if len(gg.visitors) > 0 && len(gg.groupTable) == 0 {
+		return fmt.Errorf("visitors cannot be used in a stateless processor")
 	}
 	return nil
 }
@@ -313,6 +319,28 @@ func Inputs(topics Streams, c Codec, cb ProcessCallback) Edge {
 		edges = append(edges, Input(topic, c, cb))
 	}
 	return inputStreams(edges)
+}
+
+type visitor struct {
+	name string
+	cb   ProcessCallback
+}
+
+func (m *visitor) Topic() string {
+	return ""
+}
+func (m *visitor) Codec() Codec {
+	return nil
+}
+func (m *visitor) String() string {
+	return fmt.Sprintf("visitor %s", m.name)
+}
+
+func Visitor(name string, cb ProcessCallback) Edge {
+	return &visitor{
+		name: name,
+		cb:   cb,
+	}
 }
 
 type loopStream inputStream
