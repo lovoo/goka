@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
 
 	"github.com/lovoo/goka/codec"
@@ -128,8 +127,8 @@ func TestContext_Timestamp(t *testing.T) {
 	ts := time.Now()
 
 	ctx := &cbContext{
-		msg: &sarama.ConsumerMessage{
-			Timestamp: ts,
+		msg: &message{
+			timestamp: ts,
 		},
 	}
 
@@ -205,7 +204,7 @@ func TestContext_GetSetStateless(t *testing.T) {
 	// ctx stateless since no storage passed
 	ctx := &cbContext{
 		graph:      DefineGroup("group"),
-		msg:        new(sarama.ConsumerMessage),
+		msg:        new(message),
 		syncFailer: func(err error) { panic(err) },
 	}
 	func() {
@@ -242,7 +241,7 @@ func TestContext_Delete(t *testing.T) {
 		graph:  DefineGroup(group, Persist(new(codec.String))),
 		wg:     new(sync.WaitGroup),
 		commit: func() { ack++ },
-		msg:    &sarama.ConsumerMessage{Offset: offset},
+		msg:    &message{offset: offset},
 		table:  pt,
 	}
 
@@ -275,7 +274,7 @@ func TestContext_DeleteStateless(t *testing.T) {
 	ctx := &cbContext{
 		graph: DefineGroup(group),
 		wg:    new(sync.WaitGroup),
-		msg:   &sarama.ConsumerMessage{Offset: offset},
+		msg:   &message{offset: offset},
 	}
 	ctx.emitter = newEmitter(nil, nil)
 
@@ -306,7 +305,7 @@ func TestContext_DeleteStorageError(t *testing.T) {
 	ctx := &cbContext{
 		graph: DefineGroup(group, Persist(new(codec.String))),
 		wg:    new(sync.WaitGroup),
-		msg:   &sarama.ConsumerMessage{Offset: offset},
+		msg:   &message{offset: offset},
 		table: pt,
 	}
 
@@ -342,7 +341,7 @@ func TestContext_Set(t *testing.T) {
 		wg:               new(sync.WaitGroup),
 		commit:           func() { ack++ },
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
-		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
+		msg:              &message{key: key, offset: offset},
 		table:            pt,
 		ctx:              context.Background(),
 	}
@@ -396,7 +395,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 		wg:               wg,
 		graph:            graph,
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
-		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
+		msg:              &message{key: key, offset: offset},
 		emitter: func(tp string, k string, v []byte, h Headers) *Promise {
 			wg.Add(1)
 			test.AssertEqual(t, tp, graph.GroupTable().Topic())
@@ -445,7 +444,7 @@ func TestContext_SetErrors(t *testing.T) {
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 		wg:               wg,
 		graph:            DefineGroup(group, Persist(new(codec.String))),
-		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
+		msg:              &message{key: key, offset: offset},
 		syncFailer:       failer,
 		asyncFailer:      failer,
 	}
@@ -478,7 +477,7 @@ func TestContext_LoopbackNoLoop(t *testing.T) {
 	// ctx has no loop set
 	ctx := &cbContext{
 		graph:      DefineGroup("group", Persist(c)),
-		msg:        &sarama.ConsumerMessage{},
+		msg:        &message{},
 		syncFailer: func(err error) { panic(err) },
 	}
 	func() {
@@ -502,7 +501,7 @@ func TestContext_Loopback(t *testing.T) {
 	graph := DefineGroup("group", Persist(c), Loop(c, cb))
 	ctx := &cbContext{
 		graph:            graph,
-		msg:              &sarama.ConsumerMessage{},
+		msg:              &message{},
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 		emitter: func(tp string, k string, v []byte, h Headers) *Promise {
 			cnt++
@@ -532,7 +531,7 @@ func TestContext_Join(t *testing.T) {
 
 	ctx := &cbContext{
 		graph: DefineGroup("group", Persist(c), Loop(c, cb), Join(table, c)),
-		msg:   &sarama.ConsumerMessage{Key: []byte(key)},
+		msg:   &message{key: key},
 		pviews: map[string]*PartitionTable{
 			string(table): {
 				log: defaultLogger,
@@ -581,7 +580,7 @@ func TestContext_Lookup(t *testing.T) {
 
 	ctx := &cbContext{
 		graph: DefineGroup("group", Persist(c), Loop(c, cb)),
-		msg:   &sarama.ConsumerMessage{Key: []byte(key)},
+		msg:   &message{key: key},
 		views: map[string]*View{
 			string(table): {
 				opts: &voptions{
@@ -628,19 +627,13 @@ func TestContext_Headers(t *testing.T) {
 
 	// context without headers will return empty map
 	ctx := &cbContext{
-		msg: &sarama.ConsumerMessage{Key: []byte("key")},
+		msg: &message{key: "key"},
 	}
 	hdr := ctx.Headers()
-	test.AssertNotNil(t, hdr)
 	test.AssertEqual(t, len(hdr), 0)
 
 	ctx = &cbContext{
-		msg: &sarama.ConsumerMessage{Key: []byte("key"), Headers: []*sarama.RecordHeader{
-			{
-				Key:   []byte("key"),
-				Value: []byte("value"),
-			},
-		}},
+		msg: &message{key: "key", headers: Headers{"key": []byte("value")}},
 	}
 	hdr = ctx.Headers()
 	test.AssertEqual(t, hdr["key"], []byte("value"))

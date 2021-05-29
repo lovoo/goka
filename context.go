@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lovoo/goka/headers"
-
 	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/multierr"
 )
@@ -136,6 +134,16 @@ type Context interface {
 	DeferCommit() func(error)
 }
 
+type message struct {
+	key       string
+	timestamp time.Time
+	topic     string
+	offset    int64
+	partition int32
+	headers   Headers
+	value     []byte
+}
+
 type cbContext struct {
 	ctx   context.Context
 	graph *GroupGraph
@@ -162,7 +170,7 @@ type cbContext struct {
 	// tracking statistics for the output topic
 	trackOutputStats func(ctx context.Context, topic string, size int)
 
-	msg      *sarama.ConsumerMessage
+	msg      *message
 	done     bool
 	counters struct {
 		emits  int
@@ -264,19 +272,19 @@ func (ctx *cbContext) SetValue(value interface{}, options ...ContextOption) {
 
 // Timestamp returns the timestamp of the input message.
 func (ctx *cbContext) Timestamp() time.Time {
-	return ctx.msg.Timestamp
+	return ctx.msg.timestamp
 }
 
 func (ctx *cbContext) Key() string {
-	return string(ctx.msg.Key)
+	return ctx.msg.key
 }
 
 func (ctx *cbContext) Topic() Stream {
-	return Stream(ctx.msg.Topic)
+	return Stream(ctx.msg.topic)
 }
 
 func (ctx *cbContext) Offset() int64 {
-	return ctx.msg.Offset
+	return ctx.msg.offset
 }
 
 func (ctx *cbContext) Group() Group {
@@ -284,15 +292,11 @@ func (ctx *cbContext) Group() Group {
 }
 
 func (ctx *cbContext) Partition() int32 {
-	return ctx.msg.Partition
+	return ctx.msg.partition
 }
 
 func (ctx *cbContext) Headers() Headers {
-
-	if ctx.headers == nil {
-		ctx.headers = headers.FromSarama(ctx.msg.Headers)
-	}
-	return ctx.headers
+	return ctx.msg.headers
 }
 
 func (ctx *cbContext) Join(topic Table) interface{} {

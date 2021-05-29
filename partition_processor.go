@@ -40,7 +40,7 @@ type visit struct {
 	value interface{}
 }
 
-type commitCallback func(msg *sarama.ConsumerMessage, meta string)
+type commitCallback func(msg *message, meta string)
 
 // PartitionProcessor handles message processing of one partition by serializing
 // messages from different input topics.
@@ -59,7 +59,7 @@ type PartitionProcessor struct {
 
 	partition int32
 
-	input       chan *sarama.ConsumerMessage
+	input       chan *message
 	inputTopics []string
 
 	visitInput     chan *visit
@@ -151,7 +151,7 @@ func newPartitionProcessor(partition int32,
 		producer:        producer,
 		tmgr:            tmgr,
 		joins:           make(map[string]*PartitionTable),
-		input:           make(chan *sarama.ConsumerMessage, opts.partitionChannelSize),
+		input:           make(chan *message, opts.partitionChannelSize),
 		inputTopics:     topicList,
 		visitInput:      make(chan *visit, 100),
 		visitCallbacks:  visitCallbacks,
@@ -180,11 +180,6 @@ func newPartitionProcessor(partition int32,
 		)
 	}
 	return partProc
-}
-
-// EnqueueMessage enqueues a message in the partition processor's event channel for processing
-func (pp *PartitionProcessor) EnqueueMessage(msg *sarama.ConsumerMessage) {
-	pp.input <- msg
 }
 
 // Recovered returns whether the processor is running (i.e. all joins, lookups and the table is recovered and it's consuming messages)
@@ -402,7 +397,7 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 			}
 			err := pp.processMessage(ctx, &wg, ev, syncFailer, asyncFailer)
 			if err != nil {
-				return fmt.Errorf("error processing message: from %s %v", ev.Value, err)
+				return fmt.Errorf("error processing message: from %s %v", string(ev.value), err)
 			}
 
 			pp.enqueueStatsUpdate(ctx, func() { pp.updateStatsWithMessage(ev) })
@@ -460,12 +455,12 @@ func (pp *PartitionProcessor) runStatsLoop(ctx context.Context) {
 }
 
 // updateStatsWithMessage updates the stats with a received message
-func (pp *PartitionProcessor) updateStatsWithMessage(ev *sarama.ConsumerMessage) {
-	ip := pp.stats.Input[ev.Topic]
-	ip.Bytes += len(ev.Value)
-	ip.LastOffset = ev.Offset
-	if !ev.Timestamp.IsZero() {
-		ip.Delay = time.Since(ev.Timestamp)
+func (pp *PartitionProcessor) updateStatsWithMessage(ev *message) {
+	ip := pp.stats.Input[ev.topic]
+	ip.Bytes += len(ev.value)
+	ip.LastOffset = ev.offset
+	if !ev.timestamp.IsZero() {
+		ip.Delay = time.Since(ev.timestamp)
 	}
 	ip.Count++
 }
@@ -566,12 +561,11 @@ func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGro
 		views:            pp.lookups,
 		commit:           func() {},
 		wg:               wg,
-		msg: &sarama.ConsumerMessage{
-			Key:       []byte(v.key),
-			Offset:    0,
-			Topic:     v.name,
-			Partition: pp.partition,
-			Timestamp: time.Now(),
+		msg: &message{
+			key:       v.key,
+			topic:     v.name,
+			partition: pp.partition,
+			timestamp: time.Now(),
 		},
 		syncFailer:            syncFailer,
 		asyncFailer:           asyncFailer,
@@ -589,7 +583,7 @@ func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGro
 	return nil
 }
 
-func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitGroup, msg *sarama.ConsumerMessage, syncFailer func(err error), asyncFailer func(err error)) error {
+func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitGroup, msg *message, syncFailer func(err error), asyncFailer func(err error)) error {
 	msgContext := &cbContext{
 		ctx:   ctx,
 		graph: pp.graph,
@@ -614,32 +608,32 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 
 	// decide whether to decode or ignore message
 	switch {
-	case msg.Value == nil && pp.opts.nilHandling == NilIgnore:
+	case msg.value == nil && pp.opts.nilHandling == NilIgnore:
 		// mark the message upstream so we don't receive it again.
 		// this is usually only an edge case in unit tests, as kafka probably never sends us nil messages
 		pp.commit(msg, "")
 		// otherwise drop it.
 		return nil
-	case msg.Value == nil && pp.opts.nilHandling == NilProcess:
+	case msg.value == nil && pp.opts.nilHandling == NilProcess:
 		// process nil messages without decoding them
 		m = nil
 	default:
 		// get stream subcription
-		codec := pp.graph.codec(msg.Topic)
+		codec := pp.graph.codec(msg.topic)
 		if codec == nil {
-			return fmt.Errorf("cannot handle topic %s", msg.Topic)
+			return fmt.Errorf("cannot handle topic %s", msg.topic)
 		}
 
 		// decode message
-		m, err = codec.Decode(msg.Value)
+		m, err = codec.Decode(msg.value)
 		if err != nil {
-			return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
+			return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.key, msg.topic, msg.partition, err)
 		}
 	}
 
-	cb := pp.callbacks[msg.Topic]
+	cb := pp.callbacks[msg.topic]
 	if cb == nil {
-		return fmt.Errorf("error processing message for key %s from %s/%d: %v", string(msg.Key), msg.Topic, msg.Partition, err)
+		return fmt.Errorf("error processing message for key %s from %s/%d: %v", msg.key, msg.topic, msg.partition, err)
 	}
 
 	// start context and call the ProcessorCallback cb
