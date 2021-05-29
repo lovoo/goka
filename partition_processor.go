@@ -34,6 +34,12 @@ const (
 	runModeRecoverOnly
 )
 
+type visit struct {
+	key   string
+	name  string
+	value interface{}
+}
+
 type commitCallback func(msg *sarama.ConsumerMessage, meta string)
 
 // PartitionProcessor handles message processing of one partition by serializing
@@ -55,6 +61,9 @@ type PartitionProcessor struct {
 
 	input       chan *sarama.ConsumerMessage
 	inputTopics []string
+
+	visitInput     chan *visit
+	visitCallbacks map[string]ProcessCallback
 
 	runnerGroup       *multierr.ErrGroup
 	cancelRunnerGroup func()
@@ -103,9 +112,10 @@ func newPartitionProcessor(partition int32,
 	}
 
 	var (
-		topicList  []string
-		outputList []string
-		callbacks  = make(map[string]ProcessCallback)
+		topicList      []string
+		outputList     []string
+		callbacks      = make(map[string]ProcessCallback)
+		visitCallbacks = make(map[string]ProcessCallback)
 	)
 	for t := range topicMap {
 		topicList = append(topicList, t)
@@ -126,6 +136,10 @@ func newPartitionProcessor(partition int32,
 
 	statsLoopCtx, cancel := context.WithCancel(context.Background())
 
+	for _, visitor := range graph.visitors {
+		visitCallbacks[visitor.name] = visitor.cb
+	}
+
 	partProc := &PartitionProcessor{
 		log:             log,
 		opts:            opts,
@@ -139,6 +153,8 @@ func newPartitionProcessor(partition int32,
 		joins:           make(map[string]*PartitionTable),
 		input:           make(chan *sarama.ConsumerMessage, opts.partitionChannelSize),
 		inputTopics:     topicList,
+		visitInput:      make(chan *visit, 100),
+		visitCallbacks:  visitCallbacks,
 		graph:           graph,
 		stats:           newPartitionProcStats(topicList, outputList),
 		requestStats:    make(chan bool),
@@ -390,11 +406,17 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 			}
 
 			pp.enqueueStatsUpdate(ctx, func() { pp.updateStatsWithMessage(ev) })
-
 		case <-ctx.Done():
 			pp.log.Debugf("exiting, context is cancelled")
 			return
-
+		case visit, open := <-pp.visitInput:
+			if !open {
+				return nil
+			}
+			err := pp.processVisit(ctx, &wg, visit, syncFailer, asyncFailer)
+			if err != nil {
+				return fmt.Errorf("Error migrating %s for %s: %v", visit.name, visit.key, err)
+			}
 		case <-asyncErrs:
 			pp.log.Debugf("Errors occurred asynchronously. Will exit partition processor")
 			return
@@ -528,6 +550,45 @@ func (pp *PartitionProcessor) enqueueTrackOutputStats(ctx context.Context, topic
 	})
 }
 
+func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGroup, v *visit, syncFailer func(err error), asyncFailer func(err error)) error {
+	cb, ok := pp.visitCallbacks[v.name]
+	// no callback registered for migration
+	if !ok {
+		return fmt.Errorf("no callback registered for migration")
+	}
+
+	msgContext := &cbContext{
+		ctx:   ctx,
+		graph: pp.graph,
+
+		trackOutputStats: pp.enqueueTrackOutputStats,
+		pviews:           pp.joins,
+		views:            pp.lookups,
+		commit:           func() {},
+		wg:               wg,
+		msg: &sarama.ConsumerMessage{
+			Key:       []byte(v.key),
+			Offset:    0,
+			Topic:     v.name,
+			Partition: pp.partition,
+			Timestamp: time.Now(),
+		},
+		syncFailer:            syncFailer,
+		asyncFailer:           asyncFailer,
+		emitter:               pp.producer.EmitWithHeaders,
+		emitterDefaultHeaders: pp.opts.producerDefaultHeaders,
+		table:                 pp.table,
+	}
+
+	// start context and call the ProcessorCallback cb
+	msgContext.start()
+
+	// now call cb
+	cb(msgContext, v.value)
+	msgContext.finish(nil)
+	return nil
+}
+
 func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitGroup, msg *sarama.ConsumerMessage, syncFailer func(err error), asyncFailer func(err error)) error {
 	msgContext := &cbContext{
 		ctx:   ctx,
@@ -587,5 +648,36 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	// now call cb
 	cb(msgContext, m)
 	msgContext.finish(nil)
+	return nil
+}
+
+// VisitValues iterates over all values in the table and calls the "visit"-callback for the passed name.
+// Optional parameter value can be set, which will just be forwarded to the visitor-function
+func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, value interface{}) error {
+	if pp.table == nil {
+		return fmt.Errorf("cannot visiit values in stateless processor")
+	}
+	if _, ok := pp.visitCallbacks[name]; !ok {
+		return fmt.Errorf("unconfigured visit callback. Did you initialize the processor with DefineGroup(..., Visit(%s, ...), ...)?", name)
+	}
+
+	it, err := pp.table.Iterator()
+	if err != nil {
+		return fmt.Errorf("error creating storage iterator")
+	}
+	defer it.Release()
+	for it.Next() {
+		select {
+		case <-ctx.Done():
+			return nil
+		// enqueue the visit
+		case pp.visitInput <- &visit{
+			key:   string(it.Key()),
+			name:  name,
+			value: value,
+		}:
+			// TODO (fe): add a notification when the processor shuts down so we can react to that instead of waiting for the global context
+		}
+	}
 	return nil
 }

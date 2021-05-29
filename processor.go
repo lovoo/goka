@@ -645,6 +645,7 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	for _, partition := range g.partitions {
 		pproc := partition
 		errg.Go(func() error {
+			// TODO (fe): explain why we don't use the errgroup's context here!
 			return pproc.Start(session.Context())
 		})
 	}
@@ -841,6 +842,29 @@ func (g *Processor) createPartitionProcessor(ctx context.Context, partition int3
 // will be returned from teh Processor.Run(..)
 func (g *Processor) Stop() {
 	g.cancel()
+}
+
+// Visit visits all keys and values in parallel by passing the visit request
+// to all partitions.
+// TODO (fe): currently we're not triggering to abort a visit upon rebalance, because
+// a partition processor does not know when it's shutting down.
+func (g *Processor) Visit(ctx context.Context, name string, value interface{}) error {
+	g.mTables.RLock()
+	defer g.mTables.RUnlock()
+
+	errg, ctx := multierr.NewErrGroup(ctx)
+
+	for _, part := range g.partitions {
+		// we'll only do the visit for active mode partitions
+		if part.runMode != runModeActive {
+			continue
+		}
+		part := part
+		errg.Go(func() error {
+			return part.VisitValues(ctx, name, value)
+		})
+	}
+	return errg.Wait().NilOrError()
 }
 
 func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, err error) {
