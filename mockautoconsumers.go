@@ -439,7 +439,7 @@ func (cgs *MockConsumerGroupSession) GenerationID() int32 {
 
 // MarkOffset marks the passed offset consumed in topic/partition
 func (cgs *MockConsumerGroupSession) MarkOffset(topic string, partition int32, offset int64, metadata string) {
-	panic("not implemented")
+	cgs.consumerGroup.markMessage(topic, partition, offset, metadata)
 }
 
 // Commit the offset to the backend
@@ -454,7 +454,7 @@ func (cgs *MockConsumerGroupSession) ResetOffset(topic string, partition int32, 
 
 // MarkMessage marks the passed message as consumed
 func (cgs *MockConsumerGroupSession) MarkMessage(msg *sarama.ConsumerMessage, metadata string) {
-	cgs.consumerGroup.markMessage(msg)
+	panic("not implemented")
 }
 
 // Context returns the consumer group's context
@@ -505,17 +505,17 @@ func (cg *MockConsumerGroup) topicKey(topics []string) string {
 	return strings.Join(topics, ",")
 }
 
-func (cg *MockConsumerGroup) markMessage(msg *sarama.ConsumerMessage) {
+func (cg *MockConsumerGroup) markMessage(topic string, partition int32, offset int64, metadata string) {
 	cg.mMessages.Lock()
 	defer cg.mMessages.Unlock()
 
-	cnt := cg.messages[msg.Offset]
+	cnt := cg.messages[offset]
 
 	if cnt == 0 {
-		panic(fmt.Errorf("Cannot mark message with offest %d, it's not a valid offset or was already marked", msg.Offset))
+		panic(fmt.Errorf("Cannot mark message with offest %d, it's not a valid offset or was already marked", offset))
 	}
 
-	cg.messages[msg.Offset] = cnt - 1
+	cg.messages[offset] = cnt - 1
 
 	cg.wgMessages.Done()
 }

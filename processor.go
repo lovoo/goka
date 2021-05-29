@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/lovoo/goka/headers"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
@@ -448,7 +449,7 @@ func (g *Processor) waitForStartupTables(ctx context.Context) error {
 		}
 		for _, part := range partitions {
 			part := part
-			pproc, err := g.createPartitionProcessor(ctx, part, runModeRecoverOnly, func(msg *sarama.ConsumerMessage, meta string) {
+			pproc, err := g.createPartitionProcessor(ctx, part, runModeRecoverOnly, func(msg *message, meta string) {
 				panic("a partition processor in recover-only-mode never commits a message")
 			})
 			if err != nil {
@@ -609,7 +610,10 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	// create partition views for all partitions
 	for partition := range assignment {
 		// create partition processor for our partition
-		pproc, err := g.createPartitionProcessor(session.Context(), partition, runModeActive, session.MarkMessage)
+		pproc, err := g.createPartitionProcessor(session.Context(), partition, runModeActive,
+			func(msg *message, metadata string) {
+				session.MarkOffset(msg.topic, msg.partition, msg.offset, metadata)
+			})
 		if err != nil {
 			return fmt.Errorf("Error creating partition processor for %s/%d: %v", g.Graph().Group(), partition, err)
 		}
@@ -631,7 +635,10 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 			if _, ex := g.getPartProc(standby); ex {
 				continue
 			}
-			pproc, err := g.createPartitionProcessor(session.Context(), standby, runModePassive, session.MarkMessage)
+			pproc, err := g.createPartitionProcessor(session.Context(), standby, runModePassive,
+				func(msg *message, metadata string) {
+					session.MarkOffset(msg.topic, msg.partition, msg.offset, metadata)
+				})
 			if err != nil {
 				return fmt.Errorf("Error creating partition processor for %s/%d: %v", g.Graph().Group(), standby, err)
 			}
@@ -741,7 +748,15 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 			}
 
 			select {
-			case part.input <- msg:
+			case part.input <- &message{
+				key:       string(msg.Key),
+				topic:     msg.Topic,
+				offset:    msg.Offset,
+				partition: msg.Partition,
+				timestamp: msg.Timestamp,
+				headers:   headers.FromSarama(msg.Headers),
+				value:     msg.Value,
+			}:
 			case err := <-errors:
 				if err != nil {
 					return newErrProcessing(err)
