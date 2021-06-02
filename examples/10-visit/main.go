@@ -86,7 +86,7 @@ func main() {
 		}),
 		goka.Visitor("reset", func(ctx goka.Context, meta interface{}) {
 			log.Printf("resetting %s: %d", ctx.Key(), meta.(int64))
-			ctx.SetValue(msg)
+			ctx.SetValue(meta)
 		}),
 		goka.Persist(new(codec.Int64)),
 	)
