@@ -35,9 +35,9 @@ const (
 )
 
 type visit struct {
-	key   string
-	name  string
-	value interface{}
+	key  string
+	name string
+	meta interface{}
 }
 
 type commitCallback func(msg *message, meta string)
@@ -578,7 +578,7 @@ func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGro
 	msgContext.start()
 
 	// now call cb
-	cb(msgContext, v.value)
+	cb(msgContext, v.meta)
 	msgContext.finish(nil)
 	return nil
 }
@@ -647,7 +647,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 
 // VisitValues iterates over all values in the table and calls the "visit"-callback for the passed name.
 // Optional parameter value can be set, which will just be forwarded to the visitor-function
-func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, value interface{}) error {
+func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta interface{}) error {
 	if pp.table == nil {
 		return fmt.Errorf("cannot visiit values in stateless processor")
 	}
@@ -666,9 +666,9 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, valu
 			return nil
 		// enqueue the visit
 		case pp.visitInput <- &visit{
-			key:   string(it.Key()),
-			name:  name,
-			value: value,
+			key:  string(it.Key()),
+			name: name,
+			meta: meta,
 		}:
 			// TODO (fe): add a notification when the processor shuts down so we can react to that instead of waiting for the global context
 		}

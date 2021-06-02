@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -361,4 +362,71 @@ func TestRebalance(t *testing.T) {
 	}
 
 	test.AssertNil(t, errg.Wait().NilOrError())
+}
+
+func TestCallbackFail(t *testing.T) {
+	if !*systemtest {
+		t.Skipf("Ignoring systemtest. pass '-args -systemtest' to `go test` to include them")
+	}
+
+	t.Skipf("Skipping as this triggers a bug that never finishes the test (https://github.com/lovoo/goka/issues/330)")
+
+	var (
+		group       goka.Group = "goka-systemtest-callback-fail"
+		inputStream string     = string(group) + "-input"
+		basepath               = os.TempDir()
+	)
+
+	tmc := goka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+	cfg := goka.DefaultConfig()
+	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)([]string{*broker})
+	test.AssertNil(t, err)
+
+	err = tm.EnsureStreamExists(inputStream, 20)
+	test.AssertNil(t, err)
+
+	em, err := goka.NewEmitter([]string{*broker}, goka.Stream(inputStream), new(codec.Int64))
+	test.AssertNil(t, err)
+
+	proc, err := goka.NewProcessor([]string{*broker},
+		goka.DefineGroup(
+			group,
+			goka.Input(goka.Stream(inputStream), new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+				val := msg.(int64)
+				if ctx.Partition() == 0 && val != 0 {
+					// do an invalid action
+					ctx.Emit("blubbasdf", "asdf", nil)
+				}
+			}),
+		),
+		goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
+		goka.WithStorageBuilder(storage.DefaultBuilder(basepath)),
+	)
+
+	test.AssertNil(t, err)
+
+	errg, ctx := multierr.NewErrGroup(context.Background())
+
+	errg.Go(func() error {
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer em.Finish()
+		var i int64
+		for {
+			select {
+			case <-ticker.C:
+				i++
+				test.AssertNil(t, em.EmitSync(fmt.Sprintf("%d", i%20), i))
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	})
+	errg.Go(func() error {
+		return proc.Run(ctx)
+	})
+	err = errg.Wait().NilOrError()
+	log.Printf("%v", err)
+	test.AssertTrue(t, strings.Contains(err.Error(), "callback failed"))
 }

@@ -859,11 +859,17 @@ func (g *Processor) Stop() {
 	g.cancel()
 }
 
-// Visit visits all keys and values in parallel by passing the visit request
+// VisitAll visits all keys in parallel by passing the visit request
 // to all partitions.
+// An optional argument "meta" can be passed that will be forwarded to
+// the visit-function of each key of the table.
+// The function returns when a visit to all keys has been triggered or the context is cancelled.
+// Note that this does not imply that all processor callback have already processed the visit-request.
+//
 // TODO (fe): currently we're not triggering to abort a visit upon rebalance, because
 // a partition processor does not know when it's shutting down.
-func (g *Processor) Visit(ctx context.Context, name string, value interface{}) error {
+// That implies that a rebalance will be blocked if there's a running visit request
+func (g *Processor) VisitAll(ctx context.Context, name string, meta interface{}) error {
 	g.mTables.RLock()
 	defer g.mTables.RUnlock()
 
@@ -876,7 +882,7 @@ func (g *Processor) Visit(ctx context.Context, name string, value interface{}) e
 		}
 		part := part
 		errg.Go(func() error {
-			return part.VisitValues(ctx, name, value)
+			return part.VisitValues(ctx, name, meta)
 		})
 	}
 	return errg.Wait().NilOrError()
