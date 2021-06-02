@@ -84,8 +84,8 @@ func main() {
 			ctx.SetValue(counter)
 
 		}),
-		goka.Visitor("reset", func(ctx goka.Context, msg interface{}) {
-			log.Printf("resetting %s: %d", ctx.Key(), msg.(int64))
+		goka.Visitor("reset", func(ctx goka.Context, meta interface{}) {
+			log.Printf("resetting %s: %d", ctx.Key(), meta.(int64))
 			ctx.SetValue(msg)
 		}),
 		goka.Persist(new(codec.Int64)),
@@ -121,7 +121,7 @@ func main() {
 
 	time.Sleep(5 * time.Second)
 
-	if err := proc.Visit(ctx, "reset", int64(0)); err != nil {
+	if err := proc.VisitAll(ctx, "reset", int64(0)); err != nil {
 		log.Printf("error visiting: %v", err)
 	}
 
