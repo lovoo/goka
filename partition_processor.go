@@ -38,6 +38,7 @@ type visit struct {
 	key  string
 	name string
 	meta interface{}
+	done func()
 }
 
 type commitCallback func(msg *message, meta string)
@@ -559,7 +560,7 @@ func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGro
 		trackOutputStats: pp.enqueueTrackOutputStats,
 		pviews:           pp.joins,
 		views:            pp.lookups,
-		commit:           func() {},
+		commit:           v.done,
 		wg:               wg,
 		msg: &message{
 			key:       v.key,
@@ -647,7 +648,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 
 // VisitValues iterates over all values in the table and calls the "visit"-callback for the passed name.
 // Optional parameter value can be set, which will just be forwarded to the visitor-function
-func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta interface{}) error {
+func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, wg *sync.WaitGroup, meta interface{}) error {
 	if pp.table == nil {
 		return fmt.Errorf("cannot visiit values in stateless processor")
 	}
@@ -661,16 +662,25 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 	}
 	defer it.Release()
 	for it.Next() {
+
+		// add one that we're going to put into the queue
+		// wg.Done will be called by the visit handler
+		wg.Add(1)
 		select {
 		case <-ctx.Done():
+			// context is closed, so we know that the current visit never entered the channel
+			// so we have to remove it from the waitgroup to avoid the lock.
+			wg.Done()
 			return nil
 		// enqueue the visit
 		case pp.visitInput <- &visit{
 			key:  string(it.Key()),
 			name: name,
 			meta: meta,
+			done: wg.Done,
 		}:
 			// TODO (fe): add a notification when the processor shuts down so we can react to that instead of waiting for the global context
+			// In this case we also have to drain the visitInput channel and call wg.Done() for each visit, so the caller does not wait for the waitgroup
 		}
 	}
 	return nil

@@ -875,16 +875,36 @@ func (g *Processor) VisitAll(ctx context.Context, name string, meta interface{})
 
 	errg, ctx := multierr.NewErrGroup(ctx)
 
+	var wg sync.WaitGroup
 	for _, part := range g.partitions {
 		// we'll only do the visit for active mode partitions
 		if part.runMode != runModeActive {
 			continue
 		}
 		part := part
+		wg.Add(1)
 		errg.Go(func() error {
-			return part.VisitValues(ctx, name, meta)
+			defer wg.Done()
+			return part.VisitValues(ctx, name, &wg, meta)
 		})
 	}
+
+	// wait for the waitgroup. We have to wrap it into an extra goroutine using a closing
+	// channel, since on an explicit stop, the waitgroup will never finish, so we would wait
+	// forever here.
+	errg.Go(func() error {
+		wgDone := make(chan struct{})
+		go func() {
+			defer close(wgDone)
+			wg.Wait()
+		}()
+		select {
+		case <-ctx.Done():
+		case <-wgDone:
+		}
+		return nil
+	})
+
 	return errg.Wait().NilOrError()
 }
 
