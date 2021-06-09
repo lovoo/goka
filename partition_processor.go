@@ -137,8 +137,8 @@ func newPartitionProcessor(partition int32,
 
 	statsLoopCtx, cancel := context.WithCancel(context.Background())
 
-	for _, visitor := range graph.visitors {
-		visitCallbacks[visitor.name] = visitor.cb
+	for _, v := range graph.visitors {
+		visitCallbacks[v.(*visitor).name] = v.(*visitor).cb
 	}
 
 	partProc := &PartitionProcessor{

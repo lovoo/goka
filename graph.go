@@ -32,15 +32,19 @@ type Group string
 // output, and any other topic from which and into which the processor group
 // may consume or produce events. Each of these links to Kafka is called Edge.
 type GroupGraph struct {
-	group         string
+	// the group marks multiple processor instances to be long together
+	group string
+
+	// the edges define the group graph
 	inputTables   []Edge
 	crossTables   []Edge
 	inputStreams  []Edge
 	outputStreams []Edge
 	loopStream    []Edge
 	groupTable    []Edge
-	visitors      []*visitor
+	visitors      []Edge
 
+	// those fields cache the info from above edges or are used to avoid naming/codec collisions
 	codecs    map[string]Codec
 	callbacks map[string]ProcessCallback
 
@@ -90,6 +94,25 @@ func (gg *GroupGraph) GroupTable() Edge {
 // OutputStreams returns the output stream edges of the group.
 func (gg *GroupGraph) OutputStreams() Edges {
 	return gg.outputStreams
+}
+
+// AllEdges returns a list of all edges for the group graph.
+// This allows to modify a graph by cloning it's edges into a new one.
+//
+//  var existing Graph
+//  edges := existiting.AllEdges()
+//  // modify edges as required
+//  // recreate the modifiedg raph
+//  newGraph := DefineGroup(existing.Groug(), edges...)
+func (gg *GroupGraph) AllEdges() Edges {
+	return chainEdges(
+		gg.inputTables,
+		gg.crossTables,
+		gg.inputStreams,
+		gg.outputStreams,
+		gg.loopStream,
+		gg.groupTable,
+		gg.visitors)
 }
 
 // returns whether the passed topic is a valid group output topic
@@ -327,7 +350,7 @@ type visitor struct {
 }
 
 func (m *visitor) Topic() string {
-	return ""
+	return m.name
 }
 func (m *visitor) Codec() Codec {
 	return nil
