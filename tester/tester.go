@@ -424,3 +424,11 @@ func (tt *Tester) Consume(topic string, key string, msg interface{}, options ...
 
 	tt.waitForClients()
 }
+
+// Catchup waits until all pending messages are consumed by all processors/views.
+// Calling this is very rarely necessary, normal calls to `Consume` include waiting for catchup.
+// One specific use case this is necessary for, is the Visitor-tool of processors.
+func (tt *Tester) Catchup() {
+	tt.waitStartup()
+	tt.waitForClients()
+}
