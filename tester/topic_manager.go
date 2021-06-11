@@ -8,17 +8,13 @@ import (
 
 // MockTopicManager mimicks the behavior of the real topic manager
 type MockTopicManager struct {
-	DefaultNumPartitions     int
-	DefaultReplicationFactor int
-	tt                       *Tester
+	tt *Tester
 }
 
 // NewMockTopicManager creates a new topic manager mock
 func NewMockTopicManager(tt *Tester, defaultNumPartitions int, defaultReplFactor int) *MockTopicManager {
 	return &MockTopicManager{
-		tt:                       tt,
-		DefaultNumPartitions:     defaultNumPartitions,
-		DefaultReplicationFactor: defaultReplFactor,
+		tt: tt,
 	}
 }
 
@@ -33,18 +29,12 @@ func (tm *MockTopicManager) EnsureTableExists(topic string, npar int) error {
 
 // EnsureStreamExists ensures a stream exists
 func (tm *MockTopicManager) EnsureStreamExists(topic string, npar int) error {
-	if npar != 1 {
-		return fmt.Errorf("Mock only supports 1 partition")
-	}
 	tm.tt.getOrCreateQueue(topic)
 	return nil
 }
 
 // EnsureTopicExists ensures a topic exists
 func (tm *MockTopicManager) EnsureTopicExists(topic string, npar, rfactor int, config map[string]string) error {
-	if npar != 1 {
-		return fmt.Errorf("Mock only supports 1 partition")
-	}
 	tm.tt.getOrCreateQueue(topic)
 	return nil
 }
