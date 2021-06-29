@@ -32,6 +32,8 @@ func TestHotStandby(t *testing.T) {
 		t.Skipf("Ignoring systemtest. pass '-args -systemtest' to `go test` to include them")
 	}
 
+	goka.Debug(true, true)
+
 	tmc := goka.NewTopicManagerConfig()
 	tmc.Table.Replication = 1
 	cfg := goka.DefaultConfig()

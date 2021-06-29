@@ -23,6 +23,8 @@ func TestTopicManagerCreate(t *testing.T) {
 		t.Skipf("Ignoring systemtest. pass '-args -systemtest' to `go test` to include them")
 	}
 
+	goka.Debug(true, true)
+
 	cfg := sarama.NewConfig()
 	cfg.Version = sarama.V0_11_0_0
 
@@ -40,6 +42,8 @@ func TestTopicManager_v11(t *testing.T) {
 	if !*systemtest {
 		t.Skipf("Ignoring systemtest. pass '-args -systemtest' to `go test` to include them")
 	}
+
+	goka.Debug(true, true)
 
 	cfg := sarama.NewConfig()
 	cfg.Version = sarama.V0_11_0_0
