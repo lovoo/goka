@@ -3,16 +3,16 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 
-	"github.com/lovoo/goka/headers"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 type memiter struct {
 	current int
 	keys    []string
-	storage headers.Headers
+	storage map[string][]byte
 }
 
 func (i *memiter) exhausted() bool {
@@ -53,22 +53,26 @@ func (i *memiter) Release() {
 }
 
 func (i *memiter) Seek(key []byte) bool {
-	seek := make(headers.Headers)
-	keys := []string{}
-	for k, v := range i.storage {
-		if strings.Contains(k, string(key)) {
-			keys = append(keys, k)
-			seek[k] = v
-		}
+	if i.exhausted() {
+		return false
 	}
-	i.current = -1
-	i.storage = seek
-	i.keys = keys
+
+	if i.current < 0 && !i.Next() {
+		return false
+	}
+	
+	for i.current < len(i.keys) {
+		if strings.HasPrefix(i.keys[i.current], string(key)) {
+			break
+		}
+		i.current++
+	}
 	return !i.exhausted()
 }
 
 type memory struct {
-	storage   headers.Headers
+	keys      []string
+	storage   map[string][]byte
 	offset    *int64
 	recovered bool
 }
@@ -76,7 +80,8 @@ type memory struct {
 // NewMemory returns a new in-memory storage.
 func NewMemory() Storage {
 	return &memory{
-		storage:   make(headers.Headers),
+		keys:      make([]string, 0),
+		storage:   make(map[string][]byte),
 		recovered: false,
 	}
 }
@@ -87,7 +92,7 @@ func (m *memory) Has(key string) (bool, error) {
 }
 
 func (m *memory) Get(key string) ([]byte, error) {
-	value, _ := m.storage[key]
+	value := m.storage[key]
 	return value, nil
 }
 
@@ -95,36 +100,57 @@ func (m *memory) Set(key string, value []byte) error {
 	if value == nil {
 		return fmt.Errorf("cannot write nil value")
 	}
+	if _, exists := m.storage[key]; !exists {
+		m.keys = append(m.keys, key)
+		sort.Strings(m.keys)
+	}
 	m.storage[key] = value
 	return nil
 }
 
 func (m *memory) Delete(key string) error {
 	delete(m.storage, key)
+	for i, k := range m.keys {
+		if k == key {
+			m.keys = append(m.keys[:i], m.keys[i+1:]...)
+			break
+		}
+	}
 	return nil
 }
 
+// Returns an interator on a snapshot of the storage. It's safe to modify
+// the storage while using this iterator, but it won't be aware of such changes.
+// The iterator is not concurrency-safe, but multiple iterators can
+// be used concurrently.
 func (m *memory) Iterator() (Iterator, error) {
-	keys := make([]string, 0, len(m.storage))
-	for k := range m.storage {
-		keys = append(keys, k)
+	keys := make([]string, len(m.keys))
+	copy(keys, m.keys)
+	storage := make(map[string][]byte, len(m.storage))
+	for k, v := range m.storage {
+		storage[k] = v
 	}
-
-	return &memiter{-1, keys, m.storage}, nil
+	return &memiter{-1, keys, storage}, nil
 }
 
+// Returns an interator on a snapshot of the storage within the specified range of keys.
+// It's safe to modify the storage while using this iterator, but it won't be aware of such changes.
+// The iterator is not concurrency-safe, but multiple iterators can
+// be used concurrently.
 func (m *memory) IteratorWithRange(start, limit []byte) (Iterator, error) {
 	keys := []string{} // using slice as keys has an unknown size
 	if len(limit) == 0 {
 		limit = util.BytesPrefix(start).Limit
 	}
-	for k := range m.storage {
+	storage := make(map[string][]byte)
+	for _, k := range m.keys {
 		if bytes.Compare([]byte(k), start) > -1 && bytes.Compare([]byte(k), limit) < 1 {
 			keys = append(keys, k)
+			storage[k] = m.storage[k]
 		}
 	}
 
-	return &memiter{-1, keys, m.storage}, nil
+	return &memiter{-1, keys, storage}, nil
 }
 
 func (m *memory) MarkRecovered() error {
