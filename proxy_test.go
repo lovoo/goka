@@ -2,9 +2,9 @@ package goka
 
 import (
 	"bytes"
-	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/storage"
 	"testing"
+
+	"github.com/lovoo/goka/storage"
 )
 
 type nullProxy struct{}
@@ -16,19 +16,16 @@ func (p *nullProxy) Stop()                                {}
 
 func TestUpdateWithHeaders(t *testing.T) {
 	s := storageProxy{
-		update: func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+		update: func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 			if len(headers) == 0 {
 				t.Errorf("Missing headers")
 				return nil
 			}
-			if !bytes.Equal(headers[0].Key, []byte("key")) {
-				t.Errorf("Key missmatch. Expected %q. Found: %q", "key", headers[0].Key)
-			}
-			if !bytes.Equal(headers[0].Value, []byte("value")) {
-				t.Errorf("Key missmatch. Expected %q. Found: %q", "value", headers[0].Value)
+			if !bytes.Equal(headers["key"], []byte("value")) {
+				t.Errorf("Key missmatch. Expected %q. Found: %q", "key", headers["key"])
 			}
 			return nil
 		},
 	}
-	_ = s.Update("", nil, &sarama.RecordHeader{Key: []byte("key"), Value: []byte("value")})
+	_ = s.Update("", nil, Headers{"key": []byte("value")})
 }

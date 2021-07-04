@@ -15,7 +15,7 @@ import (
 // UpdateCallback is invoked upon arrival of a message for a table partition.
 // The partition storage shall be updated in the callback.
 // Headers can converted to a map using FromSarama function.
-type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error
+type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error
 
 // RebalanceCallback is invoked when the processor receives a new partition assignment.
 type RebalanceCallback func(a Assignment)
@@ -46,7 +46,7 @@ func DefaultViewStoragePath() string {
 // during recovery of processors and during the normal operation of views.
 // DefaultUpdate can be used in the function passed to WithUpdateCallback and
 // WithViewCallback.
-func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte, _ ...*sarama.RecordHeader) error {
+func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte, _ Headers) error {
 	if value == nil {
 		return s.Delete(key)
 	}

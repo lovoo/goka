@@ -70,8 +70,8 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 	opts := &voptions{
 		log:        defaultLogger,
 		tableCodec: new(codec.String),
-		updateCallback: func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
-			if err := DefaultUpdate(s, partition, key, value); err != nil {
+		updateCallback: func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
+			if err := DefaultUpdate(s, partition, key, value, nil); err != nil {
 				return err
 			}
 			viewTestRecoveredMessages++
@@ -173,7 +173,7 @@ func TestView_Get(t *testing.T) {
 			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
-				update: func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+				update: func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 					return nil
 				},
 			}
@@ -202,7 +202,7 @@ func TestView_Get(t *testing.T) {
 			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
-				update: func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+				update: func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 					return nil
 				},
 			}
@@ -230,7 +230,7 @@ func TestView_Get(t *testing.T) {
 			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
-				update: func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+				update: func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 					return nil
 				},
 			}
@@ -525,7 +525,7 @@ func TestView_Run(t *testing.T) {
 			consumer  = defaultSaramaAutoConsumerMock(t)
 			partition int32
 			count     int64
-			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				atomic.AddInt64(&count, 1)
 				return nil
 			}

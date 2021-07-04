@@ -41,7 +41,7 @@ func TestPT_createStorage(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		var (
 			partition int32          = 101
-			callback  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			callback  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				return nil
 			}
 		)
@@ -373,7 +373,7 @@ func TestPT_load(t *testing.T) {
 			topic                  = "some-topic"
 			partition        int32
 			count            int64
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				atomic.AddInt64(&count, 1)
 				return nil
 			}
@@ -433,7 +433,7 @@ func TestPT_loadMessages(t *testing.T) {
 			consumer         = defaultSaramaAutoConsumerMock(t)
 			recKey           string
 			recVal           []byte
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				recKey = key
 				recVal = value
 				return nil
@@ -479,7 +479,7 @@ func TestPT_loadMessages(t *testing.T) {
 			topic                  = "some-topic"
 			partition        int32
 			consumer                        = defaultSaramaAutoConsumerMock(t)
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				return nil
 			}
 		)
@@ -523,7 +523,7 @@ func TestPT_loadMessages(t *testing.T) {
 			partition        int32
 			consumer         = defaultSaramaAutoConsumerMock(t)
 			count            int64
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				atomic.AddInt64(&count, 1)
 				return nil
 			}
@@ -571,7 +571,7 @@ func TestPT_loadMessages(t *testing.T) {
 			topic                  = "some-topic"
 			partition        int32
 			consumer                        = defaultSaramaAutoConsumerMock(t)
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				return nil
 			}
 		)
@@ -668,7 +668,7 @@ func TestPT_loadMessages(t *testing.T) {
 			partition        int32
 			consumer                        = defaultSaramaAutoConsumerMock(t)
 			retErr           error          = fmt.Errorf("update error")
-			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB         UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				return retErr
 			}
 		)
@@ -708,7 +708,7 @@ func TestPT_storeEvent(t *testing.T) {
 			value       = []byte("some-vale")
 			actualKey   string
 			actualValue []byte
-			updateCB    UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB    UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				actualKey = key
 				actualValue = value
 				return nil
@@ -728,7 +728,7 @@ func TestPT_storeEvent(t *testing.T) {
 		defer cancel()
 		err := pt.setup(ctx)
 		test.AssertNil(t, err)
-		err = pt.storeEvent(key, value, localOffset)
+		err = pt.storeEvent(key, value, localOffset, nil)
 		test.AssertEqual(t, actualKey, key)
 		test.AssertEqual(t, actualValue, value)
 		test.AssertNil(t, err)
@@ -740,7 +740,7 @@ func TestPT_storeEvent(t *testing.T) {
 			topic                      = "some-topic"
 			key                        = "some-key"
 			value                      = []byte("some-vale")
-			updateCB    UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB    UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				return nil
 			}
 			retErr error = fmt.Errorf("storage err")
@@ -759,7 +759,7 @@ func TestPT_storeEvent(t *testing.T) {
 		defer cancel()
 		err := pt.setup(ctx)
 		test.AssertNil(t, err)
-		err = pt.storeEvent(key, value, localOffset)
+		err = pt.storeEvent(key, value, localOffset, nil)
 		test.AssertNotNil(t, err)
 	})
 }
@@ -866,7 +866,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 			topic           = "some-topic"
 			partition int32
 			count     int64
-			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				atomic.AddInt64(&count, 1)
 				return nil
 			}
@@ -937,7 +937,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 			topic           = "some-topic"
 			partition int32
 			count     int64
-			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers ...*sarama.RecordHeader) error {
+			updateCB  UpdateCallback = func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error {
 				atomic.AddInt64(&count, 1)
 				return nil
 			}
