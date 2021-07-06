@@ -239,6 +239,7 @@ func (p *PartitionTable) createStorage(ctx context.Context) (*storageProxy, erro
 	p.log.Debugf("finished building storage for topic %s/%d in %.1f minutes", p.topic, p.partition, time.Since(start).Minutes())
 	return &storageProxy{
 		Storage:   st,
+		topic:     Stream(p.topic),
 		partition: p.partition,
 		update:    p.updateCallback,
 	}, nil
@@ -640,7 +641,7 @@ func (p *PartitionTable) updateHwmStats() {
 }
 
 func (p *PartitionTable) storeEvent(key string, value []byte, offset int64, headers Headers) error {
-	err := p.st.Update(key, value, headers)
+	err := p.st.Update(key, value, offset, headers)
 	if err != nil {
 		return fmt.Errorf("Error from the update callback while recovering from the log: %v", err)
 	}

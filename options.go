@@ -9,13 +9,40 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/lovoo/goka/headers"
 	"github.com/lovoo/goka/storage"
 )
 
+// UpdateContext defines the interface for UpdateCallback arguments.
+type UpdateContext interface {
+	// Storage returns the storage that should be updated with the input message.
+	Storage() storage.Storage
+
+	// Topic returns the topic of input message.
+	Topic() Stream
+
+	// Key returns the key of the input message.
+	Key() string
+
+	// Partition returns the partition of the input message.
+	Partition() int32
+
+	// Offset returns the offset of the input message.
+	Offset() int64
+
+	// Value returns the value of the input message.
+	Value() []byte
+
+	// Headers returns the headers of the input message.
+	//
+	// It is recommended to lazily evaluate the headers to reduce overhead per message
+	// when headers are not used.
+	Headers() Headers
+}
+
 // UpdateCallback is invoked upon arrival of a message for a table partition.
-// The partition storage shall be updated in the callback.
-// Headers can converted to a map using FromSarama function.
-type UpdateCallback func(s storage.Storage, partition int32, key string, value []byte, headers Headers) error
+// The partition storage in the context shall be updated in the callback.
+type UpdateCallback func(ctx UpdateContext) error
 
 // RebalanceCallback is invoked when the processor receives a new partition assignment.
 type RebalanceCallback func(a Assignment)
@@ -46,12 +73,12 @@ func DefaultViewStoragePath() string {
 // during recovery of processors and during the normal operation of views.
 // DefaultUpdate can be used in the function passed to WithUpdateCallback and
 // WithViewCallback.
-func DefaultUpdate(s storage.Storage, partition int32, key string, value []byte, _ Headers) error {
-	if value == nil {
-		return s.Delete(key)
+func DefaultUpdate(ctx UpdateContext) error {
+	if ctx.Value() == nil {
+		return ctx.Storage().Delete(ctx.Key())
 	}
 
-	return s.Set(key, value)
+	return ctx.Storage().Set(ctx.Key(), ctx.Value())
 }
 
 // DefaultRebalance is the default callback when a new partition assignment is received.
@@ -64,6 +91,62 @@ func DefaultHasher() func() hash.Hash32 {
 		return fnv.New32a()
 	}
 
+}
+
+// DefaultUpdateContext implements the UpdateContext interface.
+//
+// Headers can be set directly or using sarama's RecordHeader type.
+// If both are set, sarama headers will be ignored.
+type DefaultUpdateContext struct {
+	storage       storage.Storage
+	topic         Stream
+	key           string
+	partition     int32
+	offset        int64
+	value         []byte
+	headers       Headers
+	saramaHeaders []*sarama.RecordHeader
+}
+
+// Storage returns the storage that should be updated with the input message.
+func (ctx DefaultUpdateContext) Storage() storage.Storage {
+	return ctx.storage
+}
+
+// Topic returns the topic of input message.
+func (ctx DefaultUpdateContext) Topic() Stream {
+	return ctx.topic
+}
+
+// Key returns the key of the input message.
+func (ctx DefaultUpdateContext) Key() string {
+	return ctx.key
+}
+
+// Partition returns the partition of the input message.
+func (ctx DefaultUpdateContext) Partition() int32 {
+	return ctx.partition
+}
+
+// Offset returns the offset of the input message.
+func (ctx DefaultUpdateContext) Offset() int64 {
+	return ctx.offset
+}
+
+// Value returns the value of the input message.
+func (ctx DefaultUpdateContext) Value() []byte {
+	return ctx.value
+}
+
+// Headers returns the headers of the input message.
+//
+// Headers are lazily evaluated to improve performance
+// when they are not used.
+func (ctx DefaultUpdateContext) Headers() Headers {
+	if ctx.headers == nil && len(ctx.saramaHeaders) > 0 {
+		ctx.headers = headers.FromSarama(ctx.saramaHeaders)
+	}
+	return ctx.headers
 }
 
 ///////////////////////////////////////////////////////////////////////////////
