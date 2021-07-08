@@ -1,9 +1,9 @@
 package storage
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
-	"sort"
 	"testing"
 	"time"
 
@@ -17,6 +17,7 @@ func TestMemStorageDelete(t *testing.T) {
 	has, err := storage.Has("key-1")
 	test.AssertNil(t, err)
 	test.AssertFalse(t, has)
+	test.AssertEqual(t, len(storage.(*memory).keys), 0)
 
 	err = storage.Set("key-1", []byte("content-1"))
 	test.AssertNil(t, err)
@@ -24,6 +25,7 @@ func TestMemStorageDelete(t *testing.T) {
 	has, err = storage.Has("key-1")
 	test.AssertNil(t, err)
 	test.AssertTrue(t, has)
+	test.AssertEqual(t, len(storage.(*memory).keys), 1)
 
 	err = storage.Delete("key-1")
 	test.AssertNil(t, err)
@@ -31,6 +33,7 @@ func TestMemStorageDelete(t *testing.T) {
 	has, err = storage.Has("key-1")
 	test.AssertNil(t, err)
 	test.AssertFalse(t, has)
+	test.AssertEqual(t, len(storage.(*memory).keys), 0)
 }
 
 func TestMemIter(t *testing.T) {
@@ -42,8 +45,6 @@ func TestMemIter(t *testing.T) {
 		"key-3": "val-3",
 	}
 
-	found := map[string]string{}
-
 	storage.Set(offsetKey, []byte("not-returned"))
 	for k, v := range kv {
 		storage.Set(k, []byte(v))
@@ -54,9 +55,11 @@ func TestMemIter(t *testing.T) {
 	test.AssertNil(t, err)
 	iter.Release()
 	test.AssertFalse(t, iter.Next())
+	test.AssertFalse(t, iter.Seek([]byte("key-2")))
 
 	iter, err = storage.Iterator()
 	test.AssertNil(t, err)
+	i := 1
 	for iter.Next() {
 		raw, err := iter.Value()
 		test.AssertNil(t, err)
@@ -64,11 +67,9 @@ func TestMemIter(t *testing.T) {
 		key := string(iter.Key())
 		val := string(raw)
 
-		v, ok := kv[key]
-		test.AssertTrue(t, ok)
-		test.AssertEqual(t, val, v)
-
-		found[key] = val
+		test.AssertEqual(t, key, fmt.Sprintf("key-%d", i))
+		test.AssertEqual(t, val, fmt.Sprintf("val-%d", i))
+		i++
 	}
 
 	key := iter.Key()
@@ -77,15 +78,25 @@ func TestMemIter(t *testing.T) {
 	test.AssertTrue(t, key == nil)
 	test.AssertTrue(t, val == nil)
 
-	test.AssertEqual(t, found, kv)
-
 	k := []byte("key-1")
 	iter, err = storage.IteratorWithRange(k, nil)
-	sort.Strings(iter.(*memiter).keys) // make iteration order deterministic
+	test.AssertNil(t, err)
 
 	test.AssertTrue(t, iter.Next())
 	test.AssertEqual(t, iter.Key(), k)
 
+	iter, err = storage.Iterator()
+	test.AssertNil(t, err)
+	ok := iter.Seek([]byte("key-2"))
+	test.AssertTrue(t, ok)
+	test.AssertEqual(t, iter.Key(), []byte("key-2"))
+	val, err = iter.Value()
+	test.AssertNil(t, err)
+	test.AssertEqual(t, val, []byte("val-2"))
+
+	ok = iter.Seek([]byte("key-4"))
+	test.AssertFalse(t, ok)
+	test.AssertNil(t, iter.Key())
 }
 
 func TestGetHas(t *testing.T) {

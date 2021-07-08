@@ -21,8 +21,9 @@ type Iterator interface {
 	Release()
 	// Seek moves the iterator to the begining of a key-value pair sequence that
 	// is greater or equal to the given key. It returns whether at least one of
-	// such key-value pairs exist. Next must be called after seeking to access
-	// the first pair.
+	// such key-value pairs exist. If true is returned, Key/Value must be called
+	// immediately to get the first item. Calling Next immediately after a successful
+	// seek will effectively skip an item in the iterator.
 	Seek(key string) bool
 }
 
