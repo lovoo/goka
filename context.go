@@ -393,8 +393,8 @@ func (ctx *cbContext) setValueForKey(key string, value interface{}, hdr Headers)
 	table := ctx.graph.GroupTable().Topic()
 	ctx.counters.emits++
 	ctx.emitter(table, key, encodedValue, hdr).ThenWithMessage(func(msg *sarama.ProducerMessage, err error) {
-		if err == nil && msg != nil {
-			err = ctx.table.storeNewestOffset(msg.Offset)
+		if err == nil && msg != nil && msg.Offset != 0 {
+			err = ctx.table.SetOffset(msg.Offset)
 		}
 		ctx.emitDone(err)
 	})
