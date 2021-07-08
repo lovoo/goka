@@ -3,7 +3,6 @@ package goka
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -46,7 +45,6 @@ type PartitionTable struct {
 	responseStats chan *TableStats
 	updateStats   chan func()
 
-	offsetM sync.Mutex
 	// current offset
 	offset int64
 	hwm    int64
@@ -721,21 +719,6 @@ func (p *PartitionTable) Set(key string, value []byte) error {
 // Delete removes the passed key from the partition table by deleting from the underlying storage
 func (p *PartitionTable) Delete(key string) error {
 	return p.st.Delete(key)
-}
-
-func (p *PartitionTable) storeNewestOffset(newOffset int64) error {
-	p.offsetM.Lock()
-	defer p.offsetM.Unlock()
-
-	oldOffset, err := p.GetOffset(offsetNotStored)
-	if err != nil {
-		return err
-	}
-
-	if offsetNotStored != oldOffset && oldOffset <= newOffset {
-		return p.SetOffset(newOffset)
-	}
-	return nil
 }
 
 // SetOffset sets the magic offset value in storage
