@@ -357,8 +357,8 @@ func (tmc *TopicManagerConfig) tableCleanupPolicy() string {
 // initialize the config with reasonable defaults
 func NewTopicManagerConfig() *TopicManagerConfig {
 	cfg := new(TopicManagerConfig)
-	cfg.Table.Replication = 2
-	cfg.Stream.Replication = 2
+	cfg.Table.Replication = 1
+	cfg.Stream.Replication = 1
 	cfg.Stream.Retention = 1 * time.Hour
 
 	cfg.MismatchBehavior = TMConfigMismatchBehaviorIgnore
