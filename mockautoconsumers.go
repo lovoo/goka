@@ -509,7 +509,7 @@ func (cg *MockConsumerGroup) markMessage(topic string, partition int32, offset i
 	cg.mMessages.Lock()
 	defer cg.mMessages.Unlock()
 
-	cnt := cg.messages[offset]
+	cnt := cg.messages[offset-1]
 
 	if cnt == 0 {
 		panic(fmt.Errorf("Cannot mark message with offest %d, it's not a valid offset or was already marked", offset))

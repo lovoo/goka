@@ -237,15 +237,15 @@ func (cgs *cgSession) MarkOffset(topic string, partition int32, offset int64, me
 	cgs.mMessages.Lock()
 	defer cgs.mMessages.Unlock()
 
-	msgKey := cgs.makeMsgKey(topic, offset)
+	msgKey := cgs.makeMsgKey(topic, offset-1)
 	if !cgs.waitingMessages[msgKey] {
-		logger.Printf("Message topic/partition/offset %s/%d/%d was already marked as consumed. We should only mark the message once", topic, partition, offset)
+		logger.Printf("Message topic/partition/offset %s/%d/%d was already marked as consumed. We should only mark the message once", topic, partition, offset-1)
 	} else {
 		cgs.wgMessages.Done()
 		delete(cgs.waitingMessages, msgKey)
 	}
 
-	cgs.queues[topic].setHwmIfNewer(offset + 1)
+	cgs.queues[topic].setHwmIfNewer(offset)
 }
 
 func (cgs *cgSession) Commit() {
@@ -259,7 +259,7 @@ func (cgs *cgSession) ResetOffset(topic string, partition int32, offset int64, m
 
 // MarkMessage marks the passed message as consumed
 func (cgs *cgSession) MarkMessage(msg *sarama.ConsumerMessage, metadata string) {
-	cgs.MarkOffset(msg.Topic, msg.Partition, msg.Offset, metadata)
+	cgs.MarkOffset(msg.Topic, msg.Partition, msg.Offset+1, metadata)
 }
 
 // Context returns the consumer group's context

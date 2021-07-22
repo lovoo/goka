@@ -612,7 +612,10 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 		// create partition processor for our partition
 		pproc, err := g.createPartitionProcessor(session.Context(), partition, runModeActive,
 			func(msg *message, metadata string) {
-				session.MarkOffset(msg.topic, msg.partition, msg.offset, metadata)
+				// We have to commit the offset that we want to read next, not the one that we just have
+				// processed, therefore msg.offset+1 is required to get the next message.
+				// This has the same semantics as sarama's implementation of session.MarkMessage (which calls MarkOffset with offset+1)
+				session.MarkOffset(msg.topic, msg.partition, msg.offset+1, metadata)
 			})
 		if err != nil {
 			return fmt.Errorf("Error creating partition processor for %s/%d: %v", g.Graph().Group(), partition, err)
@@ -632,12 +635,16 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 			// if the partition already exists, it means it is part of the assignment, so we don't
 			// need to keep it on hot-standby and can ignore it.
 
-			if _, ex := g.getPartProc(standby); ex {
+			// we check if the partition processor exists and if it does, ignore it
+			// since it's part of the assignment
+			if _, exists := g.getPartProc(standby); exists {
 				continue
 			}
+
+			// otherwise, let's start the partition processor in passive mode
 			pproc, err := g.createPartitionProcessor(session.Context(), standby, runModePassive,
 				func(msg *message, metadata string) {
-					session.MarkOffset(msg.topic, msg.partition, msg.offset, metadata)
+					panic("a passive partition processor should never receive input messages, thus never commit any messages")
 				})
 			if err != nil {
 				return fmt.Errorf("Error creating partition processor for %s/%d: %v", g.Graph().Group(), standby, err)
