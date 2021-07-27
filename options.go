@@ -9,20 +9,13 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/headers"
 	"github.com/lovoo/goka/storage"
 )
 
 // UpdateContext defines the interface for UpdateCallback arguments.
 type UpdateContext interface {
-	// Storage returns the storage that should be updated with the input message.
-	Storage() storage.Storage
-
 	// Topic returns the topic of input message.
 	Topic() Stream
-
-	// Key returns the key of the input message.
-	Key() string
 
 	// Partition returns the partition of the input message.
 	Partition() int32
@@ -30,19 +23,15 @@ type UpdateContext interface {
 	// Offset returns the offset of the input message.
 	Offset() int64
 
-	// Value returns the value of the input message.
-	Value() []byte
-
 	// Headers returns the headers of the input message.
 	//
 	// It is recommended to lazily evaluate the headers to reduce overhead per message
 	// when headers are not used.
-	Headers() Headers
+	Headers() *Headers
 }
 
 // UpdateCallback is invoked upon arrival of a message for a table partition.
-// The partition storage in the context shall be updated in the callback.
-type UpdateCallback func(ctx UpdateContext) error
+type UpdateCallback func(ctx UpdateContext, s storage.Storage, key string, value []byte) error
 
 // RebalanceCallback is invoked when the processor receives a new partition assignment.
 type RebalanceCallback func(a Assignment)
@@ -73,12 +62,12 @@ func DefaultViewStoragePath() string {
 // during recovery of processors and during the normal operation of views.
 // DefaultUpdate can be used in the function passed to WithUpdateCallback and
 // WithViewCallback.
-func DefaultUpdate(ctx UpdateContext) error {
-	if ctx.Value() == nil {
-		return ctx.Storage().Delete(ctx.Key())
+func DefaultUpdate(ctx UpdateContext, s storage.Storage, key string, value []byte) error {
+	if value == nil {
+		return s.Delete(key)
 	}
 
-	return ctx.Storage().Set(ctx.Key(), ctx.Value())
+	return s.Set(key, value)
 }
 
 // DefaultRebalance is the default callback when a new partition assignment is received.
@@ -94,18 +83,14 @@ func DefaultHasher() func() hash.Hash32 {
 }
 
 // DefaultUpdateContext implements the UpdateContext interface.
-//
-// Headers can be set directly or using sarama's RecordHeader type.
-// If both are set, sarama headers will be ignored.
 type DefaultUpdateContext struct {
-	storage       storage.Storage
-	topic         Stream
-	key           string
-	partition     int32
-	offset        int64
-	value         []byte
-	headers       Headers
-	saramaHeaders []*sarama.RecordHeader
+	storage   storage.Storage
+	topic     Stream
+	key       string
+	partition int32
+	offset    int64
+	value     []byte
+	headers   *Headers
 }
 
 // Storage returns the storage that should be updated with the input message.
@@ -139,13 +124,7 @@ func (ctx DefaultUpdateContext) Value() []byte {
 }
 
 // Headers returns the headers of the input message.
-//
-// Headers are lazily evaluated to improve performance
-// when they are not used.
-func (ctx DefaultUpdateContext) Headers() Headers {
-	if ctx.headers == nil && len(ctx.saramaHeaders) > 0 {
-		ctx.headers = headers.FromSarama(ctx.saramaHeaders)
-	}
+func (ctx DefaultUpdateContext) Headers() *Headers {
 	return ctx.headers
 }
 
@@ -573,7 +552,7 @@ type eoptions struct {
 	clientID string
 
 	hasher         func() hash.Hash32
-	defaultHeaders Headers
+	defaultHeaders *Headers
 
 	builders struct {
 		topicmgr TopicManagerBuilder
@@ -633,9 +612,9 @@ func WithEmitterTester(t Tester) EmitterOption {
 
 // WithEmitterDefaultHeaders configures the emitter with default headers
 // which are included with every emit.
-func WithEmitterDefaultHeaders(hdr Headers) EmitterOption {
+func WithEmitterDefaultHeaders(headers *Headers) EmitterOption {
 	return func(o *eoptions, _ Stream, _ Codec) {
-		o.defaultHeaders = hdr
+		o.defaultHeaders = headers
 	}
 }
 
@@ -658,7 +637,7 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 }
 
 type ctxOptions struct {
-	emitHeaders Headers
+	emitHeaders *Headers
 }
 
 // ContextOption defines a configuration option to be used when performing
@@ -666,14 +645,10 @@ type ctxOptions struct {
 type ContextOption func(*ctxOptions)
 
 // WithCtxEmitHeaders sets kafka headers to use when emitting to kafka
-func WithCtxEmitHeaders(hdr Headers) ContextOption {
+func WithCtxEmitHeaders(headers *Headers) ContextOption {
 	return func(opts *ctxOptions) {
-		if opts.emitHeaders == nil {
-			opts.emitHeaders = make(Headers, len(hdr))
-		}
-		for k, v := range hdr {
-			opts.emitHeaders[k] = v
-		}
+		// Accumulate headers rather than discard previous ones.
+		opts.emitHeaders = opts.emitHeaders.Merged(headers)
 	}
 }
 

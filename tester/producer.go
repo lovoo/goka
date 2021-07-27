@@ -21,8 +21,8 @@ func newProducerMock(emitter emitHandler) *producerMock {
 // Emit emits messages to arbitrary topics.
 // The mock simply forwards the emit to the KafkaMock which takes care of queueing calls
 // to handled topics or putting the emitted messages in the emitted-messages-list
-func (p *producerMock) EmitWithHeaders(topic string, key string, value []byte, header goka.Headers) *goka.Promise {
-	return p.emitter(topic, key, value, WithHeaders(header))
+func (p *producerMock) EmitWithHeaders(topic string, key string, value []byte, headers *goka.Headers) *goka.Promise {
+	return p.emitter(topic, key, value, WithHeaders(headers))
 }
 
 // Emit emits messages to arbitrary topics.
@@ -47,8 +47,8 @@ type flushingProducer struct {
 }
 
 // Emit using the underlying producer
-func (e *flushingProducer) EmitWithHeaders(topic string, key string, value []byte, header goka.Headers) *goka.Promise {
-	prom := e.producer.EmitWithHeaders(topic, key, value, header)
+func (e *flushingProducer) EmitWithHeaders(topic string, key string, value []byte, headers *goka.Headers) *goka.Promise {
+	prom := e.producer.EmitWithHeaders(topic, key, value, headers)
 	e.tester.waitForClients()
 	return prom
 }

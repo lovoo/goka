@@ -319,7 +319,7 @@ func (cgs *cgSession) pushMessageToClaim(claim *cgClaim, msg *message) {
 
 	select {
 	case claim.msgs <- &sarama.ConsumerMessage{
-		Headers: msg.saramaHeaders(),
+		Headers: msg.headers.ToSaramaPtr(),
 		Key:     []byte(msg.key),
 		Value:   msg.value,
 		Topic:   claim.Topic(),

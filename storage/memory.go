@@ -60,7 +60,7 @@ func (i *memiter) Seek(key []byte) bool {
 	if i.current < 0 && !i.Next() {
 		return false
 	}
-	
+
 	for i.current < len(i.keys) {
 		if strings.HasPrefix(i.keys[i.current], string(key)) {
 			break

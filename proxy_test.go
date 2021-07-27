@@ -1,8 +1,9 @@
 package goka
 
 import (
-	"bytes"
 	"testing"
+
+	"github.com/lovoo/goka/storage"
 )
 
 type nullProxy struct{}
@@ -14,16 +15,20 @@ func (p *nullProxy) Stop()                                {}
 
 func TestUpdateWithHeaders(t *testing.T) {
 	s := storageProxy{
-		update: func(ctx UpdateContext) error {
-			if len(ctx.Headers()) == 0 {
+		update: func(ctx UpdateContext, s storage.Storage, key string, value []byte) error {
+			if ctx.Headers().Len() == 0 {
 				t.Errorf("Missing headers")
 				return nil
 			}
-			if !bytes.Equal(ctx.Headers()["key"], []byte("value")) {
-				t.Errorf("Key missmatch. Expected %q. Found: %q", "key", ctx.Headers()["key"])
+			if ctx.Headers().StrVal("key") != "value" {
+				t.Errorf("Key missmatch. Expected %q. Found: %q", "key", ctx.Headers().StrVal("key"))
 			}
 			return nil
 		},
 	}
-	_ = s.Update("", nil, 0, Headers{"key": []byte("value")})
+	headers, err := NewHeaders("key", "value")
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	_ = s.Update("", nil, 0, headers)
 }

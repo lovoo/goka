@@ -14,6 +14,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/internal/test"
+	"github.com/lovoo/goka/storage"
 )
 
 var (
@@ -69,8 +70,8 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 	opts := &voptions{
 		log:        defaultLogger,
 		tableCodec: new(codec.String),
-		updateCallback: func(ctx UpdateContext) error {
-			if err := DefaultUpdate(ctx); err != nil {
+		updateCallback: func(ctx UpdateContext, s storage.Storage, key string, value []byte) error {
+			if err := DefaultUpdate(ctx, s, key, value); err != nil {
 				return err
 			}
 			viewTestRecoveredMessages++
@@ -172,9 +173,7 @@ func TestView_Get(t *testing.T) {
 			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
-				update: func(ctx UpdateContext) error {
-					return nil
-				},
+				update:    updateCallbackNoop,
 			}
 			key         = "some-key"
 			value int64 = 3
@@ -201,9 +200,7 @@ func TestView_Get(t *testing.T) {
 			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
-				update: func(ctx UpdateContext) error {
-					return nil
-				},
+				update:    updateCallbackNoop,
 			}
 			key = "some-key"
 		)
@@ -229,9 +226,7 @@ func TestView_Get(t *testing.T) {
 			proxy = &storageProxy{
 				Storage:   bm.mst,
 				partition: 0,
-				update: func(ctx UpdateContext) error {
-					return nil
-				},
+				update:    updateCallbackNoop,
 			}
 			key          = "some-key"
 			errRet error = fmt.Errorf("get failed")
@@ -524,7 +519,7 @@ func TestView_Run(t *testing.T) {
 			consumer  = defaultSaramaAutoConsumerMock(t)
 			partition int32
 			count     int64
-			updateCB  UpdateCallback = func(ctx UpdateContext) error {
+			updateCB  UpdateCallback = func(ctx UpdateContext, s storage.Storage, key string, value []byte) error {
 				atomic.AddInt64(&count, 1)
 				return nil
 			}

@@ -29,16 +29,13 @@ func (s *storageProxy) Close() error {
 	return s.closedOnce.Do(s.Storage.Close)
 }
 
-func (s *storageProxy) Update(k string, v []byte, offset int64, headers Headers) error {
+func (s *storageProxy) Update(k string, v []byte, offset int64, headers *Headers) error {
 	return s.update(&DefaultUpdateContext{
-		storage:   s,
 		topic:     s.topic,
 		partition: s.partition,
 		offset:    offset,
-		key:       k,
-		value:     v,
 		headers:   headers,
-	})
+	}, s, k, v)
 }
 
 func (s *storageProxy) Stateless() bool {
