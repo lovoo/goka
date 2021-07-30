@@ -118,9 +118,7 @@ func TestEmitter_Emit(t *testing.T) {
 	})
 	t.Run("default_headers", func(t *testing.T) {
 		emitter, bm, ctrl := createEmitter(t)
-		defaultHeaders, err := NewHeaders("header-key", "header-val")
-		test.AssertNil(t, err)
-		emitter.defaultHeaders = defaultHeaders
+		emitter.defaultHeaders = Headers{"header-key": []byte("header-val")}
 		defer ctrl.Finish()
 
 		var (

@@ -11,7 +11,7 @@ import (
 	"github.com/lovoo/goka/multierr"
 )
 
-type emitter func(topic string, key string, value []byte, headers *Headers) *Promise
+type emitter func(topic string, key string, value []byte, headers Headers) *Promise
 
 // Context provides access to the processor's table and emit capabilities to
 // arbitrary topics in kafka.
@@ -62,7 +62,7 @@ type Context interface {
 	Value() interface{}
 
 	// Headers returns the headers of the input message
-	Headers() *Headers
+	Headers() Headers
 
 	// SetValue updates the value of the key in the group table.
 	// It stores the value in the local cache and sends the
@@ -148,7 +148,7 @@ type cbContext struct {
 
 	// Headers as passed from sarama. Note that this field will be filled
 	// lazily after the first call to Headers
-	headers *Headers
+	headers Headers
 
 	table *PartitionTable
 	// joins
@@ -223,7 +223,7 @@ func (ctx *cbContext) Loopback(key string, value interface{}, options ...Context
 	ctx.emit(l.Topic(), key, data, opts.emitHeaders)
 }
 
-func (ctx *cbContext) emit(topic string, key string, value []byte, headers *Headers) {
+func (ctx *cbContext) emit(topic string, key string, value []byte, headers Headers) {
 	ctx.counters.emits++
 	ctx.emitter(topic, key, value, ctx.emitterDefaultHeaders.Merged(headers)).Then(func(err error) {
 		if err != nil {
@@ -285,7 +285,7 @@ func (ctx *cbContext) Partition() int32 {
 	return ctx.msg.Partition
 }
 
-func (ctx *cbContext) Headers() *Headers {
+func (ctx *cbContext) Headers() Headers {
 	if ctx.headers == nil {
 		ctx.headers = HeadersFromSarama(ctx.msg.Headers)
 	}
@@ -349,7 +349,7 @@ func (ctx *cbContext) valueForKey(key string) (interface{}, error) {
 	return value, nil
 }
 
-func (ctx *cbContext) deleteKey(key string, headers *Headers) error {
+func (ctx *cbContext) deleteKey(key string, headers Headers) error {
 	if ctx.graph.GroupTable() == nil {
 		return fmt.Errorf("Cannot access state in stateless processor")
 	}
@@ -368,7 +368,7 @@ func (ctx *cbContext) deleteKey(key string, headers *Headers) error {
 }
 
 // setValueForKey sets a value for a key in the processor state.
-func (ctx *cbContext) setValueForKey(key string, value interface{}, headers *Headers) error {
+func (ctx *cbContext) setValueForKey(key string, value interface{}, headers Headers) error {
 	if ctx.graph.GroupTable() == nil {
 		return fmt.Errorf("Cannot access state in stateless processor")
 	}

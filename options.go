@@ -27,7 +27,7 @@ type UpdateContext interface {
 	//
 	// It is recommended to lazily evaluate the headers to reduce overhead per message
 	// when headers are not used.
-	Headers() *Headers
+	Headers() Headers
 }
 
 // UpdateCallback is invoked upon arrival of a message for a table partition.
@@ -84,28 +84,15 @@ func DefaultHasher() func() hash.Hash32 {
 
 // DefaultUpdateContext implements the UpdateContext interface.
 type DefaultUpdateContext struct {
-	storage   storage.Storage
 	topic     Stream
-	key       string
 	partition int32
 	offset    int64
-	value     []byte
-	headers   *Headers
-}
-
-// Storage returns the storage that should be updated with the input message.
-func (ctx DefaultUpdateContext) Storage() storage.Storage {
-	return ctx.storage
+	headers   []*sarama.RecordHeader
 }
 
 // Topic returns the topic of input message.
 func (ctx DefaultUpdateContext) Topic() Stream {
 	return ctx.topic
-}
-
-// Key returns the key of the input message.
-func (ctx DefaultUpdateContext) Key() string {
-	return ctx.key
 }
 
 // Partition returns the partition of the input message.
@@ -118,14 +105,9 @@ func (ctx DefaultUpdateContext) Offset() int64 {
 	return ctx.offset
 }
 
-// Value returns the value of the input message.
-func (ctx DefaultUpdateContext) Value() []byte {
-	return ctx.value
-}
-
 // Headers returns the headers of the input message.
-func (ctx DefaultUpdateContext) Headers() *Headers {
-	return ctx.headers
+func (ctx DefaultUpdateContext) Headers() Headers {
+	return HeadersFromSarama(ctx.headers)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -552,7 +534,7 @@ type eoptions struct {
 	clientID string
 
 	hasher         func() hash.Hash32
-	defaultHeaders *Headers
+	defaultHeaders Headers
 
 	builders struct {
 		topicmgr TopicManagerBuilder
@@ -612,7 +594,7 @@ func WithEmitterTester(t Tester) EmitterOption {
 
 // WithEmitterDefaultHeaders configures the emitter with default headers
 // which are included with every emit.
-func WithEmitterDefaultHeaders(headers *Headers) EmitterOption {
+func WithEmitterDefaultHeaders(headers Headers) EmitterOption {
 	return func(o *eoptions, _ Stream, _ Codec) {
 		o.defaultHeaders = headers
 	}
@@ -637,7 +619,7 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 }
 
 type ctxOptions struct {
-	emitHeaders *Headers
+	emitHeaders Headers
 }
 
 // ContextOption defines a configuration option to be used when performing
@@ -645,7 +627,7 @@ type ctxOptions struct {
 type ContextOption func(*ctxOptions)
 
 // WithCtxEmitHeaders sets kafka headers to use when emitting to kafka
-func WithCtxEmitHeaders(headers *Headers) ContextOption {
+func WithCtxEmitHeaders(headers Headers) ContextOption {
 	return func(opts *ctxOptions) {
 		// Accumulate headers rather than discard previous ones.
 		opts.emitHeaders = opts.emitHeaders.Merged(headers)

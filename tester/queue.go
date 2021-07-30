@@ -10,7 +10,7 @@ type message struct {
 	offset  int64
 	key     string
 	value   []byte
-	headers *goka.Headers
+	headers goka.Headers
 }
 
 type queue struct {
@@ -35,7 +35,7 @@ func (q *queue) Hwm() int64 {
 	return hwm
 }
 
-func (q *queue) push(key string, value []byte, headers *goka.Headers) int64 {
+func (q *queue) push(key string, value []byte, headers goka.Headers) int64 {
 	q.Lock()
 	defer q.Unlock()
 	offset := q.hwm
@@ -96,7 +96,7 @@ func (mt *QueueTracker) Next() (string, interface{}, bool) {
 // NextWithHeaders returns the next message since the last time this
 // function was called (or MoveToEnd).  This includes headers
 // It uses the known codec for the topic to decode the message
-func (mt *QueueTracker) NextWithHeaders() (*goka.Headers, string, interface{}, bool) {
+func (mt *QueueTracker) NextWithHeaders() (goka.Headers, string, interface{}, bool) {
 	headers, key, msgRaw, hasNext := mt.NextRawWithHeaders()
 
 	if !hasNext {
@@ -117,7 +117,7 @@ func (mt *QueueTracker) NextRaw() (string, []byte, bool) {
 }
 
 // NextRawWithHeaders returns the next message similar to Next(), but without the decoding
-func (mt *QueueTracker) NextRawWithHeaders() (*goka.Headers, string, []byte, bool) {
+func (mt *QueueTracker) NextRawWithHeaders() (goka.Headers, string, []byte, bool) {
 	q := mt.tester.getOrCreateQueue(mt.topic)
 	if int(mt.nextOffset) >= q.size() {
 		return nil, "", nil, false

@@ -3,6 +3,7 @@ package goka
 import (
 	"testing"
 
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/storage"
 )
 
@@ -16,19 +17,15 @@ func (p *nullProxy) Stop()                                {}
 func TestUpdateWithHeaders(t *testing.T) {
 	s := storageProxy{
 		update: func(ctx UpdateContext, s storage.Storage, key string, value []byte) error {
-			if ctx.Headers().Len() == 0 {
+			if len(ctx.Headers()) == 0 {
 				t.Errorf("Missing headers")
 				return nil
 			}
-			if ctx.Headers().StrVal("key") != "value" {
-				t.Errorf("Key missmatch. Expected %q. Found: %q", "key", ctx.Headers().StrVal("key"))
+			if string(ctx.Headers()["key"]) != "value" {
+				t.Errorf("Key missmatch. Expected %q. Found: %q", "key", string(ctx.Headers()["key"]))
 			}
 			return nil
 		},
 	}
-	headers, err := NewHeaders("key", "value")
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	_ = s.Update("", nil, 0, headers)
+	_ = s.Update(&DefaultUpdateContext{headers: []*sarama.RecordHeader{{Key: []byte("key"), Value: []byte("value")}}}, "", nil)
 }

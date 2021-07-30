@@ -17,7 +17,7 @@ type Emitter struct {
 	producer Producer
 
 	topic          string
-	defaultHeaders *Headers
+	defaultHeaders Headers
 
 	wg   sync.WaitGroup
 	mu   sync.RWMutex
@@ -57,7 +57,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 func (e *Emitter) emitDone(err error) { e.wg.Done() }
 
 // EmitWithHeaders sends a message with the given headers for the passed key using the emitter's codec.
-func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers *Headers) (*Promise, error) {
+func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers Headers) (*Promise, error) {
 	var (
 		err  error
 		data []byte
@@ -95,7 +95,7 @@ func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
 }
 
 // EmitSyncWithHeaders sends a message with the given headers to passed topic and key.
-func (e *Emitter) EmitSyncWithHeaders(key string, msg interface{}, headers *Headers) error {
+func (e *Emitter) EmitSyncWithHeaders(key string, msg interface{}, headers Headers) error {
 	var (
 		err     error
 		promise *Promise

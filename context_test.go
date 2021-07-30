@@ -17,7 +17,7 @@ import (
 )
 
 func newEmitter(err error, done func(err error)) emitter {
-	return func(topic string, key string, value []byte, headers *Headers) *Promise {
+	return func(topic string, key string, value []byte, headers Headers) *Promise {
 		p := NewPromise()
 		if done != nil {
 			p.Then(done)
@@ -27,7 +27,7 @@ func newEmitter(err error, done func(err error)) emitter {
 }
 
 func newEmitterW(wg *sync.WaitGroup, err error, done func(err error)) emitter {
-	return func(topic string, key string, value []byte, headers *Headers) *Promise {
+	return func(topic string, key string, value []byte, headers Headers) *Promise {
 		wg.Add(1)
 		p := NewPromise()
 		if done != nil {
@@ -369,14 +369,14 @@ func TestContext_GetSetStateful(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		group      Group = "some-group"
-		key              = "key"
-		value            = "value"
-		headers, _       = NewHeaders("key", "headerValue")
-		offset           = int64(123)
-		wg               = new(sync.WaitGroup)
-		st               = NewMockStorage(ctrl)
-		pt               = &PartitionTable{
+		group   Group = "some-group"
+		key           = "key"
+		value         = "value"
+		headers       = Headers{"key": []byte("headerValue")}
+		offset        = int64(123)
+		wg            = new(sync.WaitGroup)
+		st            = NewMockStorage(ctrl)
+		pt            = &PartitionTable{
 			st: &storageProxy{
 				Storage: st,
 			},
@@ -397,7 +397,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 		graph:            graph,
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 		msg:              &sarama.ConsumerMessage{Key: []byte(key), Offset: offset},
-		emitter: func(tp string, k string, v []byte, h *Headers) *Promise {
+		emitter: func(tp string, k string, v []byte, h Headers) *Promise {
 			wg.Add(1)
 			test.AssertEqual(t, tp, graph.GroupTable().Topic())
 			test.AssertEqual(t, string(k), key)
@@ -493,10 +493,10 @@ func TestContext_Loopback(t *testing.T) {
 	defer ctrl.Finish()
 
 	var (
-		key        = "key"
-		value      = "value"
-		headers, _ = NewHeaders("key", "headerValue")
-		cnt        = 0
+		key     = "key"
+		value   = "value"
+		headers = Headers{"key": []byte("headerValue")}
+		cnt     = 0
 	)
 
 	graph := DefineGroup("group", Persist(c), Loop(c, cb))
@@ -504,7 +504,7 @@ func TestContext_Loopback(t *testing.T) {
 		graph:            graph,
 		msg:              &sarama.ConsumerMessage{},
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
-		emitter: func(tp string, k string, v []byte, h *Headers) *Promise {
+		emitter: func(tp string, k string, v []byte, h Headers) *Promise {
 			cnt++
 			test.AssertEqual(t, tp, graph.LoopStream().Topic())
 			test.AssertEqual(t, string(k), key)
@@ -632,7 +632,7 @@ func TestContext_Headers(t *testing.T) {
 	}
 	headers := ctx.Headers()
 	test.AssertNotNil(t, headers)
-	test.AssertEqual(t, headers.Len(), 0)
+	test.AssertEqual(t, len(headers), 0)
 
 	ctx = &cbContext{
 		msg: &sarama.ConsumerMessage{Key: []byte("key"), Headers: []*sarama.RecordHeader{
@@ -643,7 +643,7 @@ func TestContext_Headers(t *testing.T) {
 		}},
 	}
 	headers = ctx.Headers()
-	test.AssertEqual(t, headers.Val("key"), []byte("value"))
+	test.AssertEqual(t, headers["key"], []byte("value"))
 }
 
 func TestContext_Fail(t *testing.T) {
