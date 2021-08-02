@@ -352,7 +352,7 @@ func (tmc *TopicManagerConfig) tableCleanupPolicy() string {
 }
 
 // NewTopicManagerConfig provides a default configuration for auto-creation
-// with replication factor of 1 and rentention time of 1 hour.
+// with replication factor of 2 and rentention time of 1 hour.
 // Use this function rather than creating TopicManagerConfig from scratch to
 // initialize the config with reasonable defaults
 func NewTopicManagerConfig() *TopicManagerConfig {
