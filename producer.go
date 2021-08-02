@@ -12,7 +12,7 @@ import (
 type Producer interface {
 	// Emit sends a message to topic.
 	Emit(topic string, key string, value []byte) *Promise
-	EmitWithHeaders(topic string, key string, value []byte, hdr Headers) *Promise
+	EmitWithHeaders(topic string, key string, value []byte, headers Headers) *Promise
 	Close() error
 }
 
@@ -75,7 +75,7 @@ func (p *producer) Emit(topic string, key string, value []byte) *Promise {
 
 // EmitWithHeaders emits a key-value pair with headers to topic and returns a Promise that
 // can be checked for errors asynchronously
-func (p *producer) EmitWithHeaders(topic string, key string, value []byte, hdr Headers) *Promise {
+func (p *producer) EmitWithHeaders(topic string, key string, value []byte, headers Headers) *Promise {
 	promise := NewPromise()
 
 	p.producer.Input() <- &sarama.ProducerMessage{
@@ -83,7 +83,7 @@ func (p *producer) EmitWithHeaders(topic string, key string, value []byte, hdr H
 		Key:      sarama.StringEncoder(key),
 		Value:    sarama.ByteEncoder(value),
 		Metadata: promise,
-		Headers:  hdr.ToSarama(),
+		Headers:  headers.ToSarama(),
 	}
 	return promise
 }

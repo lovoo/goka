@@ -20,15 +20,9 @@ type emitOption struct {
 type EmitOption func(*emitOption)
 
 // WithHeaders sets kafka headers to use when emitting to kafka
-func WithHeaders(hdr goka.Headers) EmitOption {
+func WithHeaders(headers goka.Headers) EmitOption {
 	return func(opts *emitOption) {
-		if opts.headers == nil {
-			opts.headers = make(goka.Headers)
-		}
-
-		for k, v := range hdr {
-			opts.headers[k] = v
-		}
+		opts.headers = opts.headers.Merged(headers)
 	}
 }
 
@@ -164,8 +158,8 @@ func (tt *Tester) handleEmit(topic string, key string, value []byte, options ...
 	return finisher(&sarama.ProducerMessage{Offset: offset}, nil)
 }
 
-func (tt *Tester) pushMessage(topic string, key string, data []byte, hdr goka.Headers) int64 {
-	return tt.getOrCreateQueue(topic).push(key, data, hdr)
+func (tt *Tester) pushMessage(topic string, key string, data []byte, headers goka.Headers) int64 {
+	return tt.getOrCreateQueue(topic).push(key, data, headers)
 }
 
 func (tt *Tester) ProducerBuilder() goka.ProducerBuilder {

@@ -106,16 +106,14 @@ func TestHeaders(t *testing.T) {
 		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
 			processorHeaders = ctx.Headers()
 			ctx.Emit("output", ctx.Key(), fmt.Sprintf("forwarded: %v", msg),
-				goka.WithCtxEmitHeaders(
-					goka.Headers{
-						"Header1": []byte("to output"),
-						"Header2": []byte("to output2"),
-					}),
-				goka.WithCtxEmitHeaders(
-					goka.Headers{
-						"Header2": []byte("to output3"),
-						"Header3": []byte("to output4"),
-					}),
+				goka.WithCtxEmitHeaders(goka.Headers{
+					"Header1": []byte("to output1"),
+					"Header2": []byte("to output2"),
+				}),
+				goka.WithCtxEmitHeaders(goka.Headers{
+					"Header2": []byte("to output2b"),
+					"Header3": []byte("to output3"),
+				}),
 			)
 		}),
 		goka.Output("output", new(codec.String)),
@@ -140,16 +138,15 @@ func TestHeaders(t *testing.T) {
 	mt := gkt.NewQueueTracker("output")
 
 	// send some message
-	gkt.Consume("input", "key", "some-message", tester.WithHeaders(
-		goka.Headers{
+	gkt.Consume("input", "key", "some-message",
+		tester.WithHeaders(goka.Headers{
 			"Header1": []byte("value 1"),
 			"Header2": []byte("value 2"),
 		}),
-		tester.WithHeaders(
-			goka.Headers{
-				"Header2": []byte("value 3"),
-				"Header3": []byte("value 4"),
-			}),
+		tester.WithHeaders(goka.Headers{
+			"Header2": []byte("value 2b"),
+			"Header3": []byte("value 3"),
+		}),
 	)
 
 	// make sure received the message in the output
@@ -159,14 +156,14 @@ func TestHeaders(t *testing.T) {
 	test.AssertEqual(t, value, "forwarded: some-message")
 
 	// Check headers sent by Emit...
-	test.AssertEqual(t, string(outputHeaders["Header1"]), "to output")
-	test.AssertEqual(t, string(outputHeaders["Header2"]), "to output3")
-	test.AssertEqual(t, string(outputHeaders["Header3"]), "to output4")
+	test.AssertEqual(t, string(outputHeaders["Header1"]), "to output1")
+	test.AssertEqual(t, string(outputHeaders["Header2"]), "to output2b")
+	test.AssertEqual(t, string(outputHeaders["Header3"]), "to output3")
 
 	// Check headers sent to processor
 	test.AssertEqual(t, string(processorHeaders["Header1"]), "value 1")
-	test.AssertEqual(t, string(processorHeaders["Header2"]), "value 3")
-	test.AssertEqual(t, string(processorHeaders["Header3"]), "value 4")
+	test.AssertEqual(t, string(processorHeaders["Header2"]), "value 2b")
+	test.AssertEqual(t, string(processorHeaders["Header3"]), "value 3")
 
 	cancel()
 	<-done

@@ -1,12 +1,12 @@
 package goka
 
 import (
-	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka/storage"
 )
 
 type storageProxy struct {
 	storage.Storage
+	topic     Stream
 	partition int32
 	stateless bool
 	update    UpdateCallback
@@ -29,8 +29,8 @@ func (s *storageProxy) Close() error {
 	return s.closedOnce.Do(s.Storage.Close)
 }
 
-func (s *storageProxy) Update(k string, v []byte, headers ...*sarama.RecordHeader) error {
-	return s.update(s.Storage, s.partition, k, v, headers...)
+func (s *storageProxy) Update(ctx UpdateContext, k string, v []byte) error {
+	return s.update(ctx, s, k, v)
 }
 
 func (s *storageProxy) Stateless() bool {

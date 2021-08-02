@@ -108,7 +108,7 @@ func (pcm *partConsumerMock) catchup() int {
 	var numCatchup int
 	for _, msg := range pcm.queue.messagesFromOffset(pcm.hwm) {
 		pcm.messages <- &sarama.ConsumerMessage{
-			Headers:   msg.saramaHeaders(),
+			Headers:   msg.headers.ToSaramaPtr(),
 			Key:       []byte(msg.key),
 			Value:     msg.value,
 			Topic:     pcm.queue.topic,
