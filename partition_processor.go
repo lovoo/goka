@@ -650,7 +650,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 // Optional parameter value can be set, which will just be forwarded to the visitor-function
 func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, wg *sync.WaitGroup, meta interface{}) error {
 	if pp.table == nil {
-		return fmt.Errorf("cannot visiit values in stateless processor")
+		return fmt.Errorf("cannot visit values in stateless processor")
 	}
 	if _, ok := pp.visitCallbacks[name]; !ok {
 		return fmt.Errorf("unconfigured visit callback. Did you initialize the processor with DefineGroup(..., Visit(%s, ...), ...)?", name)
