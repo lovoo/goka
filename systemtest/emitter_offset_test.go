@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka"
@@ -18,7 +19,7 @@ import (
 // older offsets.
 func TestEmitterOffset(t *testing.T) {
 
-	var topic goka.Stream = "goka-systemtest-emitter-offset"
+	var topic goka.Stream = goka.Stream(fmt.Sprintf("%s-%d", "goka-systemtest-emitter-offset", time.Now().Unix()))
 
 	if !*systemtest {
 		t.Skipf("Ignoring systemtest. pass '-args -systemtest' to `go test` to include them")
@@ -29,7 +30,7 @@ func TestEmitterOffset(t *testing.T) {
 	cfg := goka.DefaultConfig()
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)([]string{*broker})
 	test.AssertNil(t, err)
-	tm.EnsureStreamExists(string(topic), 10)
+	tm.EnsureStreamExists(string(topic), 1)
 
 	var lastOffset int64
 
@@ -49,7 +50,7 @@ func TestEmitterOffset(t *testing.T) {
 			}
 			oldOffset := atomic.SwapInt64(&lastOffset, msg.Offset)
 			if msg.Offset < oldOffset {
-				log.Fatalf("offsets appeared in wrong order")
+				log.Fatalf("offsets appeared in wrong order new=%d, old=%d", msg.Offset, oldOffset)
 			}
 		})
 	}

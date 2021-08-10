@@ -32,14 +32,19 @@ type Group string
 // output, and any other topic from which and into which the processor group
 // may consume or produce events. Each of these links to Kafka is called Edge.
 type GroupGraph struct {
-	group         string
+	// the group marks multiple processor instances to be long together
+	group string
+
+	// the edges define the group graph
 	inputTables   []Edge
 	crossTables   []Edge
 	inputStreams  []Edge
 	outputStreams []Edge
 	loopStream    []Edge
 	groupTable    []Edge
+	visitors      []Edge
 
+	// those fields cache the info from above edges or are used to avoid naming/codec collisions
 	codecs    map[string]Codec
 	callbacks map[string]ProcessCallback
 
@@ -89,6 +94,25 @@ func (gg *GroupGraph) GroupTable() Edge {
 // OutputStreams returns the output stream edges of the group.
 func (gg *GroupGraph) OutputStreams() Edges {
 	return gg.outputStreams
+}
+
+// AllEdges returns a list of all edges for the group graph.
+// This allows to modify a graph by cloning it's edges into a new one.
+//
+//  var existing Graph
+//  edges := existiting.AllEdges()
+//  // modify edges as required
+//  // recreate the modifiedg raph
+//  newGraph := DefineGroup(existing.Groug(), edges...)
+func (gg *GroupGraph) AllEdges() Edges {
+	return chainEdges(
+		gg.inputTables,
+		gg.crossTables,
+		gg.inputStreams,
+		gg.outputStreams,
+		gg.loopStream,
+		gg.groupTable,
+		gg.visitors)
 }
 
 // returns whether the passed topic is a valid group output topic
@@ -164,6 +188,8 @@ func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 			e.setGroup(group)
 			gg.codecs[e.Topic()] = e.Codec()
 			gg.groupTable = append(gg.groupTable, e)
+		case *visitor:
+			gg.visitors = append(gg.visitors, e)
 		}
 	}
 
@@ -203,6 +229,9 @@ func (gg *GroupGraph) Validate() error {
 		if t.Topic() == tableName(gg.Group()) {
 			return errors.New("should not directly use group table")
 		}
+	}
+	if len(gg.visitors) > 0 && len(gg.groupTable) == 0 {
+		return fmt.Errorf("visitors cannot be used in a stateless processor")
 	}
 	return nil
 }
@@ -313,6 +342,31 @@ func Inputs(topics Streams, c Codec, cb ProcessCallback) Edge {
 		edges = append(edges, Input(topic, c, cb))
 	}
 	return inputStreams(edges)
+}
+
+type visitor struct {
+	name string
+	cb   ProcessCallback
+}
+
+func (m *visitor) Topic() string {
+	return m.name
+}
+func (m *visitor) Codec() Codec {
+	return nil
+}
+func (m *visitor) String() string {
+	return fmt.Sprintf("visitor %s", m.name)
+}
+
+// Visitor adds a visitor edge to the processor. This allows to iterate over the whole processor state
+// while running. Note that this can block rebalance or processor shutdown.
+// EXPERIMENTAL! This feature is not fully tested and might trigger unknown bugs. Be careful!
+func Visitor(name string, cb ProcessCallback) Edge {
+	return &visitor{
+		name: name,
+		cb:   cb,
+	}
 }
 
 type loopStream inputStream

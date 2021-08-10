@@ -448,7 +448,7 @@ func (g *Processor) waitForStartupTables(ctx context.Context) error {
 		}
 		for _, part := range partitions {
 			part := part
-			pproc, err := g.createPartitionProcessor(ctx, part, runModeRecoverOnly, func(msg *sarama.ConsumerMessage, meta string) {
+			pproc, err := g.createPartitionProcessor(ctx, part, runModeRecoverOnly, func(msg *message, meta string) {
 				panic("a partition processor in recover-only-mode never commits a message")
 			})
 			if err != nil {
@@ -609,7 +609,13 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	// create partition views for all partitions
 	for partition := range assignment {
 		// create partition processor for our partition
-		pproc, err := g.createPartitionProcessor(session.Context(), partition, runModeActive, session.MarkMessage)
+		pproc, err := g.createPartitionProcessor(session.Context(), partition, runModeActive,
+			func(msg *message, metadata string) {
+				// We have to commit the offset that we want to read next, not the one that we just have
+				// processed, therefore msg.offset+1 is required to get the next message.
+				// This has the same semantics as sarama's implementation of session.MarkMessage (which calls MarkOffset with offset+1)
+				session.MarkOffset(msg.topic, msg.partition, msg.offset+1, metadata)
+			})
 		if err != nil {
 			return fmt.Errorf("Error creating partition processor for %s/%d: %v", g.Graph().Group(), partition, err)
 		}
@@ -628,10 +634,17 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 			// if the partition already exists, it means it is part of the assignment, so we don't
 			// need to keep it on hot-standby and can ignore it.
 
-			if _, ex := g.getPartProc(standby); ex {
+			// we check if the partition processor exists and if it does, ignore it
+			// since it's part of the assignment
+			if _, exists := g.getPartProc(standby); exists {
 				continue
 			}
-			pproc, err := g.createPartitionProcessor(session.Context(), standby, runModePassive, session.MarkMessage)
+
+			// otherwise, let's start the partition processor in passive mode
+			pproc, err := g.createPartitionProcessor(session.Context(), standby, runModePassive,
+				func(msg *message, metadata string) {
+					panic("a passive partition processor should never receive input messages, thus never commit any messages")
+				})
 			if err != nil {
 				return fmt.Errorf("Error creating partition processor for %s/%d: %v", g.Graph().Group(), standby, err)
 			}
@@ -645,6 +658,7 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	for _, partition := range g.partitions {
 		pproc := partition
 		errg.Go(func() error {
+			// TODO (fe): explain why we don't use the errgroup's context here!
 			return pproc.Start(session.Context())
 		})
 	}
@@ -740,7 +754,15 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 			}
 
 			select {
-			case part.input <- msg:
+			case part.input <- &message{
+				key:       string(msg.Key),
+				topic:     msg.Topic,
+				offset:    msg.Offset,
+				partition: msg.Partition,
+				timestamp: msg.Timestamp,
+				headers:   msg.Headers,
+				value:     msg.Value,
+			}:
 			case err := <-errors:
 				if err != nil {
 					return newErrProcessing(err)
@@ -841,6 +863,55 @@ func (g *Processor) createPartitionProcessor(ctx context.Context, partition int3
 // will be returned from teh Processor.Run(..)
 func (g *Processor) Stop() {
 	g.cancel()
+}
+
+// VisitAll visits all keys in parallel by passing the visit request
+// to all partitions.
+// An optional argument "meta" can be passed that will be forwarded to
+// the visit-function of each key of the table.
+// The function returns when a visit to all keys has been triggered or the context is cancelled.
+// Note that this does not imply that all processor callback have already processed the visit-request.
+//
+// TODO (fe): currently we're not triggering to abort a visit upon rebalance, because
+// a partition processor does not know when it's shutting down.
+// That implies that a rebalance will be blocked if there's a running visit request
+func (g *Processor) VisitAll(ctx context.Context, name string, meta interface{}) error {
+	g.mTables.RLock()
+	defer g.mTables.RUnlock()
+
+	errg, ctx := multierr.NewErrGroup(ctx)
+
+	var wg sync.WaitGroup
+	for _, part := range g.partitions {
+		// we'll only do the visit for active mode partitions
+		if part.runMode != runModeActive {
+			continue
+		}
+		part := part
+		wg.Add(1)
+		errg.Go(func() error {
+			defer wg.Done()
+			return part.VisitValues(ctx, name, &wg, meta)
+		})
+	}
+
+	// wait for the waitgroup. We have to wrap it into an extra goroutine using a closing
+	// channel, since on an explicit stop, the waitgroup will never finish, so we would wait
+	// forever here.
+	errg.Go(func() error {
+		wgDone := make(chan struct{})
+		go func() {
+			defer close(wgDone)
+			wg.Wait()
+		}()
+		select {
+		case <-ctx.Done():
+		case <-wgDone:
+		}
+		return nil
+	})
+
+	return errg.Wait().NilOrError()
 }
 
 func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, err error) {
