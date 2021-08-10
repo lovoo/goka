@@ -101,7 +101,7 @@ func process(ctx goka.Context, msg interface{}) {
 
 	u.Clicks++
 	ctx.SetValue(u)
-	// fmt.Printf("[proc] key: %s clicks: %d, msg: %v\n", ctx.Key(), u.Clicks, msg)
+	fmt.Printf("[proc] key: %s clicks: %d, msg: %v\n", ctx.Key(), u.Clicks, msg)
 }
 func runStatelessProcessor(ctx context.Context, monitor *monitor.Server) error {
 	g := goka.DefineGroup(group+"-stateless",
