@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/multierr"
+	"github.com/lovoo/goka/web/actions"
 	"github.com/lovoo/goka/web/index"
 	"github.com/lovoo/goka/web/monitor"
 	"github.com/lovoo/goka/web/query"
@@ -149,11 +151,29 @@ func runJoinProcessor(ctx context.Context, monitor *monitor.Server) error {
 	return p.Run(ctx)
 }
 
-func runProcessor(ctx context.Context, monitor *monitor.Server, query *query.Server) error {
+func runProcessor(ctx context.Context, monitor *monitor.Server, query *query.Server, actions *actions.Server) error {
+
+	// helper function that waits the configured number of times
+	waitVisitor := func(ctx goka.Context, value interface{}) {
+
+		waitTime, ok := value.(int64)
+		if !ok {
+			return
+		}
+
+		log.Printf("Waiting %dms for key %s", waitTime, ctx.Key())
+		select {
+		case <-time.After(time.Millisecond * time.Duration(waitTime)):
+		case <-ctx.Context().Done():
+		}
+	}
 	g := goka.DefineGroup(group,
 		goka.Input(topic, new(codec.String), process),
 		goka.Join(goka.GroupTable(joinGroup), new(codec.String)),
 		goka.Persist(new(userCodec)),
+		goka.Visitor("action1", waitVisitor),
+		goka.Visitor("action2", waitVisitor),
+		goka.Visitor("action3", waitVisitor),
 	)
 	p, err := goka.NewProcessor(brokers, g)
 	if err != nil {
@@ -163,6 +183,29 @@ func runProcessor(ctx context.Context, monitor *monitor.Server, query *query.Ser
 	// attach the processor to the monitor
 	monitor.AttachProcessor(p)
 	query.AttachSource("user-clicks", p.Get)
+	actions.AttachFuncAction("action1", "execute action 1 (wait time in millisecond)",
+		func(ctx context.Context, value string) error {
+			log.Printf("running action1 with value %s", value)
+			var (
+				err    error
+				intVal int64
+			)
+			if value != "" {
+				intVal, err = strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("error parsing value: %v", err)
+				}
+			}
+			return p.VisitAll(ctx, "action1", intVal)
+		})
+	actions.AttachFuncAction("action2", "some action that isn't implemented",
+		func(ctx context.Context, value string) error {
+			return fmt.Errorf("not implemented")
+		})
+	actions.AttachFuncAction("action3", "some action that isn't implemented",
+		func(ctx context.Context, value string) error {
+			return fmt.Errorf("not implemented")
+		})
 
 	err = p.Run(ctx)
 	if err != nil {
@@ -238,7 +281,10 @@ func main() {
 	cfg.Version = sarama.V2_4_0_0
 	goka.ReplaceGlobalConfig(cfg)
 
-	tmgr, _ := goka.NewTopicManager(brokers, goka.DefaultConfig(), goka.NewTopicManagerConfig())
+	tmgr, err := goka.NewTopicManager(brokers, goka.DefaultConfig(), goka.NewTopicManagerConfig())
+	if err != nil {
+		log.Fatalf("error creating topic manager: %v", err)
+	}
 	tmgr.EnsureStreamExists(string(topic), 2)
 	tmgr.EnsureTableExists(string(goka.GroupTable(group)), 2)
 
@@ -246,9 +292,11 @@ func main() {
 	pprofInit(root)
 	monitorServer := monitor.NewServer("/monitor", root)
 	queryServer := query.NewServer("/query", root)
+	actionServer := actions.NewServer("/actions", root)
 	idxServer := index.NewServer("/", root)
 	idxServer.AddComponent(monitorServer, "Monitor")
 	idxServer.AddComponent(queryServer, "Query")
+	idxServer.AddComponent(actionServer, "Actions")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -267,7 +315,7 @@ func main() {
 	})
 	errg.Go(func() error {
 		defer log.Printf("processor done")
-		return runProcessor(ctx, monitorServer, queryServer)
+		return runProcessor(ctx, monitorServer, queryServer, actionServer)
 	})
 	errg.Go(func() error {
 		defer log.Printf("stateless processor done")

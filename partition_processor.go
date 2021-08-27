@@ -34,7 +34,14 @@ const (
 	runModeRecoverOnly
 )
 
-type commitCallback func(msg *sarama.ConsumerMessage, meta string)
+type visit struct {
+	key  string
+	name string
+	meta interface{}
+	done func()
+}
+
+type commitCallback func(msg *message, meta string)
 
 // PartitionProcessor handles message processing of one partition by serializing
 // messages from different input topics.
@@ -53,8 +60,11 @@ type PartitionProcessor struct {
 
 	partition int32
 
-	input       chan *sarama.ConsumerMessage
+	input       chan *message
 	inputTopics []string
+
+	visitInput     chan *visit
+	visitCallbacks map[string]ProcessCallback
 
 	runnerGroup       *multierr.ErrGroup
 	cancelRunnerGroup func()
@@ -103,9 +113,10 @@ func newPartitionProcessor(partition int32,
 	}
 
 	var (
-		topicList  []string
-		outputList []string
-		callbacks  = make(map[string]ProcessCallback)
+		topicList      []string
+		outputList     []string
+		callbacks      = make(map[string]ProcessCallback)
+		visitCallbacks = make(map[string]ProcessCallback)
 	)
 	for t := range topicMap {
 		topicList = append(topicList, t)
@@ -126,6 +137,10 @@ func newPartitionProcessor(partition int32,
 
 	statsLoopCtx, cancel := context.WithCancel(context.Background())
 
+	for _, v := range graph.visitors {
+		visitCallbacks[v.(*visitor).name] = v.(*visitor).cb
+	}
+
 	partProc := &PartitionProcessor{
 		log:             log,
 		opts:            opts,
@@ -137,8 +152,10 @@ func newPartitionProcessor(partition int32,
 		producer:        producer,
 		tmgr:            tmgr,
 		joins:           make(map[string]*PartitionTable),
-		input:           make(chan *sarama.ConsumerMessage, opts.partitionChannelSize),
+		input:           make(chan *message, opts.partitionChannelSize),
 		inputTopics:     topicList,
+		visitInput:      make(chan *visit, 100),
+		visitCallbacks:  visitCallbacks,
 		graph:           graph,
 		stats:           newPartitionProcStats(topicList, outputList),
 		requestStats:    make(chan bool),
@@ -164,11 +181,6 @@ func newPartitionProcessor(partition int32,
 		)
 	}
 	return partProc
-}
-
-// EnqueueMessage enqueues a message in the partition processor's event channel for processing
-func (pp *PartitionProcessor) EnqueueMessage(msg *sarama.ConsumerMessage) {
-	pp.input <- msg
 }
 
 // Recovered returns whether the processor is running (i.e. all joins, lookups and the table is recovered and it's consuming messages)
@@ -386,15 +398,21 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 			}
 			err := pp.processMessage(ctx, &wg, ev, syncFailer, asyncFailer)
 			if err != nil {
-				return fmt.Errorf("error processing message: from %s %v", ev.Value, err)
+				return fmt.Errorf("error processing message: from %s %v", string(ev.value), err)
 			}
 
 			pp.enqueueStatsUpdate(ctx, func() { pp.updateStatsWithMessage(ev) })
-
 		case <-ctx.Done():
 			pp.log.Debugf("exiting, context is cancelled")
 			return
-
+		case visit, open := <-pp.visitInput:
+			if !open {
+				return nil
+			}
+			err := pp.processVisit(ctx, &wg, visit, syncFailer, asyncFailer)
+			if err != nil {
+				return fmt.Errorf("Error migrating %s for %s: %v", visit.name, visit.key, err)
+			}
 		case <-asyncErrs:
 			pp.log.Debugf("Errors occurred asynchronously. Will exit partition processor")
 			return
@@ -438,12 +456,12 @@ func (pp *PartitionProcessor) runStatsLoop(ctx context.Context) {
 }
 
 // updateStatsWithMessage updates the stats with a received message
-func (pp *PartitionProcessor) updateStatsWithMessage(ev *sarama.ConsumerMessage) {
-	ip := pp.stats.Input[ev.Topic]
-	ip.Bytes += len(ev.Value)
-	ip.LastOffset = ev.Offset
-	if !ev.Timestamp.IsZero() {
-		ip.Delay = time.Since(ev.Timestamp)
+func (pp *PartitionProcessor) updateStatsWithMessage(ev *message) {
+	ip := pp.stats.Input[ev.topic]
+	ip.Bytes += len(ev.value)
+	ip.LastOffset = ev.offset
+	if !ev.timestamp.IsZero() {
+		ip.Delay = time.Since(ev.timestamp)
 	}
 	ip.Count++
 }
@@ -528,7 +546,45 @@ func (pp *PartitionProcessor) enqueueTrackOutputStats(ctx context.Context, topic
 	})
 }
 
-func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitGroup, msg *sarama.ConsumerMessage, syncFailer func(err error), asyncFailer func(err error)) error {
+func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGroup, v *visit, syncFailer func(err error), asyncFailer func(err error)) error {
+	cb, ok := pp.visitCallbacks[v.name]
+	// no callback registered for migration
+	if !ok {
+		return fmt.Errorf("no callback registered for migration")
+	}
+
+	msgContext := &cbContext{
+		ctx:   ctx,
+		graph: pp.graph,
+
+		trackOutputStats: pp.enqueueTrackOutputStats,
+		pviews:           pp.joins,
+		views:            pp.lookups,
+		commit:           v.done,
+		wg:               wg,
+		msg: &message{
+			key:       v.key,
+			topic:     v.name,
+			partition: pp.partition,
+			timestamp: time.Now(),
+		},
+		syncFailer:            syncFailer,
+		asyncFailer:           asyncFailer,
+		emitter:               pp.producer.EmitWithHeaders,
+		emitterDefaultHeaders: pp.opts.producerDefaultHeaders,
+		table:                 pp.table,
+	}
+
+	// start context and call the ProcessorCallback cb
+	msgContext.start()
+
+	// now call cb
+	cb(msgContext, v.meta)
+	msgContext.finish(nil)
+	return nil
+}
+
+func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitGroup, msg *message, syncFailer func(err error), asyncFailer func(err error)) error {
 	msgContext := &cbContext{
 		ctx:   ctx,
 		graph: pp.graph,
@@ -553,32 +609,32 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 
 	// decide whether to decode or ignore message
 	switch {
-	case msg.Value == nil && pp.opts.nilHandling == NilIgnore:
+	case msg.value == nil && pp.opts.nilHandling == NilIgnore:
 		// mark the message upstream so we don't receive it again.
 		// this is usually only an edge case in unit tests, as kafka probably never sends us nil messages
 		pp.commit(msg, "")
 		// otherwise drop it.
 		return nil
-	case msg.Value == nil && pp.opts.nilHandling == NilProcess:
+	case msg.value == nil && pp.opts.nilHandling == NilProcess:
 		// process nil messages without decoding them
 		m = nil
 	default:
 		// get stream subcription
-		codec := pp.graph.codec(msg.Topic)
+		codec := pp.graph.codec(msg.topic)
 		if codec == nil {
-			return fmt.Errorf("cannot handle topic %s", msg.Topic)
+			return fmt.Errorf("cannot handle topic %s", msg.topic)
 		}
 
 		// decode message
-		m, err = codec.Decode(msg.Value)
+		m, err = codec.Decode(msg.value)
 		if err != nil {
-			return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.Key, msg.Topic, msg.Partition, err)
+			return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.key, msg.topic, msg.partition, err)
 		}
 	}
 
-	cb := pp.callbacks[msg.Topic]
+	cb := pp.callbacks[msg.topic]
 	if cb == nil {
-		return fmt.Errorf("error processing message for key %s from %s/%d: %v", string(msg.Key), msg.Topic, msg.Partition, err)
+		return fmt.Errorf("error processing message for key %s from %s/%d: %v", msg.key, msg.topic, msg.partition, err)
 	}
 
 	// start context and call the ProcessorCallback cb
@@ -587,5 +643,45 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	// now call cb
 	cb(msgContext, m)
 	msgContext.finish(nil)
+	return nil
+}
+
+// VisitValues iterates over all values in the table and calls the "visit"-callback for the passed name.
+// Optional parameter value can be set, which will just be forwarded to the visitor-function
+func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, wg *sync.WaitGroup, meta interface{}) error {
+	if pp.table == nil {
+		return fmt.Errorf("cannot visit values in stateless processor")
+	}
+	if _, ok := pp.visitCallbacks[name]; !ok {
+		return fmt.Errorf("unconfigured visit callback. Did you initialize the processor with DefineGroup(..., Visit(%s, ...), ...)?", name)
+	}
+
+	it, err := pp.table.Iterator()
+	if err != nil {
+		return fmt.Errorf("error creating storage iterator")
+	}
+	defer it.Release()
+	for it.Next() {
+
+		// add one that we're going to put into the queue
+		// wg.Done will be called by the visit handler
+		wg.Add(1)
+		select {
+		case <-ctx.Done():
+			// context is closed, so we know that the current visit never entered the channel
+			// so we have to remove it from the waitgroup to avoid the lock.
+			wg.Done()
+			return nil
+		// enqueue the visit
+		case pp.visitInput <- &visit{
+			key:  string(it.Key()),
+			name: name,
+			meta: meta,
+			done: wg.Done,
+		}:
+			// TODO (fe): add a notification when the processor shuts down so we can react to that instead of waiting for the global context
+			// In this case we also have to drain the visitInput channel and call wg.Done() for each visit, so the caller does not wait for the waitgroup
+		}
+	}
 	return nil
 }

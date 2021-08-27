@@ -169,6 +169,60 @@ func TestHeaders(t *testing.T) {
 	<-done
 }
 
+// Tests that errors inside the callback lead to processor shutdown
+func TestProcessorVisit(t *testing.T) {
+	gkt := tester.New(t)
+
+	proc, _ := goka.NewProcessor(nil,
+		goka.DefineGroup(
+			"test",
+			goka.Input("input-topic", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+				ctx.SetValue(msg)
+			}),
+			goka.Persist(new(codec.Int64)),
+			goka.Output("output", new(codec.Int64)),
+			goka.Visitor("reset", func(ctx goka.Context, msg interface{}) {
+				ctx.Emit("output", ctx.Key(), msg)
+				ctx.SetValue(msg)
+			}),
+		),
+		goka.WithTester(gkt),
+	)
+
+	outputTracker := gkt.NewQueueTracker("output")
+
+	var (
+		done = make(chan struct{})
+		err  error
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		defer close(done)
+		err = proc.Run(ctx)
+	}()
+
+	gkt.Consume("input-topic", "a", int64(123))
+	test.AssertEqual(t, gkt.TableValue("test-table", "a"), int64(123))
+
+	// no output yet
+	_, _, ok := outputTracker.Next()
+	test.AssertFalse(t, ok)
+
+	proc.VisitAll(ctx, "reset", int64(15))
+	time.Sleep(100 * time.Millisecond)
+	k, v, ok := outputTracker.Next()
+	test.AssertTrue(t, ok)
+	test.AssertEqual(t, k, "a")
+	test.AssertEqual(t, v, int64(15))
+	test.AssertEqual(t, gkt.TableValue("test-table", "a"), int64(15))
+
+	cancel()
+	<-done
+	test.AssertNil(t, err)
+}
+
 /*
 import (
 	"context"
