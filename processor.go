@@ -610,12 +610,8 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	for partition := range assignment {
 		// create partition processor for our partition
 		pproc, err := g.createPartitionProcessor(session.Context(), partition, runModeActive,
-			func(msg *message, metadata string) {
-				// We have to commit the offset that we want to read next, not the one that we just have
-				// processed, therefore msg.offset+1 is required to get the next message.
-				// This has the same semantics as sarama's implementation of session.MarkMessage (which calls MarkOffset with offset+1)
-				session.MarkOffset(msg.topic, msg.partition, msg.offset+1, metadata)
-			})
+			createMessageCommitter(session),
+		)
 		if err != nil {
 			return fmt.Errorf("Error creating partition processor for %s/%d: %v", g.Graph().Group(), partition, err)
 		}
@@ -973,4 +969,19 @@ func ensureCopartitioned(tm TopicManager, topics []string) (int, error) {
 		}
 	}
 	return npar, nil
+}
+
+// createMessageCommitter returns a commitCallback that allows to commit a message into the passed
+// sarama.ConsumerGroupSession.
+//
+// Note that the offset to be committed must be offset that the consumer expects to consume next, not the offset of the message.
+// See documentation at https://kafka.apache.org/25/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html which says:
+//
+//   Note: The committed offset should always be the offset of the next message that your application will read. Thus, when calling commitSync(offsets) you should add one to the offset of the last message processed.
+//
+// This has the same semantics as sarama's implementation of session.MarkMessage (which calls MarkOffset with offset+1)
+func createMessageCommitter(session sarama.ConsumerGroupSession) commitCallback {
+	return func(msg *message, metadata string) {
+		session.MarkOffset(msg.topic, msg.partition, msg.offset+1, metadata)
+	}
 }

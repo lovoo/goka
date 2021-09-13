@@ -411,7 +411,7 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 			}
 			err := pp.processVisit(ctx, &wg, visit, syncFailer, asyncFailer)
 			if err != nil {
-				return fmt.Errorf("Error migrating %s for %s: %v", visit.name, visit.key, err)
+				return fmt.Errorf("Error visiting %s for %s: %v", visit.name, visit.key, err)
 			}
 		case <-asyncErrs:
 			pp.log.Debugf("Errors occurred asynchronously. Will exit partition processor")
@@ -548,9 +548,9 @@ func (pp *PartitionProcessor) enqueueTrackOutputStats(ctx context.Context, topic
 
 func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGroup, v *visit, syncFailer func(err error), asyncFailer func(err error)) error {
 	cb, ok := pp.visitCallbacks[v.name]
-	// no callback registered for migration
+	// no callback registered for visit
 	if !ok {
-		return fmt.Errorf("no callback registered for migration")
+		return fmt.Errorf("no callback registered for visit named '%s'", v.name)
 	}
 
 	msgContext := &cbContext{
