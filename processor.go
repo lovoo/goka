@@ -974,7 +974,7 @@ func ensureCopartitioned(tm TopicManager, topics []string) (int, error) {
 // createMessageCommitter returns a commitCallback that allows to commit a message into the passed
 // sarama.ConsumerGroupSession.
 //
-// Note that the offset to be committed must be offset that the consumer expects to consume next, not the offset of the message.
+// Note that the offset to be committed must be the offset that the consumer expects to consume next, not the offset of the message.
 // See documentation at https://kafka.apache.org/25/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html which says:
 //
 //   Note: The committed offset should always be the offset of the next message that your application will read. Thus, when calling commitSync(offsets) you should add one to the offset of the last message processed.
