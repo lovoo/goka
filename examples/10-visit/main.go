@@ -16,8 +16,8 @@ import (
 
 var (
 	brokers             = []string{"localhost:9092"}
-	topic   goka.Stream = "example-migration-clicks-input"
-	group   goka.Group  = "example-migration-group"
+	topic   goka.Stream = "example-visit-clicks-input"
+	group   goka.Group  = "example-visit-group"
 
 	tmc *goka.TopicManagerConfig
 )
@@ -61,7 +61,7 @@ func main() {
 	}
 	err = tm.EnsureStreamExists(string(topic), 8)
 	if err != nil {
-		log.Printf("Error creating kafka topic %s: %v", topic, err)
+		log.Fatalf("Error creating kafka topic %s: %v", topic, err)
 	}
 
 	sigs := make(chan os.Signal)
