@@ -155,7 +155,7 @@ func (m *topicManager) createTopic(topic string, npar, rfactor int, config map[s
 			topic, npar, rfactor, config, err)
 	}
 
-	return nil
+	return m.waitForCreated(topic)
 }
 
 func (m *topicManager) handleConfigMismatch(message string) error {
@@ -227,6 +227,33 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 	}
 
 	return nil
+}
+
+func (m *topicManager) waitForCreated(topic string) error {
+	start := time.Now()
+	for m.topicManagerConfig.CreateTopicTimeout != 0 {
+
+		// past timeout, break the loop
+		if time.Since(start) > m.topicManagerConfig.CreateTopicTimeout {
+			break
+		}
+
+		// check partitions for topic
+		if _, err := m.Partitions(topic); err != nil {
+			// if it's not found retry after sleep
+			if err != errTopicNotFound {
+				return fmt.Errorf("error checking topic: %v", err)
+			}
+			time.Sleep(time.Second)
+			continue // retry
+		}
+
+		// it was found, stop here.
+		return nil
+	}
+
+	// wasn't found after timeout
+	return fmt.Errorf("Waiting for topic %s to be created timed out", topic)
 }
 
 func (m *topicManager) adminSupported() bool {
@@ -333,6 +360,13 @@ type TopicManagerConfig struct {
 		CleanupPolicy string
 	}
 
+	// CreateTopicTimeout timeout for the topic manager to wait for the topic being created.
+	// Set to 0 to turn off checking topic creation.
+	// Defaults to 10 seconds
+	CreateTopicTimeout time.Duration
+
+	// TMConfigMismatchBehavior configures how configuration mismatches of a topic (replication, num partitions, compaction) should be
+	// treated
 	MismatchBehavior TMConfigMismatchBehavior
 }
 
@@ -363,5 +397,6 @@ func NewTopicManagerConfig() *TopicManagerConfig {
 
 	cfg.MismatchBehavior = TMConfigMismatchBehaviorIgnore
 	cfg.Logger = defaultLogger.Prefix("topic_manager")
+	cfg.CreateTopicTimeout = 10 * time.Second
 	return cfg
 }
