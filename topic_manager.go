@@ -230,9 +230,14 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 }
 
 func (m *topicManager) waitForCreated(topic string) error {
-	start := time.Now()
-	for m.topicManagerConfig.CreateTopicTimeout != 0 {
 
+	// no timeout defined -> no check
+	if m.topicManagerConfig.CreateTopicTimeout == 0 {
+		return nil
+	}
+
+	start := time.Now()
+	for {
 		// past timeout, break the loop
 		if time.Since(start) > m.topicManagerConfig.CreateTopicTimeout {
 			break

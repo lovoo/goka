@@ -244,8 +244,13 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 
 		tm.topicManagerConfig.Stream.Replication = rfactor
 		tm.topicManagerConfig.Stream.Retention = time.Second
-		bm.client.EXPECT().RefreshMetadata().Return(nil)
-		bm.client.EXPECT().Topics().Return(nil, nil)
+		bm.client.EXPECT().RefreshMetadata().Return(nil).AnyTimes()
+
+		gomock.InOrder(
+			bm.client.EXPECT().Topics().Return(nil, nil),
+			bm.client.EXPECT().Topics().Return([]string{"some-topic"}, nil),
+			bm.client.EXPECT().Partitions("some-topic").Return([]int32{0}, nil),
+		)
 		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(nil)
 
 		err := tm.EnsureStreamExists(topic, npar)
@@ -280,6 +285,14 @@ func TestTM_createTopic(t *testing.T) {
 				"a": "a",
 			}
 		)
+
+		bm.client.EXPECT().RefreshMetadata().Return(nil).AnyTimes()
+		gomock.InOrder(
+			bm.client.EXPECT().Topics().Return(nil, nil),
+			bm.client.EXPECT().Topics().Return([]string{"some-topic"}, nil),
+			bm.client.EXPECT().Partitions("some-topic").Return([]int32{0}, nil),
+		)
+
 		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(nil)
 		err := tm.createTopic(topic, npar, rfactor, config)
 		test.AssertNil(t, err)
@@ -467,8 +480,34 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 			}
 		)
 
-		bm.client.EXPECT().Topics().Return([]string{}, nil)
+		bm.client.EXPECT().RefreshMetadata().Return(nil).AnyTimes()
+		gomock.InOrder(
+			bm.client.EXPECT().Topics().Return(nil, nil),
+			bm.client.EXPECT().Topics().Return([]string{"some-topic"}, nil),
+			bm.client.EXPECT().Partitions("some-topic").Return([]int32{0}, nil),
+		)
+
+		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(nil)
+
+		err := tm.EnsureTopicExists(topic, npar, rfactor, config)
+		test.AssertNil(t, err)
+	})
+	t.Run("create-nowait", func(t *testing.T) {
+		tm, bm, ctrl := createTopicManager(t)
+		tm.topicManagerConfig.CreateTopicTimeout = 0
+		defer ctrl.Finish()
+		var (
+			topic   = "some-topic"
+			npar    = 1
+			rfactor = 1
+			config  = map[string]string{
+				"a": "a",
+			}
+		)
+
 		bm.client.EXPECT().RefreshMetadata().Return(nil)
+		bm.client.EXPECT().Topics().Return(nil, nil)
+
 		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(nil)
 
 		err := tm.EnsureTopicExists(topic, npar, rfactor, config)
