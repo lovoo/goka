@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -230,34 +231,25 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 }
 
 func (m *topicManager) waitForCreated(topic string) error {
-
 	// no timeout defined -> no check
 	if m.topicManagerConfig.CreateTopicTimeout == 0 {
 		return nil
 	}
 
-	start := time.Now()
-	for {
-		// past timeout, break the loop
-		if time.Since(start) > m.topicManagerConfig.CreateTopicTimeout {
-			break
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), m.topicManagerConfig.CreateTopicTimeout)
+	defer cancel()
 
-		// check partitions for topic
-		if _, err := m.Partitions(topic); err != nil {
-			// if it's not found retry after sleep
-			if err != errTopicNotFound {
-				return fmt.Errorf("error checking topic: %v", err)
-			}
+	for ctx.Err() == nil {
+		_, err := m.Partitions(topic)
+		switch err {
+		case nil:
+			return nil
+		case errTopicNotFound:
 			time.Sleep(time.Second)
-			continue // retry
+		default:
+			return fmt.Errorf("error checking topic: %w", err)
 		}
-
-		// it was found, stop here.
-		return nil
 	}
-
-	// wasn't found after timeout
 	return fmt.Errorf("Waiting for topic %s to be created timed out", topic)
 }
 
