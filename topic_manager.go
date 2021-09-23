@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -155,7 +156,7 @@ func (m *topicManager) createTopic(topic string, npar, rfactor int, config map[s
 			topic, npar, rfactor, config, err)
 	}
 
-	return nil
+	return m.waitForCreated(topic)
 }
 
 func (m *topicManager) handleConfigMismatch(message string) error {
@@ -227,6 +228,29 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 	}
 
 	return nil
+}
+
+func (m *topicManager) waitForCreated(topic string) error {
+	// no timeout defined -> no check
+	if m.topicManagerConfig.CreateTopicTimeout == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), m.topicManagerConfig.CreateTopicTimeout)
+	defer cancel()
+
+	for ctx.Err() == nil {
+		_, err := m.Partitions(topic)
+		switch err {
+		case nil:
+			return nil
+		case errTopicNotFound:
+			time.Sleep(time.Second)
+		default:
+			return fmt.Errorf("error checking topic: %w", err)
+		}
+	}
+	return fmt.Errorf("Waiting for topic %s to be created timed out", topic)
 }
 
 func (m *topicManager) adminSupported() bool {
@@ -333,6 +357,13 @@ type TopicManagerConfig struct {
 		CleanupPolicy string
 	}
 
+	// CreateTopicTimeout timeout for the topic manager to wait for the topic being created.
+	// Set to 0 to turn off checking topic creation.
+	// Defaults to 10 seconds
+	CreateTopicTimeout time.Duration
+
+	// TMConfigMismatchBehavior configures how configuration mismatches of a topic (replication, num partitions, compaction) should be
+	// treated
 	MismatchBehavior TMConfigMismatchBehavior
 }
 
@@ -363,5 +394,6 @@ func NewTopicManagerConfig() *TopicManagerConfig {
 
 	cfg.MismatchBehavior = TMConfigMismatchBehaviorIgnore
 	cfg.Logger = defaultLogger.Prefix("topic_manager")
+	cfg.CreateTopicTimeout = 10 * time.Second
 	return cfg
 }
