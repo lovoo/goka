@@ -330,7 +330,7 @@ func main() {
 		cancel()
 	}
 
-	if err := errg.Wait().NilOrError(); err != nil {
+	if err := errg.Wait().ErrorOrNil(); err != nil {
 		log.Fatalf("Error running monitoring example: %v", err)
 	} else {
 		log.Printf("Example gracefully shutdown")

@@ -15,6 +15,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/gorilla/mux"
+	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/multierr"
@@ -77,10 +78,10 @@ func runEmitter(ctx context.Context) (rerr error) {
 	}
 
 	defer func() {
-		errs := new(multierr.Errors)
-		errs.Collect(emitterA.Finish())
-		errs.Collect(emitterB.Finish())
-		rerr = errs.NilOrError()
+		rerr = multierror.Append(
+			emitterA.Finish(),
+			emitterB.Finish(),
+		).ErrorOrNil()
 	}()
 
 	t := time.NewTicker(100 * time.Millisecond)
@@ -233,7 +234,7 @@ func main() {
 		cancel()
 	}
 
-	if err := errg.Wait().NilOrError(); err != nil {
+	if err := errg.Wait().ErrorOrNil(); err != nil {
 		log.Fatalf("Error running example: %v", err)
 	} else {
 		log.Printf("Example gracefully shutdown")

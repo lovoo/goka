@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
@@ -256,43 +257,12 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	g.state.SetState(ProcStateStarting)
 
 	// collect all errors before leaving
-	merrors := new(multierr.Errors)
+	var errs *multierror.Error
 	defer func() {
-		_ = merrors.Collect(rerr)
-		rerr = merrors.NilOrError()
+		rerr = multierror.Append(errs, rerr).ErrorOrNil()
 	}()
 
-	// create kafka consumer
-	consumerGroup, err := g.opts.builders.consumerGroup(g.brokers, string(g.graph.Group()), g.opts.clientID)
-	if err != nil {
-		return fmt.Errorf(errBuildConsumer, err)
-	}
-
-	errg.Go(func() error {
-		consumerErrors := consumerGroup.Errors()
-
-		for {
-			select {
-			case err, ok := <-consumerErrors:
-				if !ok {
-					return nil
-				}
-				var cbErr *errProcessing
-				if errors.As(err, &cbErr) {
-					g.log.Printf("error processing message (non-transient), stopping execution: %v", err)
-					return cbErr
-				}
-
-				g.log.Printf("Error executing group consumer (continuing execution): %v", err)
-			case <-ctx.Done():
-				//  drain the channel and log in case we still have errors in the channel, otherwise they would be muted.
-				for err := range consumerErrors {
-					g.log.Printf("Error executing consumer group: %v", err)
-				}
-			}
-		}
-	})
-
+	var err error
 	g.saramaConsumer, err = g.opts.builders.consumerSarama(g.brokers, g.opts.clientID)
 	if err != nil {
 		return fmt.Errorf("Error creating consumer for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
@@ -314,7 +284,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 		g.log.Debugf("closing producer")
 		defer g.log.Debugf("producer ... closed")
 		if err := g.producer.Close(); err != nil {
-			merrors.Collect(fmt.Errorf("error closing producer: %v", err))
+			errs = multierror.Append(errs, fmt.Errorf("error closing producer: %w", err))
 		}
 	}()
 
@@ -337,13 +307,27 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 
 	// run the main rebalance-consume-loop
 	errg.Go(func() error {
-		return g.rebalanceLoop(ctx, consumerGroup)
+		return g.rebalanceLoop(ctx)
 	})
 
-	return errg.Wait().NilOrError()
+	return errg.Wait().ErrorOrNil()
 }
 
-func (g *Processor) rebalanceLoop(ctx context.Context, consumerGroup sarama.ConsumerGroup) (rerr error) {
+func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
+
+	// create kafka consumer
+	consumerGroup, err := g.opts.builders.consumerGroup(g.brokers, string(g.graph.Group()), g.opts.clientID)
+	if err != nil {
+		return fmt.Errorf(errBuildConsumer, err)
+	}
+
+	go func() {
+		errs := consumerGroup.Errors()
+		for err := range errs {
+			g.log.Printf("error while executing consumer group: %v", err)
+		}
+	}()
+
 	var topics []string
 	for _, e := range g.graph.InputStreams() {
 		topics = append(topics, e.Topic())
@@ -352,56 +336,50 @@ func (g *Processor) rebalanceLoop(ctx context.Context, consumerGroup sarama.Cons
 		topics = append(topics, g.graph.LoopStream().Topic())
 	}
 
-	var errs = new(multierr.Errors)
+	var errs *multierror.Error
 
 	defer func() {
-		errs.Collect(rerr)
-		rerr = errs.NilOrError()
+		rerr = multierror.Append(errs, rerr).ErrorOrNil()
 	}()
 
 	defer func() {
 		g.log.Debugf("closing consumer group")
 		defer g.log.Debugf("closing consumer group ... done")
-		errs.Collect(consumerGroup.Close())
+		errs = multierror.Append(errs, consumerGroup.Close())
 	}()
 
 	for {
+		err := consumerGroup.Consume(ctx, topics, g)
 		var (
-			consumeErr = make(chan error)
+			errProc  *errProcessing
+			errSetup *errSetup
 		)
-		go func() {
-			g.log.Debugf("consuming from consumer loop")
-			defer g.log.Debugf("consuming from consumer loop done")
-			defer close(consumeErr)
-			err := consumerGroup.Consume(ctx, topics, g)
-			if err != nil {
-				consumeErr <- err
-			}
-		}()
-		select {
-		case err := <-consumeErr:
-			g.log.Debugf("Consumer group loop done, will stop here")
 
-			if err != nil {
-				errs.Collect(err)
-				return
-			}
-		case <-ctx.Done():
-			g.log.Debugf("context closed, waiting for processor to finish up")
-			err := <-consumeErr
-			errs.Collect(err)
-			g.log.Debugf("context closed, waiting for processor to finish up")
-			return
+		if errors.As(err, &errProc) {
+			g.log.Debugf("error processing message (non-transient), shutting down processor: %v", err)
+			return err
 		}
-		// let's wait some time before we retry to consume
-		<-time.After(5 * time.Second)
+		if errors.As(err, &errSetup) {
+			g.log.Debugf("setup error (non-transient), shutting down processor: %v", err)
+			return err
+		}
+
+		if err != nil {
+			g.log.Printf("Error executing group consumer (continuing execution, rebalance after short sleep): %v", err)
+		}
+
+		select {
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+			return nil
+		}
 	}
 }
 
 // waits for all tables that are supposed to start up
 func (g *Processor) waitForStartupTables(ctx context.Context) error {
 
-	errg, ctx := multierr.NewErrGroup(ctx)
+	errg, startupCtx := multierr.NewErrGroup(ctx)
 
 	var (
 		waitMap  = make(map[string]struct{})
@@ -431,7 +409,7 @@ func (g *Processor) waitForStartupTables(ctx context.Context) error {
 			}()
 
 			select {
-			case <-ctx.Done():
+			case <-startupCtx.Done():
 			case <-view.WaitRunning():
 			}
 			return nil
@@ -469,14 +447,13 @@ func (g *Processor) waitForStartupTables(ctx context.Context) error {
 				g.setPartProc(part, pproc)
 				defer g.setPartProc(part, nil)
 
-				err := pproc.Start(ctx)
+				err := pproc.Start(ctx, ctx)
 				if err != nil {
 					return err
 				}
 				return pproc.Stop()
 			})
 		}
-
 	}
 
 	var (
@@ -592,6 +569,36 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	g.log.Debugf("setup generation %d, claims=%#v", session.GenerationID(), session.Claims())
 	defer g.log.Debugf("setup generation %d ... done", session.GenerationID())
 
+	if err := g.createAssignedPartitions(session); err != nil {
+		return err
+	}
+
+	if err := g.createHotStandbyPartitions(session); err != nil {
+		return err
+	}
+
+	// setup all processors
+	setupErrg, setupCtx := multierr.NewErrGroup(session.Context())
+	g.mTables.RLock()
+	for partID, partition := range g.partitions {
+		pproc := partition
+		setupErrg.Go(func() error {
+			// the partition processors need two contexts:
+			// setupCtx --> for this setup, which we'll wait for
+			// the runner ctx, which is active during a session
+			err := pproc.Start(setupCtx, session.Context())
+			if err != nil {
+				return newErrSetup(partID, err)
+			}
+			return nil
+		})
+	}
+	g.mTables.RUnlock()
+
+	return setupErrg.Wait().ErrorOrNil()
+}
+
+func (g *Processor) createAssignedPartitions(session sarama.ConsumerGroupSession) error {
 	assignment, err := g.assignmentFromSession(session)
 	if err != nil {
 		return fmt.Errorf("Error verifying assignment from session: %v", err)
@@ -617,50 +624,41 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 		}
 		g.setPartProc(partition, pproc)
 	}
+	return nil
+}
 
-	// if hot standby is configured, we find the partitions that are missing
-	// from the current assignment, and create those processors in standby mode
-	if g.opts.hotStandby {
-		allPartitions, err := g.findStatefulPartitions()
+// if hot standby is configured, we find the partitions that are missing
+// from the current assignment, and create those processors in standby mode
+func (g *Processor) createHotStandbyPartitions(session sarama.ConsumerGroupSession) error {
+	if !g.opts.hotStandby {
+		return nil
+	}
+	allPartitions, err := g.findStatefulPartitions()
 
+	if err != nil {
+		return fmt.Errorf("Error finding partitions for standby")
+	}
+	for _, standby := range allPartitions {
+		// if the partition already exists, it means it is part of the assignment, so we don't
+		// need to keep it on hot-standby and can ignore it.
+
+		// we check if the partition processor exists and if it does, ignore it
+		// since it's part of the assignment
+		if _, exists := g.getPartProc(standby); exists {
+			continue
+		}
+
+		// otherwise, let's start the partition processor in passive mode
+		pproc, err := g.createPartitionProcessor(session.Context(), standby, runModePassive,
+			func(msg *message, metadata string) {
+				panic("a passive partition processor should never receive input messages, thus never commit any messages")
+			})
 		if err != nil {
-			return fmt.Errorf("Error finding partitions for standby")
+			return fmt.Errorf("Error creating partition processor for %s/%d: %v", g.Graph().Group(), standby, err)
 		}
-		for _, standby := range allPartitions {
-			// if the partition already exists, it means it is part of the assignment, so we don't
-			// need to keep it on hot-standby and can ignore it.
-
-			// we check if the partition processor exists and if it does, ignore it
-			// since it's part of the assignment
-			if _, exists := g.getPartProc(standby); exists {
-				continue
-			}
-
-			// otherwise, let's start the partition processor in passive mode
-			pproc, err := g.createPartitionProcessor(session.Context(), standby, runModePassive,
-				func(msg *message, metadata string) {
-					panic("a passive partition processor should never receive input messages, thus never commit any messages")
-				})
-			if err != nil {
-				return fmt.Errorf("Error creating partition processor for %s/%d: %v", g.Graph().Group(), standby, err)
-			}
-			g.setPartProc(standby, pproc)
-		}
+		g.setPartProc(standby, pproc)
 	}
-
-	// setup all processors
-	errg, _ := multierr.NewErrGroup(session.Context())
-	g.mTables.RLock()
-	for _, partition := range g.partitions {
-		pproc := partition
-		errg.Go(func() error {
-			// TODO (fe): explain why we don't use the errgroup's context here!
-			return pproc.Start(session.Context())
-		})
-	}
-	g.mTables.RUnlock()
-
-	return errg.Wait().NilOrError()
+	return nil
 }
 
 // Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
@@ -678,19 +676,19 @@ func (g *Processor) Cleanup(session sarama.ConsumerGroupSession) error {
 		errg.Go(func() error {
 			err := pproc.Stop()
 			if err != nil {
-				return fmt.Errorf("error stopping partition processor %d: %v", partID, err)
+				g.log.Printf("Error running/stopping partition processor %d: %v", partID, err)
+				return err
 			}
 			return nil
 		})
 	}
 	g.mTables.RUnlock()
-	err := errg.Wait().NilOrError()
+	err := errg.Wait().ErrorOrNil()
 
 	// reset the partitions after the session ends
 	g.mTables.Lock()
 	defer g.mTables.Unlock()
 	g.partitions = make(map[int32]*PartitionProcessor)
-
 	return err
 }
 
@@ -740,7 +738,7 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 	}
 
 	messages := claim.Messages()
-	errors := part.Errors()
+	stopping := part.stopping()
 
 	for {
 		select {
@@ -759,17 +757,15 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 				headers:   msg.Headers,
 				value:     msg.Value,
 			}:
-			case err := <-errors:
-				if err != nil {
-					return newErrProcessing(err)
-				}
+			case <-stopping:
+				return nil
+			case <-session.Context().Done():
 				return nil
 			}
 
-		case err := <-errors:
-			if err != nil {
-				return newErrProcessing(err)
-			}
+		case <-stopping:
+			return nil
+		case <-session.Context().Done():
 			return nil
 		}
 	}
@@ -819,7 +815,7 @@ func (g *Processor) StatsWithContext(ctx context.Context) *ProcessorStats {
 	}
 	g.mTables.RUnlock()
 
-	err := errg.Wait().NilOrError()
+	err := errg.Wait().ErrorOrNil()
 	if err != nil {
 		g.log.Printf("Error retrieving stats: %v", err)
 	}
@@ -907,7 +903,7 @@ func (g *Processor) VisitAll(ctx context.Context, name string, meta interface{})
 		return nil
 	})
 
-	return errg.Wait().NilOrError()
+	return errg.Wait().ErrorOrNil()
 }
 
 func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, err error) {

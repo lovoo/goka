@@ -269,7 +269,7 @@ func TestProcessor_Run(t *testing.T) {
 		test.AssertNil(t, procErr)
 
 	})
-	t.Run("consgroup-error", func(t *testing.T) {
+	t.Run("setup-error", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
 
@@ -297,7 +297,7 @@ func TestProcessor_Run(t *testing.T) {
 			done    = make(chan struct{})
 		)
 
-		cg.FailOnConsume(fmt.Errorf("consume-error"))
+		cg.FailOnConsume(newErrSetup(123, fmt.Errorf("setup-error")))
 
 		go func() {
 			defer close(done)
@@ -309,7 +309,6 @@ func TestProcessor_Run(t *testing.T) {
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
 		<-done
-		// the errors sent back by the consumergroup do not lead to a failure of the processor
-		test.AssertTrue(t, strings.Contains(procErr.Error(), "consume-error"))
+		test.AssertTrue(t, strings.Contains(procErr.Error(), "setup-error"))
 	})
 }

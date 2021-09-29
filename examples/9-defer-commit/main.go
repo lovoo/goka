@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/multierr"
@@ -130,7 +131,7 @@ func main() {
 		return p.Run(ctx)
 	})
 
-	if err := errg.Wait().NilOrError(); err != nil {
+	if err := errg.Wait().ErrorOrNil(); err != nil {
 		log.Fatalf("Error executing: %v", err)
 	}
 }
@@ -144,10 +145,11 @@ func createTopics() {
 
 	// error ignored for simplicity
 	defer tmg.Close()
-	errs := new(multierr.Errors)
-	errs.Collect(tmg.EnsureStreamExists(string(inputTopic), 6))
-	errs.Collect(tmg.EnsureStreamExists(string(forwardTopic), 6))
-	if errs.HasErrors() {
-		log.Fatalf("cannot create topics: %v", errs.NilOrError())
+	errs := multierror.Append(
+		tmg.EnsureStreamExists(string(inputTopic), 6),
+		tmg.EnsureStreamExists(string(forwardTopic), 6),
+	)
+	if errs.ErrorOrNil() != nil {
+		log.Fatalf("cannot create topics: %v", errs.ErrorOrNil())
 	}
 }

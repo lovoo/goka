@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Shopify/sarama"
+	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/multierr"
 )
@@ -30,7 +31,6 @@ type consumerGroup struct {
 
 const (
 	cgStateStopped goka.State = iota
-	cgStateRebalancing
 	cgStateSetup
 	cgStateConsuming
 	cgStateCleaning
@@ -38,8 +38,8 @@ const (
 
 func newConsumerGroup(t T, tt *Tester) *consumerGroup {
 	return &consumerGroup{
-		errs:  make(chan error, 1),
-		state: goka.NewSignal(cgStateStopped, cgStateRebalancing, cgStateSetup, cgStateConsuming, cgStateCleaning).SetState(cgStateStopped),
+		errs:  make(chan error, 10),
+		state: goka.NewSignal(cgStateStopped, cgStateSetup, cgStateConsuming, cgStateCleaning).SetState(cgStateStopped),
 		tt:    tt,
 	}
 }
@@ -57,67 +57,57 @@ func (cg *consumerGroup) Consume(ctx context.Context, topics []string, handler s
 		return fmt.Errorf("Tried to double-consume this consumer-group, which is not supported by the mock")
 	}
 	logger.Printf("consuming consumergroup with topics %v", topics)
+	defer func() { cg.currentGeneration++ }()
 	defer cg.state.SetState(cgStateStopped)
 	if len(topics) == 0 {
 		return fmt.Errorf("no topics specified")
 	}
 
-	for {
-		cg.state.SetState(cgStateRebalancing)
-		cg.currentGeneration++
-		session := newCgSession(ctx, cg.currentGeneration, cg, topics)
+	session := newCgSession(ctx, cg.currentGeneration, cg, topics)
 
-		cg.currentSession = session
+	cg.currentSession = session
 
-		cg.state.SetState(cgStateSetup)
-		err := handler.Setup(session)
-		if err != nil {
-			return fmt.Errorf("Error setting up: %v", err)
-		}
-		errg, innerCtx := multierr.NewErrGroup(ctx)
-		for _, claim := range session.claims {
-			claim := claim
-			errg.Go(func() error {
-				<-innerCtx.Done()
-				claim.close()
-				return nil
-			})
-			errg.Go(func() error {
-				err := handler.ConsumeClaim(session, claim)
-				if err != nil {
-					cg.errs <- err
-				}
-				return nil
-			})
-		}
-		cg.state.SetState(cgStateConsuming)
-
-		errs := new(multierr.Errors)
-
-		// wait for runner errors and collect error
-		errs.Collect(errg.Wait().NilOrError())
-		cg.state.SetState(cgStateCleaning)
-
-		// cleanup and collect errors
-		errs.Collect(handler.Cleanup(session))
-
-		// remove current sessions
-		cg.currentSession = nil
-
-		err = errs.NilOrError()
-		if err != nil {
-			return fmt.Errorf("Error running or cleaning: %v", err)
-		}
-
-		select {
-		// if the session was terminated because of a cancelled context,
-		// stop the loop
-		case <-ctx.Done():
-			return nil
-			// otherwise just continue with the next generation
-		default:
-		}
+	cg.state.SetState(cgStateSetup)
+	err := handler.Setup(session)
+	if err != nil {
+		return fmt.Errorf("Error setting up: %v", err)
 	}
+	errg, innerCtx := multierr.NewErrGroup(session.ctx)
+	for _, claim := range session.claims {
+		claim := claim
+		errg.Go(func() error {
+			select {
+			case <-innerCtx.Done():
+			case <-session.ctx.Done():
+			}
+			claim.close()
+			return nil
+		})
+		errg.Go(func() error {
+			err := handler.ConsumeClaim(session, claim)
+			// cancel session when the first consume claim finishes (regardless of error).
+			session.cancel()
+			if err != nil {
+				cg.errs <- err
+			}
+			return err
+		})
+	}
+	cg.state.SetState(cgStateConsuming)
+
+	var errs *multierror.Error
+
+	// wait for runner errors and collect error
+	errs = multierror.Append(errs, errg.Wait().ErrorOrNil())
+	cg.state.SetState(cgStateCleaning)
+
+	// cleanup and collect errors
+	errs = multierror.Append(errs, handler.Cleanup(session))
+
+	// remove current sessions
+	cg.currentSession = nil
+
+	return errs.ErrorOrNil()
 }
 
 // SendError sends an error the consumergroup
@@ -157,6 +147,7 @@ func (cg *consumerGroup) Close() error {
 
 type cgSession struct {
 	ctx        context.Context
+	cancel     context.CancelFunc
 	generation int32
 	claims     map[string]*cgClaim
 	queues     map[string]*queueSession
@@ -171,8 +162,10 @@ type cgSession struct {
 
 func newCgSession(ctx context.Context, generation int32, cg *consumerGroup, topics []string) *cgSession {
 
+	ctx, cancel := context.WithCancel(ctx)
 	cgs := &cgSession{
 		ctx:             ctx,
+		cancel:          cancel,
 		generation:      generation,
 		consumerGroup:   cg,
 		waitingMessages: make(map[string]bool),
