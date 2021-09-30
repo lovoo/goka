@@ -554,16 +554,16 @@ func (cg *MockConsumerGroup) Consume(ctx context.Context, topics []string, handl
 
 		err = multierror.Append(
 			// wait for runner errors and collect error
-			errg.Wait().ErrorOrNil(),
+			errg.Wait(),
 			// cleanup and collect errors
 			handler.Cleanup(session),
-		)
+		).ErrorOrNil()
 
 		// remove current sessions
 		delete(cg.sessions, key)
 
 		if err != nil {
-			return fmt.Errorf("Error running or cleaning: %v", err)
+			return fmt.Errorf("Error running or cleaning: %w", err)
 		}
 
 		select {

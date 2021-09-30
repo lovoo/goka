@@ -71,9 +71,6 @@ type PartitionProcessor struct {
 
 	runnerGroup       *multierr.ErrGroup
 	cancelRunnerGroup func()
-	// runnerErrors store the errors occuring during runtime of the
-	// partition processor. It is created in Setup and after the runnerGroup
-	// finishes.
 
 	runMode PPRunMode
 
@@ -195,6 +192,11 @@ func (pp *PartitionProcessor) Recovered() bool {
 // * recover all join tables
 // * run the join-tables in catchup mode
 // * start the processor processing loop to receive messages
+// This method takes two contexts, as it does two distinct phases:
+// * setting up the partition (loading table, joins etc.), after which it returns.
+//   This needs a separate context to allow terminatin the setup phase
+// * starting the message-processing-loop of the actual processor. This will keep running
+//   after `Start` returns, so it uses the second context.
 func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 
 	if state := pp.state.State(); state != PPStateIdle {
