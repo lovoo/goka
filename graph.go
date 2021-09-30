@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	tableSuffix = "-v1"
+	tableSuffix = "-table"
 	loopSuffix  = "-loop"
 )
 
