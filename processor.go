@@ -344,8 +344,11 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 
 	defer func() {
 		g.log.Debugf("closing consumer group")
-		defer g.log.Debugf("closing consumer group ... done")
-		errs = multierror.Append(errs, consumerGroup.Close())
+		errs = multierror.Append(
+			errs,
+			consumerGroup.Close(),
+		)
+		g.log.Debugf("closing consumer group ... done")
 	}()
 
 	for {

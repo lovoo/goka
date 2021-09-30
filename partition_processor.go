@@ -198,7 +198,7 @@ func (pp *PartitionProcessor) Recovered() bool {
 func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 
 	if state := pp.state.State(); state != PPStateIdle {
-		return fmt.Errorf("partitionprocessor seems not idle (but %v), cannot start", state)
+		return fmt.Errorf("partitionprocessor is not idle (but %v), cannot start", state)
 	}
 
 	// runner context
@@ -356,7 +356,9 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 			select {
 			case <-ctx.Done():
 				mutexErr.Lock()
-				rerr = newErrProcessing(pp.partition, fmt.Errorf("synchronous error in callback: %v", err))
+				rerr = multierror.Append(rerr,
+					newErrProcessing(pp.partition, fmt.Errorf("synchronous error in callback: %v", err)),
+				)
 				mutexErr.Unlock()
 				return
 			default:
@@ -368,7 +370,7 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 		asyncErrs = make(chan struct{})
 
 		// asyncFailer is called asynchronously from other goroutines, e.g.
-		// when the promise of a Emit (using a producer internally) fails
+		// when the promise of an Emit (using a producer internally) fails
 		asyncFailer = func(err error) {
 			mutexErr.Lock()
 			rerr = multierror.Append(rerr, newErrProcessing(pp.partition, fmt.Errorf("asynchronous error from callback: %v", err)))
@@ -382,7 +384,9 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			mutexErr.Lock()
-			rerr = newErrProcessing(pp.partition, fmt.Errorf("panic in callback: %v\n%v", r, strings.Join(userStacktrace(), "\n")))
+			rerr = multierror.Append(rerr,
+				newErrProcessing(pp.partition, fmt.Errorf("panic in callback: %v\n%v", r, strings.Join(userStacktrace(), "\n"))),
+			)
 			mutexErr.Unlock()
 			return
 		}

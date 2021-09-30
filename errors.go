@@ -33,7 +33,7 @@ var (
 )
 
 // type to indicate that some non-transient error occurred while processing
-// the message, e.g. panic, (de|en)-coding errors or invalid usage of context.
+// the message, e.g. panic, decoding/encoding errors or invalid usage of context.
 type errProcessing struct {
 	partition int32
 	err       error
@@ -42,6 +42,7 @@ type errProcessing struct {
 func (ec *errProcessing) Error() string {
 	return fmt.Sprintf("error processing message (partition=%d): %v", ec.partition, ec.err)
 }
+
 func newErrProcessing(partition int32, err error) error {
 	return &errProcessing{
 		partition: partition,
@@ -49,8 +50,8 @@ func newErrProcessing(partition int32, err error) error {
 	}
 }
 
-// type to indicate that some non-transient error occurred while processing
-// the message, e.g. panic, (de|en)-coding errors or invalid usage of context.
+// type to indicate that some non-transient error occurred while setting up the partitions on
+// rebalance.
 type errSetup struct {
 	partition int32
 	err       error
@@ -59,6 +60,7 @@ type errSetup struct {
 func (ec *errSetup) Error() string {
 	return fmt.Sprintf("error setting up (partition=%d): %v", ec.partition, ec.err)
 }
+
 func newErrSetup(partition int32, err error) error {
 	return &errSetup{
 		partition: partition,
@@ -106,5 +108,4 @@ func userStacktrace() []string {
 	}
 
 	return lines
-
 }
