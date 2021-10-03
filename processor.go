@@ -530,6 +530,11 @@ func (g *Processor) Recovered() bool {
 	return g.state.IsState(ProcStateRunning)
 }
 
+// StateReader returns a read only interface of the processors state.
+func (g *Processor) StateReader() StateReader {
+	return g.state
+}
+
 func (g *Processor) assignmentFromSession(session sarama.ConsumerGroupSession) (Assignment, error) {
 	var (
 		assignment Assignment

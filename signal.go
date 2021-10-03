@@ -14,6 +14,12 @@ type waiter struct {
 	minState bool
 }
 
+// StateReader is a read only abstraction of a Signal to expose the current state.
+type StateReader interface {
+	State() State
+	WaitForState(state State) <-chan struct{}
+}
+
 // Signal allows synchronization on a state, waiting for that state and checking
 // the current state
 type Signal struct {
@@ -100,7 +106,7 @@ func (s *Signal) WaitForStateMin(state State) chan struct{} {
 
 // WaitForState returns a channel that closes when the signal reaches passed
 // state.
-func (s *Signal) WaitForState(state State) chan struct{} {
+func (s *Signal) WaitForState(state State) <-chan struct{} {
 
 	w := &waiter{
 		done:  make(chan struct{}),
