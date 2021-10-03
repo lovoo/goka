@@ -3,7 +3,6 @@ package integrationtest
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"testing"
 	"time"
@@ -85,7 +84,7 @@ func TestErrorCallback(t *testing.T) {
 			select {
 			case <-done:
 				test.AssertNotNil(t, err)
-				log.Printf("error. %v", err)
+
 				test.AssertTrue(t, strings.Contains(err.Error(), "error processing message"))
 			case <-time.After(10 * time.Second):
 				t.Errorf("processor did not shut down as expected")

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
+	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka/multierr"
 )
 
@@ -551,20 +552,18 @@ func (cg *MockConsumerGroup) Consume(ctx context.Context, topics []string, handl
 			})
 		}
 
-		errs := new(multierr.Errors)
-
-		// wait for runner errors and collect error
-		errs.Collect(errg.Wait().NilOrError())
-
-		// cleanup and collect errors
-		errs.Collect(handler.Cleanup(session))
+		err = multierror.Append(
+			// wait for runner errors and collect error
+			errg.Wait(),
+			// cleanup and collect errors
+			handler.Cleanup(session),
+		).ErrorOrNil()
 
 		// remove current sessions
 		delete(cg.sessions, key)
 
-		err = errs.NilOrError()
 		if err != nil {
-			return fmt.Errorf("Error running or cleaning: %v", err)
+			return fmt.Errorf("Error running or cleaning: %w", err)
 		}
 
 		select {

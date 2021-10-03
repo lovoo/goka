@@ -10,6 +10,7 @@ require (
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/go-cmp v0.5.1 // indirect
 	github.com/gorilla/mux v1.7.3
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/stretchr/testify v1.6.1 // indirect
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381 // indirect

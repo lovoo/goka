@@ -2,7 +2,9 @@ package multierr
 
 import (
 	"context"
+	"sync"
 
+	"github.com/hashicorp/go-multierror"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -10,7 +12,8 @@ import (
 // wait for all routines to terminate, as well as error handling.
 type ErrGroup struct {
 	*errgroup.Group
-	err Errors
+	mutex sync.Mutex
+	err   *multierror.Error
 }
 
 // NewErrGroup creates a new ErrGroup using passed context.
@@ -21,15 +24,15 @@ func NewErrGroup(ctx context.Context) (*ErrGroup, context.Context) {
 
 // Wait blocks until all goroutines of the error group have terminated and returns
 // the accumulated errors.
-func (g *ErrGroup) Wait() *Errors {
-	_ = g.Group.Wait()
-	return &g.err
+func (g *ErrGroup) Wait() *multierror.Error {
+	g.Group.Wait()
+	return g.err
 }
 
 // WaitChan returns a channel that is closed after the error group terminates, possibly
 // containing the error
-func (g *ErrGroup) WaitChan() <-chan *Errors {
-	errs := make(chan *Errors, 1)
+func (g *ErrGroup) WaitChan() <-chan *multierror.Error {
+	errs := make(chan *multierror.Error, 1)
 	go func() {
 		defer close(errs)
 		errs <- g.Wait()
@@ -43,7 +46,9 @@ func (g *ErrGroup) WaitChan() <-chan *Errors {
 func (g *ErrGroup) Go(f func() error) {
 	g.Group.Go(func() error {
 		if err := f(); err != nil {
-			g.err.Collect(err)
+			g.mutex.Lock()
+			defer g.mutex.Unlock()
+			g.err = multierror.Append(g.err, err)
 			return err
 		}
 		return nil

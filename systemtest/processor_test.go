@@ -154,7 +154,7 @@ func TestHotStandby(t *testing.T) {
 
 	// stop everything and wait until it's shut down
 	cancel()
-	test.AssertNil(t, errg.Wait().NilOrError())
+	test.AssertNil(t, errg.Wait().ErrorOrNil())
 }
 
 // Tests the processor option WithRecoverAhead. This requires a (local) running kafka cluster.
@@ -287,7 +287,7 @@ func TestRecoverAhead(t *testing.T) {
 
 	// stop everything and wait until it's shut down
 	cancel()
-	test.AssertNil(t, errg.Wait().NilOrError())
+	test.AssertNil(t, errg.Wait().ErrorOrNil())
 }
 
 // TestRebalance runs some processors to test rebalance. It's merely a
@@ -360,7 +360,7 @@ func TestRebalance(t *testing.T) {
 		time.Sleep(2 * time.Second)
 	}
 
-	test.AssertNil(t, errg.Wait().NilOrError())
+	test.AssertNil(t, errg.Wait().ErrorOrNil())
 }
 
 func TestCallbackFail(t *testing.T) {
@@ -368,10 +368,8 @@ func TestCallbackFail(t *testing.T) {
 		t.Skipf("Ignoring systemtest. pass '-args -systemtest' to `go test` to include them")
 	}
 
-	t.Skipf("Skipping as this triggers a bug that never finishes the test (https://github.com/lovoo/goka/issues/330)")
-
 	var (
-		group       goka.Group = "goka-systemtest-callback-fail"
+		group       goka.Group = goka.Group(fmt.Sprintf("goka-systemtest-callback-fail-%d", time.Now().Unix()))
 		inputStream string     = string(group) + "-input"
 		basepath               = os.TempDir()
 	)
@@ -383,7 +381,7 @@ func TestCallbackFail(t *testing.T) {
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)([]string{*broker})
 	test.AssertNil(t, err)
 
-	err = tm.EnsureStreamExists(inputStream, 20)
+	err = tm.EnsureStreamExists(inputStream, 1)
 	test.AssertNil(t, err)
 
 	em, err := goka.NewEmitter([]string{*broker}, goka.Stream(inputStream), new(codec.Int64))
@@ -427,9 +425,74 @@ func TestCallbackFail(t *testing.T) {
 	errg.Go(func() error {
 		return proc.Run(ctx)
 	})
-	err = errg.Wait().NilOrError()
+	err = errg.Wait().ErrorOrNil()
+	test.AssertTrue(t, strings.Contains(err.Error(), "error processing message"))
+}
+
+func TestProcessorSlowStuck(t *testing.T) {
+	if !*systemtest {
+		t.Skipf("Ignoring systemtest. pass '-args -systemtest' to `go test` to include them")
+	}
+
+	var (
+		group       goka.Group = "goka-systemtest-slow-callback-fail"
+		inputStream string     = string(group) + "-input"
+	)
+
+	tmc := goka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+	cfg := goka.DefaultConfig()
+	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)([]string{*broker})
+	test.AssertNil(t, err)
+
+	err = tm.EnsureStreamExists(inputStream, 2)
+	test.AssertNil(t, err)
+
+	em, err := goka.NewEmitter([]string{*broker}, goka.Stream(inputStream), new(codec.Int64))
+	test.AssertNil(t, err)
+
+	proc, err := goka.NewProcessor([]string{*broker},
+		goka.DefineGroup(
+			group,
+			goka.Input(goka.Stream(inputStream), new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+				val := msg.(int64)
+				time.Sleep(500 * time.Microsecond)
+				log.Printf("%d", val)
+				if ctx.Partition() == 0 && val > 50 {
+					// do an invalid action
+					panic("asdf")
+				}
+			}),
+		),
+		goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
+		goka.WithPartitionChannelSize(10),
+	)
+
+	test.AssertNil(t, err)
+
+	errg, ctx := multierr.NewErrGroup(context.Background())
+
+	errg.Go(func() error {
+		ticker := time.NewTicker(10 * time.Microsecond)
+		defer em.Finish()
+		var i int64
+		for {
+			select {
+			case <-ticker.C:
+				i++
+				test.AssertNil(t, em.EmitSync(fmt.Sprintf("%d", i%20), i))
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	})
+	errg.Go(func() error {
+		return proc.Run(ctx)
+	})
+	err = errg.Wait().ErrorOrNil()
 	log.Printf("%v", err)
-	test.AssertTrue(t, strings.Contains(err.Error(), "callback failed"))
+	test.AssertTrue(t, strings.Contains(err.Error(), "panic in callback"))
 }
 
 // Test the message commit of a processor, in particular to avoid reprocessing the last message after processor restart.

@@ -128,7 +128,7 @@ func main() {
 	time.Sleep(5 * time.Second)
 	log.Printf("stopping...")
 	cancel()
-	if err := errg.Wait().NilOrError(); err != nil {
+	if err := errg.Wait().ErrorOrNil(); err != nil {
 		log.Fatalf("error running: %v", err)
 	}
 	log.Printf("done.")

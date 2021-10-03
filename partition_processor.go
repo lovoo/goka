@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka/multierr"
 )
 
@@ -18,8 +19,10 @@ const (
 	PPStateRecovering
 	// PPStateRunning indicates a running partition processor
 	PPStateRunning
-	// PPStateStopping indicates a stopped partition processor
+	// PPStateStopping indicates a stopping partition processor
 	PPStateStopping
+	// PPStateStopped indicates a stopped partition processor
+	PPStateStopped
 )
 
 // PPRunMode configures how the partition processor participates as part of the processor
@@ -68,10 +71,6 @@ type PartitionProcessor struct {
 
 	runnerGroup       *multierr.ErrGroup
 	cancelRunnerGroup func()
-	// runnerErrors store the errors occuring during runtime of the
-	// partition processor. It is created in Setup and after the runnerGroup
-	// finishes.
-	runnerErrors chan error
 
 	runMode PPRunMode
 
@@ -145,7 +144,7 @@ func newPartitionProcessor(partition int32,
 		log:             log,
 		opts:            opts,
 		partition:       partition,
-		state:           NewSignal(PPStateIdle, PPStateRecovering, PPStateRunning, PPStateStopping).SetState(PPStateIdle),
+		state:           NewSignal(PPStateIdle, PPStateRecovering, PPStateRunning, PPStateStopping, PPStateStopped).SetState(PPStateIdle),
 		callbacks:       callbacks,
 		lookups:         lookupTables,
 		consumer:        consumer,
@@ -188,33 +187,29 @@ func (pp *PartitionProcessor) Recovered() bool {
 	return pp.state.IsState(PPStateRunning)
 }
 
-// Errors returns a channel of errors during consumption
-func (pp *PartitionProcessor) Errors() <-chan error {
-	return pp.runnerErrors
-}
-
 // Start initializes the partition processor
 // * recover the table
 // * recover all join tables
 // * run the join-tables in catchup mode
 // * start the processor processing loop to receive messages
-func (pp *PartitionProcessor) Start(ctx context.Context) error {
+// This method takes two contexts, as it does two distinct phases:
+// * setting up the partition (loading table, joins etc.), after which it returns.
+//   This needs a separate context to allow terminatin the setup phase
+// * starting the message-processing-loop of the actual processor. This will keep running
+//   after `Start` returns, so it uses the second context.
+func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
+
+	if state := pp.state.State(); state != PPStateIdle {
+		return fmt.Errorf("partitionprocessor is not idle (but %v), cannot start", state)
+	}
+
+	// runner context
 	ctx, pp.cancelRunnerGroup = context.WithCancel(ctx)
 
 	var runnerCtx context.Context
 	pp.runnerGroup, runnerCtx = multierr.NewErrGroup(ctx)
-	pp.runnerErrors = make(chan error, 1)
-	defer func() {
-		go func() {
-			defer close(pp.runnerErrors)
-			err := pp.runnerGroup.Wait().NilOrError()
-			if err != nil {
-				pp.runnerErrors <- err
-			}
-		}()
-	}()
 
-	setupErrg, setupCtx := multierr.NewErrGroup(ctx)
+	setupErrg, setupCtx := multierr.NewErrGroup(setupCtx)
 
 	pp.state.SetState(PPStateRecovering)
 	defer pp.state.SetState(PPStateRunning)
@@ -248,11 +243,12 @@ func (pp *PartitionProcessor) Start(ctx context.Context) error {
 	}
 
 	// here we wait for our table and the joins to recover
-	err := setupErrg.Wait().NilOrError()
+	err := setupErrg.Wait().ErrorOrNil()
 	if err != nil {
 		return fmt.Errorf("Setup failed. Cannot start processor for partition %d: %v", pp.partition, err)
 	}
 
+	// check if one of the contexts might have been closed in the meantime
 	select {
 	case <-ctx.Done():
 		return nil
@@ -269,12 +265,15 @@ func (pp *PartitionProcessor) Start(ctx context.Context) error {
 	for _, join := range pp.joins {
 		join := join
 		pp.runnerGroup.Go(func() error {
+			defer pp.state.SetState(PPStateStopping)
 			return join.CatchupForever(runnerCtx, false)
 		})
 	}
 
 	// now run the processor in a runner-group
 	pp.runnerGroup.Go(func() error {
+		defer pp.state.SetState(PPStateStopping)
+
 		var err error
 		// depending on the run mode, we'll do
 		switch pp.runMode {
@@ -287,7 +286,7 @@ func (pp *PartitionProcessor) Start(ctx context.Context) error {
 				err = pp.table.CatchupForever(runnerCtx, false)
 			}
 		default:
-			return fmt.Errorf("processor has invalid run mode")
+			err = fmt.Errorf("processor has invalid run mode")
 		}
 		if err != nil {
 			pp.log.Debugf("Run failed with error: %v", err)
@@ -297,50 +296,58 @@ func (pp *PartitionProcessor) Start(ctx context.Context) error {
 	return nil
 }
 
+func (pp *PartitionProcessor) stopping() <-chan struct{} {
+	return pp.state.WaitForStateMin(PPStateStopping)
+}
+
 // Stop stops the partition processor
 func (pp *PartitionProcessor) Stop() error {
 	pp.log.Debugf("Stopping")
 	defer pp.log.Debugf("... Stopping done")
 	pp.state.SetState(PPStateStopping)
-	defer pp.state.SetState(PPStateIdle)
-	errs := new(multierr.Errors)
+	defer pp.state.SetState(PPStateStopped)
 
 	if pp.cancelRunnerGroup != nil {
 		pp.cancelRunnerGroup()
-	}
-	if pp.runnerGroup != nil {
-		errs.Collect(<-pp.Errors())
 	}
 
 	// stop the stats updating/serving loop
 	pp.cancelStatsLoop()
 
-	errg, _ := multierr.NewErrGroup(context.Background())
+	// wait for the runner to be done
+	runningErrs := multierror.Append(pp.runnerGroup.Wait().ErrorOrNil())
+
+	// close all the tables
+	stopErrg, _ := multierr.NewErrGroup(context.Background())
 	for _, join := range pp.joins {
 		join := join
-		errg.Go(func() error {
+		stopErrg.Go(func() error {
 			return join.Close()
 		})
 	}
 
+	// close processor table, if there is one
 	if pp.table != nil {
-		errg.Go(func() error {
+		stopErrg.Go(func() error {
 			return pp.table.Close()
 		})
 	}
-	errs.Collect(errg.Wait().NilOrError())
 
-	return errs.NilOrError()
+	// return stopping errors and running errors
+	return multierror.Append(stopErrg.Wait().ErrorOrNil(), runningErrs).ErrorOrNil()
 }
 
 func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 	pp.log.Debugf("starting")
 	defer pp.log.Debugf("stopped")
 
-	errs := new(multierr.Errors)
+	// protect the errors-collection
+	var mutexErr sync.Mutex
+
 	defer func() {
-		errs.Collect(rerr)
-		rerr = errs.NilOrError()
+		mutexErr.Lock()
+		defer mutexErr.Unlock()
+		rerr = multierror.Append(rerr).ErrorOrNil()
 	}()
 
 	var (
@@ -350,7 +357,11 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 			// only fail processor if context not already Done
 			select {
 			case <-ctx.Done():
-				rerr = err
+				mutexErr.Lock()
+				rerr = multierror.Append(rerr,
+					newErrProcessing(pp.partition, fmt.Errorf("synchronous error in callback: %v", err)),
+				)
+				mutexErr.Unlock()
 				return
 			default:
 			}
@@ -361,9 +372,11 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 		asyncErrs = make(chan struct{})
 
 		// asyncFailer is called asynchronously from other goroutines, e.g.
-		// when the promise of a Emit (using a producer internally) fails
+		// when the promise of an Emit (using a producer internally) fails
 		asyncFailer = func(err error) {
-			errs.Collect(err)
+			mutexErr.Lock()
+			rerr = multierror.Append(rerr, newErrProcessing(pp.partition, fmt.Errorf("asynchronous error from callback: %v", err)))
+			mutexErr.Unlock()
 			closeOnce.Do(func() { close(asyncErrs) })
 		}
 
@@ -372,7 +385,11 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			rerr = fmt.Errorf("%v\n%v", r, strings.Join(userStacktrace(), "\n"))
+			mutexErr.Lock()
+			rerr = multierror.Append(rerr,
+				newErrProcessing(pp.partition, fmt.Errorf("panic in callback: %v\n%v", r, strings.Join(userStacktrace(), "\n"))),
+			)
+			mutexErr.Unlock()
 			return
 		}
 
@@ -398,7 +415,7 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 			}
 			err := pp.processMessage(ctx, &wg, ev, syncFailer, asyncFailer)
 			if err != nil {
-				return fmt.Errorf("error processing message: from %s %v", string(ev.value), err)
+				return newErrProcessing(pp.partition, err)
 			}
 
 			pp.enqueueStatsUpdate(ctx, func() { pp.updateStatsWithMessage(ev) })
@@ -411,7 +428,7 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 			}
 			err := pp.processVisit(ctx, &wg, visit, syncFailer, asyncFailer)
 			if err != nil {
-				return fmt.Errorf("Error visiting %s for %s: %v", visit.name, visit.key, err)
+				return newErrProcessing(pp.partition, fmt.Errorf("Error visiting %s for %s: %v", visit.name, visit.key, err))
 			}
 		case <-asyncErrs:
 			pp.log.Debugf("Errors occurred asynchronously. Will exit partition processor")
@@ -510,7 +527,7 @@ func (pp *PartitionProcessor) collectStats(ctx context.Context) *PartitionProcSt
 		})
 	}
 
-	err := errg.Wait().NilOrError()
+	err := errg.Wait().ErrorOrNil()
 	if err != nil {
 		pp.log.Printf("Error retrieving stats: %v", err)
 	}

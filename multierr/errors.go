@@ -8,6 +8,8 @@ import (
 // Errors represent a list of errors triggered during the execution of a goka view/processor.
 // Normally, the first error leads to stopping the processor/view, but during shutdown, more errors
 // might occur.
+// DEPRECATED. This will be removed one day, we migrated to the implementation in
+// github.com/hashicorp/go-multierror
 type Errors struct {
 	errs []error
 	m    sync.Mutex

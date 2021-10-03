@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
+	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
@@ -236,10 +237,10 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 
 	// close the view after running
 	defer func() {
-		errs := new(multierr.Errors)
-		errs.Collect(rerr)
-		errs.Collect(v.close())
-		rerr = errs.NilOrError()
+		rerr = multierror.Append(
+			rerr,
+			v.close(),
+		).ErrorOrNil()
 	}()
 
 	recoverErrg, recoverCtx := multierr.NewErrGroup(ctx)
@@ -252,7 +253,7 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 		})
 	}
 
-	err := recoverErrg.Wait().NilOrError()
+	err := recoverErrg.Wait().ErrorOrNil()
 	if err != nil {
 		rerr = fmt.Errorf("Error recovering partitions for view %s: %v", v.Topic(), err)
 		return
@@ -273,7 +274,7 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 		})
 	}
 
-	err = catchupErrg.Wait().NilOrError()
+	err = catchupErrg.Wait().ErrorOrNil()
 	if err != nil {
 		rerr = fmt.Errorf("Error catching up partitions for view %s: %v", v.Topic(), err)
 	}
@@ -290,7 +291,7 @@ func (v *View) close() error {
 		})
 	}
 	v.partitions = nil
-	return errg.Wait().NilOrError()
+	return errg.Wait().ErrorOrNil()
 }
 
 func (v *View) hash(key string) (int32, error) {
@@ -490,7 +491,7 @@ func (v *View) statsWithContext(ctx context.Context) *ViewStats {
 		})
 	}
 
-	err := errg.Wait().NilOrError()
+	err := errg.Wait().ErrorOrNil()
 	if err != nil {
 		v.log.Printf("Error retrieving stats: %v", err)
 	}
