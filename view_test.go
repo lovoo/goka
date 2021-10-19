@@ -81,7 +81,7 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 	}
 	opts.builders.storage = bm.getStorageBuilder()
 	opts.builders.topicmgr = bm.getTopicManagerBuilder()
-	opts.builders.consumerSarama = func(brokers []string, clientID string) (sarama.Consumer, error) {
+	opts.builders.consumerSarama = func(brokers []string, clientID string, consumerWrapper ConsumerWrapper) (sarama.Consumer, error) {
 		return consumer, nil
 	}
 	opts.builders.backoff = DefaultBackoffBuilder
@@ -672,7 +672,7 @@ func TestView_NewView(t *testing.T) {
 
 		view, err := NewView([]string{""}, Table(viewTestTopic), &codec.Int64{}, []ViewOption{
 			WithViewTopicManagerBuilder(bm.getTopicManagerBuilder()),
-			WithViewConsumerSaramaBuilder(func(brokers []string, clientID string) (sarama.Consumer, error) {
+			WithViewConsumerSaramaBuilder(func(brokers []string, clientID string, consumerWrapper ConsumerWrapper) (sarama.Consumer, error) {
 				return NewMockAutoConsumer(t, DefaultConfig()), nil
 			}),
 		}...)
@@ -692,7 +692,7 @@ func TestView_NewView(t *testing.T) {
 
 		view, err := NewView([]string{""}, Table(viewTestTopic), &codec.Int64{}, []ViewOption{
 			WithViewTopicManagerBuilder(bm.getTopicManagerBuilder()),
-			WithViewConsumerSaramaBuilder(func(brokers []string, clientID string) (sarama.Consumer, error) {
+			WithViewConsumerSaramaBuilder(func(brokers []string, clientID string, consumerWrapper ConsumerWrapper) (sarama.Consumer, error) {
 				return NewMockAutoConsumer(t, DefaultConfig()), nil
 			}),
 		}...)

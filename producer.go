@@ -19,17 +19,23 @@ type Producer interface {
 type producer struct {
 	producer sarama.AsyncProducer
 	wg       sync.WaitGroup
+	promises *sync.Map
 }
 
 // NewProducer creates new kafka producer for passed brokers.
-func NewProducer(brokers []string, config *sarama.Config) (Producer, error) {
+func NewProducer(brokers []string, config *sarama.Config, wrapper ProducerWrapper) (Producer, error) {
 	aprod, err := sarama.NewAsyncProducer(brokers, config)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to start Sarama producer: %v", err)
 	}
 
+	if wrapper != nil {
+		aprod = wrapper(aprod, config)
+	}
+
 	p := producer{
 		producer: aprod,
+		promises: &sync.Map{},
 	}
 
 	p.run()
@@ -64,12 +70,15 @@ func (p *producer) Close() error {
 func (p *producer) Emit(topic string, key string, value []byte) *Promise {
 	promise := NewPromise()
 
-	p.producer.Input() <- &sarama.ProducerMessage{
-		Topic:    topic,
-		Key:      sarama.StringEncoder(key),
-		Value:    sarama.ByteEncoder(value),
-		Metadata: promise,
+	msg := &sarama.ProducerMessage{
+		Topic: topic,
+		Key:   sarama.StringEncoder(key),
+		Value: sarama.ByteEncoder(value),
 	}
+
+	p.producer.Input() <- msg
+	p.promises.Store(msg, promise)
+
 	return promise
 }
 
@@ -78,17 +87,20 @@ func (p *producer) Emit(topic string, key string, value []byte) *Promise {
 func (p *producer) EmitWithHeaders(topic string, key string, value []byte, headers Headers) *Promise {
 	promise := NewPromise()
 
-	p.producer.Input() <- &sarama.ProducerMessage{
-		Topic:    topic,
-		Key:      sarama.StringEncoder(key),
-		Value:    sarama.ByteEncoder(value),
-		Metadata: promise,
-		Headers:  headers.ToSarama(),
+	msg := &sarama.ProducerMessage{
+		Topic:   topic,
+		Key:     sarama.StringEncoder(key),
+		Value:   sarama.ByteEncoder(value),
+		Headers: headers.ToSarama(),
 	}
+
+	p.producer.Input() <- msg
+	p.promises.Store(msg, promise)
+
 	return promise
 }
 
-// resolve or reject a promise in the message's metadata on Success or Error
+// resolve or reject a promise in the map on Success or Error
 func (p *producer) run() {
 	p.wg.Add(2)
 	go func() {
@@ -100,7 +112,10 @@ func (p *producer) run() {
 			if !ok {
 				return
 			}
-			err.Msg.Metadata.(*Promise).finish(nil, err.Err)
+
+			if value, ok := p.promises.LoadAndDelete(err.Msg); ok {
+				value.(*Promise).finish(nil, err.Err)
+			}
 		}
 	}()
 
@@ -112,7 +127,10 @@ func (p *producer) run() {
 			if !ok {
 				return
 			}
-			msg.Metadata.(*Promise).finish(msg, nil)
+
+			if value, ok := p.promises.LoadAndDelete(msg); ok {
+				value.(*Promise).finish(msg, nil)
+			}
 		}
 	}()
 }

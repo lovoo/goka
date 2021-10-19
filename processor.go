@@ -31,6 +31,10 @@ const (
 // processor.
 type ProcessCallback func(ctx Context, msg interface{})
 
+// ConsumerGroupHandlerWrapper function is called to wrap the current sarama consumer
+// group handler.
+type ConsumerGroupHandlerWrapper func(consumerGroupHandler sarama.ConsumerGroupHandler) sarama.ConsumerGroupHandler
+
 // Processor is a set of stateful callback functions that, on the arrival of
 // messages, modify the content of a table (the group table) and emit messages into other
 // topics. Messages as well as rows in the group table are key-value pairs.
@@ -263,7 +267,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	}()
 
 	var err error
-	g.saramaConsumer, err = g.opts.builders.consumerSarama(g.brokers, g.opts.clientID)
+	g.saramaConsumer, err = g.opts.builders.consumerSarama(g.brokers, g.opts.clientID, g.opts.consumerWrapper)
 	if err != nil {
 		return fmt.Errorf("Error creating consumer for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
 	}
@@ -275,7 +279,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 
 	// create kafka producer
 	g.log.Debugf("creating producer")
-	producer, err := g.opts.builders.producer(g.brokers, g.opts.clientID, g.opts.hasher)
+	producer, err := g.opts.builders.producer(g.brokers, g.opts.clientID, g.opts.hasher, g.opts.producerWrapper)
 	if err != nil {
 		return fmt.Errorf(errBuildProducer, err)
 	}
@@ -352,7 +356,12 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 	}()
 
 	for {
-		err := consumerGroup.Consume(ctx, topics, g)
+		var handler sarama.ConsumerGroupHandler = g
+		if g.opts.consumerGroupHandlerWrapper != nil {
+			handler = g.opts.consumerGroupHandlerWrapper(handler)
+		}
+
+		err := consumerGroup.Consume(ctx, topics, handler)
 		var (
 			errProc  *errProcessing
 			errSetup *errSetup

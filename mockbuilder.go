@@ -63,13 +63,13 @@ func (bm *builderMock) getTopicManagerBuilder() TopicManagerBuilder {
 }
 
 func (bm *builderMock) getProducerBuilder() ProducerBuilder {
-	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
+	return func(brokers []string, clientID string, hasher func() hash.Hash32, producerWrapper ProducerWrapper) (Producer, error) {
 		return bm.producer, nil
 	}
 }
 
 func (bm *builderMock) getErrorProducerBuilder() ProducerBuilder {
-	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
+	return func(brokers []string, clientID string, hasher func() hash.Hash32, producerWrapper ProducerWrapper) (Producer, error) {
 		return nil, errProducerBuilder
 	}
 }
