@@ -312,3 +312,11 @@ func TestProcessor_Run(t *testing.T) {
 		test.AssertTrue(t, strings.Contains(procErr.Error(), "setup-error"))
 	})
 }
+
+func TestProcessor_StateReader(t *testing.T) {
+	state := NewSignal(ProcStateSetup, ProcStateRunning)
+	state.SetState(ProcStateRunning)
+	p := Processor{state: state}
+
+	test.AssertEqual(t, p.StateReader().State(), ProcStateRunning)
+}

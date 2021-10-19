@@ -667,7 +667,7 @@ func (p *PartitionTable) CurrentState() PartitionStatus {
 }
 
 // WaitRecovered returns a channel that closes when the partition table enters state `PartitionRunning`
-func (p *PartitionTable) WaitRecovered() chan struct{} {
+func (p *PartitionTable) WaitRecovered() <-chan struct{} {
 	return p.state.WaitForState(State(PartitionRunning))
 }
 
