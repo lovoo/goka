@@ -1,0 +1,60 @@
+´name: Master
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15
+
+      - name: Test
+        shell: bash
+        run: |
+          go test -v -race ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15
+
+      - name: Test
+        shell: bash
+        run: |
+          echo "TODO how to run these?"
+          
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15
+
+      - name: Services
+        shell: bash
+        run: |
+          sudo apt update -y && sudo apt install -y netcat
+          cd examples && make start && cd ..
+
+      - name: Test
+        shell: bash
+        run: |
+          go test -v github.com/lovoo/goka/systemtest -args -systemtest
+          
