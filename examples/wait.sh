@@ -5,10 +5,9 @@
 # $1: expects the hosts and port in array form: localhost:9092,localhost:9093
 #
 wait_for() {
-    for i in $(echo "$1" | tr "," "\n"); do
-        array=$(echo "$i" | tr ":" "\n")
-        host="${array[0]}"
-        port="${array[1]}"
+    IFS=','; for i in $1; do
+        host="$(echo "$i" | cut -d':' -f1)"
+        port="$(echo "$i" | cut -d':' -f2)"
         while ! $(nc -z -v -w5 $host $port); do
             echo "Waiting for '$i' to come up..."
             sleep 5
