@@ -5,9 +5,10 @@ all:
 restart: stop start
 	@echo done
 
-# start docker compose (zookeeper and kafka)
+# start docker compose (zookeeper and kafka) and wait until all are up
 start: compose-up
 	@echo done
+	@sh wait.sh "localhost:2181,localhost:9092,localhost:9093,localhost:9094"
 
 # shutdown docker compose (zookeeper and kafka)
 stop: compose-down
