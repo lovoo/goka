@@ -166,6 +166,8 @@ func TestGroupGraph_UpdateSuffixes(t *testing.T) {
 	SetLoopSuffix("-loop1")
 	SetTableSuffix("-table1")
 
+	defer ResetSuffixes()
+
 	g := DefineGroup("group",
 		Input("input-topic", c, cb),
 		Persist(c),

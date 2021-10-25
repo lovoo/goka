@@ -7,8 +7,11 @@ import (
 )
 
 var (
-	tableSuffix = "-table"
-	loopSuffix  = "-loop"
+	defaultTableSuffix = "-table"
+	defaultLoopSuffix  = "-loop"
+
+	tableSuffix = defaultTableSuffix
+	loopSuffix  = defaultLoopSuffix
 )
 
 // SetTableSuffix changes `tableSuffix` which is a suffix for table topic.
@@ -21,6 +24,13 @@ func SetTableSuffix(suffix string) {
 // Use it to modify loop topic's suffix to otherwise in case you cannot use the default suffix.
 func SetLoopSuffix(suffix string) {
 	loopSuffix = suffix
+}
+
+// ResetSuffixes reset both `loopSuffix` and `tableSuffix` to their default value.
+// This function is helpful when there are multiple testcases, so you can do clean-up any change for suffixes.
+func ResetSuffixes() {
+	loopSuffix = defaultLoopSuffix
+	tableSuffix = defaultTableSuffix
 }
 
 // Stream is the name of an event stream topic in Kafka, ie, a topic with
