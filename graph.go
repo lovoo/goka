@@ -11,10 +11,14 @@ var (
 	loopSuffix  = "-loop"
 )
 
+// SetTableSuffix changes `tableSuffix` which is a suffix for table topic.
+// Use it to modify table's suffix to otherwise in case you cannot use the default suffix.
 func SetTableSuffix(suffix string) {
 	tableSuffix = suffix
 }
 
+// SetLoopSuffix changes `loopSuffix` which is a suffix for loop topic of group.
+// Use it to modify loop topic's suffix to otherwise in case you cannot use the default suffix.
 func SetLoopSuffix(suffix string) {
 	loopSuffix = suffix
 }
