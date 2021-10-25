@@ -11,6 +11,14 @@ var (
 	loopSuffix  = "-loop"
 )
 
+func SetTableSuffix(suffix string) {
+	tableSuffix = suffix
+}
+
+func SetLoopSuffix(suffix string) {
+	loopSuffix = suffix
+}
+
 // Stream is the name of an event stream topic in Kafka, ie, a topic with
 // cleanup.policy=delete
 type Stream string
