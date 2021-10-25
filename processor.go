@@ -805,7 +805,10 @@ func (g *Processor) StatsWithContext(ctx context.Context) *ProcessorStats {
 
 			m.Lock()
 			defer m.Unlock()
-			stats.Group[partID] = partStats
+
+			if partStats != nil {
+				stats.Group[partID] = partStats
+			}
 			return nil
 		})
 	}
@@ -817,7 +820,10 @@ func (g *Processor) StatsWithContext(ctx context.Context) *ProcessorStats {
 			m.Lock()
 			defer m.Unlock()
 			viewStats := view.Stats(ctx)
-			stats.Lookup[topic] = viewStats
+
+			if viewStats != nil {
+				stats.Lookup[topic] = viewStats
+			}
 			return nil
 		})
 	}

@@ -486,7 +486,9 @@ func (v *View) statsWithContext(ctx context.Context) *ViewStats {
 			m.Lock()
 			defer m.Unlock()
 
-			stats.Partitions[partTable.partition] = tableStats
+			if tableStats != nil {
+				stats.Partitions[partTable.partition] = tableStats
+			}
 			return nil
 		})
 	}
