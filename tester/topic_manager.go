@@ -54,7 +54,9 @@ func (tm *MockTopicManager) GetOffset(topicName string, partitionID int32, time 
 	case sarama.OffsetNewest:
 		return topic.Hwm(), nil
 	default:
-		return 0, fmt.Errorf("only oldest and newest are supported in the mock")
+		// always return from oldest, because the tester does not store
+		// timestamps
+		return 0, nil
 	}
 }
 

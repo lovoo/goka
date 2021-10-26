@@ -34,11 +34,19 @@ func (cm *consumerMock) catchup() int {
 }
 
 func (cm *consumerMock) Topics() ([]string, error) {
-	return nil, fmt.Errorf("Not implemented")
+	cm.tester.mCodecs.RLock()
+	defer cm.tester.mCodecs.RUnlock()
+
+	var topics []string
+
+	for topic := range cm.tester.codecs {
+		topics = append(topics, topic)
+	}
+	return topics, nil
 }
 
 func (cm *consumerMock) Partitions(topic string) ([]int32, error) {
-	return nil, fmt.Errorf("not implemented")
+	return []int32{0}, nil
 }
 
 func (cm *consumerMock) ConsumePartition(topic string, partition int32, offset int64) (sarama.PartitionConsumer, error) {
