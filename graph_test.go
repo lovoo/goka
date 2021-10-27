@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -166,8 +167,6 @@ func TestGroupGraph_UpdateSuffixes(t *testing.T) {
 	SetLoopSuffix("-loop1")
 	SetTableSuffix("-table1")
 
-	defer ResetSuffixes()
-
 	g := DefineGroup("group",
 		Input("input-topic", c, cb),
 		Persist(c),
@@ -176,6 +175,11 @@ func TestGroupGraph_UpdateSuffixes(t *testing.T) {
 
 	test.AssertEqual(t, tableName(g.Group()), "group-table1")
 	test.AssertEqual(t, loopName(g.Group()), "group-loop1")
+
+	ResetSuffixes()
+
+	test.AssertEqual(t, tableName(g.Group()), fmt.Sprintf("group%s", defaultTableSuffix))
+	test.AssertEqual(t, loopName(g.Group()), fmt.Sprintf("group%s", defaultLoopSuffix))
 }
 
 func TestStringsToStreams(t *testing.T) {
