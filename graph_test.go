@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -157,10 +158,28 @@ func TestGroupGraph_getters(t *testing.T) {
 }
 
 func TestGroupGraph_Inputs(t *testing.T) {
-
 	topics := Inputs(Streams{"a", "b", "c"}, c, cb)
 	test.AssertEqual(t, topics.Topic(), "a,b,c")
 	test.AssertTrue(t, strings.Contains(topics.String(), "a,b,c/*codec.String"))
+}
+
+func TestGroupGraph_UpdateSuffixes(t *testing.T) {
+	SetLoopSuffix("-loop1")
+	SetTableSuffix("-table1")
+
+	g := DefineGroup("group",
+		Input("input-topic", c, cb),
+		Persist(c),
+		Persist(c),
+	)
+
+	test.AssertEqual(t, tableName(g.Group()), "group-table1")
+	test.AssertEqual(t, loopName(g.Group()), "group-loop1")
+
+	ResetSuffixes()
+
+	test.AssertEqual(t, tableName(g.Group()), fmt.Sprintf("group%s", defaultTableSuffix))
+	test.AssertEqual(t, loopName(g.Group()), fmt.Sprintf("group%s", defaultLoopSuffix))
 }
 
 func TestStringsToStreams(t *testing.T) {
