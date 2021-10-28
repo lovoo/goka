@@ -132,9 +132,7 @@ type poptions struct {
 	recoverAhead           bool
 	producerDefaultHeaders Headers
 
-	consumerWrapper             ConsumerWrapper
 	consumerGroupHandlerWrapper ConsumerGroupHandlerWrapper
-	producerWrapper             ProducerWrapper
 
 	builders struct {
 		storage        storage.Builder
@@ -196,24 +194,10 @@ func WithConsumerSaramaBuilder(cgb SaramaConsumerBuilder) ProcessorOption {
 	}
 }
 
-// WithSaramaConsumerWrapper allows to wrap a Sarama Consumer.
-func WithSaramaConsumerWrapper(consumerWrapper ConsumerWrapper) ProcessorOption {
-	return func(o *poptions, gg *GroupGraph) {
-		o.consumerWrapper = consumerWrapper
-	}
-}
-
 // WithProducerBuilder replaces the default producer builder.
 func WithProducerBuilder(pb ProducerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.producer = pb
-	}
-}
-
-// WithSaramaProducerWrapper allows to wrap a Sarama Producer.
-func WithSaramaProducerWrapper(producerWrapper ProducerWrapper) ProcessorOption {
-	return func(o *poptions, gg *GroupGraph) {
-		o.producerWrapper = producerWrapper
 	}
 }
 
@@ -395,6 +379,34 @@ func WithRebalanceCallback(cb RebalanceCallback) ProcessorOption {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// producer options
+///////////////////////////////////////////////////////////////////////////////
+
+// SaramaProducerWrapper function allows to wrap a Sarama producer and return the wrapped Sarama producer.
+type SaramaProducerWrapper func(producer sarama.AsyncProducer, config *sarama.Config) sarama.AsyncProducer
+
+// ProducerOption defines a configuration option to be used when creating a producer.
+type ProducerOption func(*producerOptions)
+
+// producer options
+type producerOptions struct {
+	saramaProducerWrapper SaramaProducerWrapper
+}
+
+func (po *producerOptions) applyOptions(options ...ProducerOption) {
+	for _, option := range options {
+		option(po)
+	}
+}
+
+// WithSaramaProducerWrapper replaces the default Sarama producer by wrapping it.
+func WithSaramaProducerWrapper(saramaProducerWrapper SaramaProducerWrapper) ProducerOption {
+	return func(o *producerOptions) {
+		o.saramaProducerWrapper = saramaProducerWrapper
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // view options
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -409,8 +421,6 @@ type voptions struct {
 	hasher           func() hash.Hash32
 	autoreconnect    bool
 	backoffResetTime time.Duration
-
-	consumerWrapper ConsumerWrapper
 
 	builders struct {
 		storage        storage.Builder
@@ -517,13 +527,6 @@ func WithViewTester(t Tester) ViewOption {
 	}
 }
 
-// WithViewSaramaConsumerWrapper allows to wrap a Sarama Consumer from view.
-func WithViewSaramaConsumerWrapper(consumerWrapper ConsumerWrapper) ViewOption {
-	return func(o *voptions, table Table, codec Codec) {
-		o.consumerWrapper = consumerWrapper
-	}
-}
-
 func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) error {
 	opt.clientID = defaultClientID
 	opt.log = defaultLogger
@@ -567,9 +570,8 @@ type eoptions struct {
 	log      logger
 	clientID string
 
-	hasher          func() hash.Hash32
-	defaultHeaders  Headers
-	producerWrapper ProducerWrapper
+	hasher         func() hash.Hash32
+	defaultHeaders Headers
 
 	builders struct {
 		topicmgr TopicManagerBuilder
@@ -632,13 +634,6 @@ func WithEmitterTester(t Tester) EmitterOption {
 func WithEmitterDefaultHeaders(headers Headers) EmitterOption {
 	return func(o *eoptions, _ Stream, _ Codec) {
 		o.defaultHeaders = headers
-	}
-}
-
-// WithEmitterSaramaProducerWrapper allows to wrap a Sarama Producer from emitter.
-func WithEmitterSaramaProducerWrapper(producerWrapper ProducerWrapper) EmitterOption {
-	return func(o *eoptions, topic Stream, codec Codec) {
-		o.producerWrapper = producerWrapper
 	}
 }
 

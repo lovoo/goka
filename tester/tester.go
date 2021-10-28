@@ -121,7 +121,7 @@ func (tt *Tester) ConsumerGroupBuilder() goka.ConsumerGroupBuilder {
 
 // ConsumerBuilder creates a consumerbuilder that builds consumers for passed clientID
 func (tt *Tester) ConsumerBuilder() goka.SaramaConsumerBuilder {
-	return func(brokers []string, clientID string, consumerWrapper goka.ConsumerWrapper) (sarama.Consumer, error) {
+	return func(brokers []string, clientID string) (sarama.Consumer, error) {
 		tt.mClients.RLock()
 		defer tt.mClients.RUnlock()
 
@@ -138,8 +138,8 @@ func (tt *Tester) ConsumerBuilder() goka.SaramaConsumerBuilder {
 // Emitters need to flush when emitting messages.
 func (tt *Tester) EmitterProducerBuilder() goka.ProducerBuilder {
 	builder := tt.ProducerBuilder()
-	return func(b []string, cid string, hasher func() hash.Hash32, producerWrapper goka.ProducerWrapper) (goka.Producer, error) {
-		prod, err := builder(b, cid, hasher, producerWrapper)
+	return func(b []string, cid string, hasher func() hash.Hash32) (goka.Producer, error) {
+		prod, err := builder(b, cid, hasher)
 		return &flushingProducer{
 			tester:   tt,
 			producer: prod,
@@ -163,7 +163,7 @@ func (tt *Tester) pushMessage(topic string, key string, data []byte, headers gok
 }
 
 func (tt *Tester) ProducerBuilder() goka.ProducerBuilder {
-	return func(b []string, cid string, hasher func() hash.Hash32, producerWrapper goka.ProducerWrapper) (goka.Producer, error) {
+	return func(b []string, cid string, hasher func() hash.Hash32) (goka.Producer, error) {
 		return tt.producer, nil
 	}
 }

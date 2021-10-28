@@ -71,7 +71,7 @@ func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) 
 		return nil, fmt.Errorf("Error applying user-defined options: %v", err)
 	}
 
-	consumer, err := opts.builders.consumerSarama(brokers, opts.clientID, opts.consumerWrapper)
+	consumer, err := opts.builders.consumerSarama(brokers, opts.clientID)
 	if err != nil {
 		return nil, fmt.Errorf("Error creating sarama consumer for brokers %+v: %v", brokers, err)
 	}

@@ -8,25 +8,22 @@ import (
 )
 
 // ProducerBuilder create a Kafka producer.
-type ProducerBuilder func(brokers []string, clientID string, hasher func() hash.Hash32, producerWrapper ProducerWrapper) (Producer, error)
-
-// ProducerWrapper function allows to wrap a Sarama producer and return the wrapped Sarama producer.
-type ProducerWrapper func(producer sarama.AsyncProducer, config *sarama.Config) sarama.AsyncProducer
+type ProducerBuilder func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error)
 
 // DefaultProducerBuilder creates a Kafka producer using the Sarama library.
-func DefaultProducerBuilder(brokers []string, clientID string, hasher func() hash.Hash32, producerWrapper ProducerWrapper) (Producer, error) {
+func DefaultProducerBuilder(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
 	config := globalConfig
 	config.ClientID = clientID
 	config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
-	return NewProducer(brokers, &config, producerWrapper)
+	return NewProducer(brokers, &config)
 }
 
 // ProducerBuilderWithConfig creates a Kafka consumer using the Sarama library.
 func ProducerBuilderWithConfig(config *sarama.Config) ProducerBuilder {
-	return func(brokers []string, clientID string, hasher func() hash.Hash32, producerWrapper ProducerWrapper) (Producer, error) {
+	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
 		config.ClientID = clientID
 		config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
-		return NewProducer(brokers, config, producerWrapper)
+		return NewProducer(brokers, config)
 	}
 }
 
@@ -76,35 +73,20 @@ func ConsumerGroupBuilderWithConfig(config *sarama.Config) ConsumerGroupBuilder 
 }
 
 // SaramaConsumerBuilder creates a `sarama.Consumer`
-type SaramaConsumerBuilder func(brokers []string, clientID string, consumerWrapper ConsumerWrapper) (sarama.Consumer, error)
-
-// ConsumerWrapper allows to wrap a Sarama consumer and return the wrapped Sarama consumer.
-type ConsumerWrapper func(consumer sarama.Consumer) sarama.Consumer
+type SaramaConsumerBuilder func(brokers []string, clientID string) (sarama.Consumer, error)
 
 // DefaultSaramaConsumerBuilder creates a Kafka consumer using the Sarama library.
-func DefaultSaramaConsumerBuilder(brokers []string, clientID string, consumerWrapper ConsumerWrapper) (sarama.Consumer, error) {
+func DefaultSaramaConsumerBuilder(brokers []string, clientID string) (sarama.Consumer, error) {
 	config := globalConfig
 	config.ClientID = clientID
-
-	consumer, err := sarama.NewConsumer(brokers, &config)
-	if consumer != nil && consumerWrapper != nil {
-		consumer = consumerWrapper(consumer)
-	}
-
-	return consumer, err
+	return sarama.NewConsumer(brokers, &config)
 }
 
 // SaramaConsumerBuilderWithConfig creates a sarama consumer using passed config
 func SaramaConsumerBuilderWithConfig(config *sarama.Config) SaramaConsumerBuilder {
-	return func(brokers []string, clientID string, consumerWrapper ConsumerWrapper) (sarama.Consumer, error) {
+	return func(brokers []string, clientID string) (sarama.Consumer, error) {
 		config.ClientID = clientID
-
-		consumer, err := sarama.NewConsumer(brokers, config)
-		if consumer != nil && consumerWrapper != nil {
-			consumer = consumerWrapper(consumer)
-		}
-
-		return consumer, err
+		return sarama.NewConsumer(brokers, config)
 	}
 }
 

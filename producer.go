@@ -23,14 +23,17 @@ type producer struct {
 }
 
 // NewProducer creates new kafka producer for passed brokers.
-func NewProducer(brokers []string, config *sarama.Config, wrapper ProducerWrapper) (Producer, error) {
+func NewProducer(brokers []string, config *sarama.Config, options ...ProducerOption) (Producer, error) {
+	opts := new(producerOptions)
+	opts.applyOptions(options...)
+
 	aprod, err := sarama.NewAsyncProducer(brokers, config)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to start Sarama producer: %v", err)
 	}
 
-	if wrapper != nil {
-		aprod = wrapper(aprod, config)
+	if saramaProducerWrapper := opts.saramaProducerWrapper; saramaProducerWrapper != nil {
+		aprod = saramaProducerWrapper(aprod, config)
 	}
 
 	p := producer{

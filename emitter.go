@@ -40,7 +40,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 
 	opts.applyOptions(topic, codec, options...)
 
-	prod, err := opts.builders.producer(brokers, opts.clientID, opts.hasher, opts.producerWrapper)
+	prod, err := opts.builders.producer(brokers, opts.clientID, opts.hasher)
 	if err != nil {
 		return nil, fmt.Errorf(errBuildProducer, err)
 	}

@@ -267,7 +267,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	}()
 
 	var err error
-	g.saramaConsumer, err = g.opts.builders.consumerSarama(g.brokers, g.opts.clientID, g.opts.consumerWrapper)
+	g.saramaConsumer, err = g.opts.builders.consumerSarama(g.brokers, g.opts.clientID)
 	if err != nil {
 		return fmt.Errorf("Error creating consumer for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
 	}
@@ -279,7 +279,7 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 
 	// create kafka producer
 	g.log.Debugf("creating producer")
-	producer, err := g.opts.builders.producer(g.brokers, g.opts.clientID, g.opts.hasher, g.opts.producerWrapper)
+	producer, err := g.opts.builders.producer(g.brokers, g.opts.clientID, g.opts.hasher)
 	if err != nil {
 		return fmt.Errorf(errBuildProducer, err)
 	}
