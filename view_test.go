@@ -86,7 +86,11 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 	}
 	opts.builders.backoff = DefaultBackoffBuilder
 
-	view := &View{topic: viewTestTopic, opts: opts, log: opts.log}
+	view := &View{topic: viewTestTopic,
+		opts:  opts,
+		log:   opts.log,
+		state: newViewSignal(),
+	}
 	return view, bm, ctrl
 }
 
@@ -185,6 +189,7 @@ func TestView_Get(t *testing.T) {
 			},
 		}
 		view.opts.tableCodec = &codec.Int64{}
+		view.state.SetState(State(ViewStateRunning))
 
 		bm.mst.EXPECT().Get(key).Return([]byte(strconv.FormatInt(value, 10)), nil)
 
@@ -211,7 +216,7 @@ func TestView_Get(t *testing.T) {
 			},
 		}
 		view.opts.tableCodec = &codec.Int64{}
-
+		view.state.SetState(State(ViewStateRunning))
 		bm.mst.EXPECT().Get(key).Return(nil, nil)
 
 		ret, err := view.Get(key)
@@ -238,6 +243,7 @@ func TestView_Get(t *testing.T) {
 			},
 		}
 		view.opts.tableCodec = &codec.Int64{}
+		view.state.SetState(State(ViewStateRunning))
 		bm.mst.EXPECT().Get(key).Return(nil, errRet)
 
 		_, err := view.Get(key)

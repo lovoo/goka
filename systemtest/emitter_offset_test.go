@@ -21,20 +21,18 @@ func TestEmitterOffset(t *testing.T) {
 
 	var topic goka.Stream = goka.Stream(fmt.Sprintf("%s-%d", "goka-systemtest-emitter-offset", time.Now().Unix()))
 
-	if !*systemtest {
-		t.Skipf("Ignoring systemtest. pass '-args -systemtest' to `go test` to include them")
-	}
+	brokers := initSystemTest(t)
 
 	tmc := goka.NewTopicManagerConfig()
 	tmc.Table.Replication = 1
 	cfg := goka.DefaultConfig()
-	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)([]string{*broker})
+	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
 	test.AssertNil(t, err)
 	tm.EnsureStreamExists(string(topic), 1)
 
 	var lastOffset int64
 
-	emitter, err := goka.NewEmitter([]string{*broker}, topic, new(codec.Int64))
+	emitter, err := goka.NewEmitter(brokers, topic, new(codec.Int64))
 	if err != nil {
 		t.Fatalf("error creating emitter: %v", err)
 	}

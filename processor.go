@@ -321,13 +321,6 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 		return fmt.Errorf(errBuildConsumer, err)
 	}
 
-	go func() {
-		errs := consumerGroup.Errors()
-		for err := range errs {
-			g.log.Printf("error while executing consumer group: %v", err)
-		}
-	}()
-
 	var topics []string
 	for _, e := range g.graph.InputStreams() {
 		topics = append(topics, e.Topic())
@@ -352,29 +345,61 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 	}()
 
 	for {
+		sessionCtx, sessionCtxCancel := context.WithCancel(ctx)
+
+		go func() {
+			g.handleSessionErrors(ctx, sessionCtx, sessionCtxCancel, consumerGroup)
+		}()
+
 		err := consumerGroup.Consume(ctx, topics, g)
-		var (
-			errProc  *errProcessing
-			errSetup *errSetup
-		)
+		sessionCtxCancel()
 
-		if errors.As(err, &errProc) {
-			g.log.Debugf("error processing message (non-transient), shutting down processor: %v", err)
-			return err
-		}
-		if errors.As(err, &errSetup) {
-			g.log.Debugf("setup error (non-transient), shutting down processor: %v", err)
-			return err
-		}
-
+		// error consuming, no way to recover so we have to kill the processor
 		if err != nil {
-			g.log.Printf("Error executing group consumer (continuing execution, rebalance after short sleep): %v", err)
+			return err
 		}
+
+		g.log.Debugf("Consumer group returned, trying rebalance")
 
 		select {
 		case <-time.After(5 * time.Second):
-		case <-ctx.Done():
+		case <-sessionCtx.Done():
 			return nil
+		}
+	}
+}
+
+func (g *Processor) handleSessionErrors(ctx, sessionCtx context.Context, sessionCtxCancel context.CancelFunc, consumerGroup sarama.ConsumerGroup) {
+	errs := consumerGroup.Errors()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-sessionCtx.Done():
+			return
+		case err, ok := <-errs:
+			if !ok {
+				return
+			}
+
+			if err != nil {
+				g.log.Printf("error during execution of consumer group: %v", err)
+			}
+
+			var (
+				errProc  *errProcessing
+				errSetup *errSetup
+			)
+
+			if errors.As(err, &errProc) {
+				g.log.Debugf("error processing message (non-transient), shutting down processor: %v", err)
+				sessionCtxCancel()
+			}
+			if errors.As(err, &errSetup) {
+				g.log.Debugf("setup error (non-transient), shutting down processor: %v", err)
+				sessionCtxCancel()
+			}
 		}
 	}
 }
@@ -717,7 +742,7 @@ func (g *Processor) WaitForReady() {
 
 	// wait for all partitionprocessors to be running
 
-	// copy them first with the mutex so we don't run in to race conditions
+	// copy them first with the mutex so we don't run into a deadlock
 
 	g.mTables.RLock()
 	parts := make([]*PartitionProcessor, 0, len(g.partitions))

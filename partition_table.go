@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
@@ -17,6 +18,8 @@ const (
 
 	// internal offset we use to detect if the offset has never been stored locally
 	offsetNotStored int64 = -3
+
+	consumerDrainTimeout = time.Second
 )
 
 // Backoff is used for adding backoff capabilities to the restarting
@@ -191,7 +194,6 @@ func (p *PartitionTable) Close() error {
 func (p *PartitionTable) createStorage(ctx context.Context) (*storageProxy, error) {
 	var (
 		err   error
-		errs  = new(multierr.Errors)
 		st    storage.Storage
 		start = time.Now()
 		done  = make(chan struct{})
@@ -217,9 +219,7 @@ func (p *PartitionTable) createStorage(ctx context.Context) (*storageProxy, erro
 	}
 	err = st.Open()
 	if err != nil {
-		errs.Collect(st.Close())
-		errs.Collect(fmt.Errorf("error opening storage: %v", err))
-		return nil, errs.NilOrError()
+		return nil, multierror.Append(st.Close(), fmt.Errorf("error opening storage: %v", err)).ErrorOrNil()
 	}
 
 	// close the db if context was cancelled before the builder returned
@@ -228,10 +228,9 @@ func (p *PartitionTable) createStorage(ctx context.Context) (*storageProxy, erro
 		err = st.Close()
 		// only collect context error if Close() errored out
 		if err != nil {
-			errs.Collect(err)
-			errs.Collect(ctx.Err())
+			return nil, multierror.Append(err, ctx.Err()).ErrorOrNil()
 		}
-		return nil, errs.NilOrError()
+		return nil, nil
 	default:
 	}
 
@@ -280,37 +279,25 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 		storedOffset int64
 		partConsumer sarama.PartitionConsumer
 		err          error
-		errs         = new(multierr.Errors)
 	)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	// deferred error handling
-	defer func() {
-		errs.Collect(rerr)
-
-		rerr = errs.NilOrError()
-		return
-	}()
 
 	p.state.SetState(State(PartitionConnecting))
 
 	// fetch local offset
 	storedOffset, err = p.st.GetOffset(offsetNotStored)
 	if err != nil {
-		errs.Collect(fmt.Errorf("error reading local offset: %v", err))
-		return
+		return fmt.Errorf("error reading local offset: %v", err)
 	}
 
 	loadOffset, hwm, err := p.findOffsetToLoad(storedOffset)
 	if err != nil {
-		errs.Collect(err)
-		return
+		return err
 	}
 
 	if storedOffset > 0 && hwm == 0 {
-		errs.Collect(fmt.Errorf("kafka tells us there's no message in the topic, but our cache has one. The table might be gone. Try to delete your local cache! Topic %s, partition %d, hwm %d, local offset %d", p.topic, p.partition, hwm, storedOffset))
-		return
+		return fmt.Errorf("kafka tells us there's no message in the topic, but our cache has one. The table might be gone. Try to delete your local cache! Topic %s, partition %d, hwm %d, local offset %d", p.topic, p.partition, hwm, storedOffset)
 	}
 
 	if storedOffset >= hwm {
@@ -334,8 +321,7 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	// AND we're here for catchup, so let's stop here
 	// and do not attempt to load anything
 	if stopAfterCatchup && loadOffset >= hwm {
-		errs.Collect(p.markRecovered(ctx))
-		return
+		return p.markRecovered(ctx)
 	}
 
 	if stopAfterCatchup {
@@ -348,17 +334,13 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 
 	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, loadOffset)
 	if err != nil {
-		errs.Collect(fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, storedOffset, err))
-		return
+		return fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, storedOffset, err)
 	}
-
-	// consume errors asynchronously
-	go p.handleConsumerErrors(ctx, errs, partConsumer)
 
 	// close the consumer
 	defer func() {
 		partConsumer.AsyncClose()
-		p.drainConsumer(partConsumer, errs)
+		rerr = multierror.Append(rerr, p.drainConsumer(partConsumer)).ErrorOrNil()
 	}()
 
 	if stopAfterCatchup {
@@ -371,15 +353,13 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	loadErr := p.loadMessages(ctx, partConsumer, hwm, stopAfterCatchup)
 
 	if loadErr != nil {
-		errs.Collect(loadErr)
-		return
+		return loadErr
 	}
 
 	if stopAfterCatchup {
-		errs.Collect(p.markRecovered(ctx))
-
-		now := time.Now()
-		p.enqueueStatsUpdate(ctx, func() { p.stats.Recovery.RecoveryTime = now })
+		err := p.markRecovered(ctx)
+		p.enqueueStatsUpdate(ctx, func() { p.stats.Recovery.RecoveryTime = time.Now() })
+		return err
 	}
 	return
 }
@@ -424,43 +404,27 @@ func (p *PartitionTable) markRecovered(ctx context.Context) error {
 	}
 }
 
-func (p *PartitionTable) handleConsumerErrors(ctx context.Context, errs *multierr.Errors, cons sarama.PartitionConsumer) {
-	for {
-		select {
-		case consError, ok := <-cons.Errors():
-			if !ok {
-				return
-			}
-			err := fmt.Errorf("Consumer error: %v", consError)
-			p.log.Printf("%v", err)
-			errs.Collect(err)
-			// if there's an error, close the consumer
-			cons.AsyncClose()
-		case <-ctx.Done():
-			return
-		}
-	}
-}
+func (p *PartitionTable) drainConsumer(cons sarama.PartitionConsumer) error {
 
-func (p *PartitionTable) drainConsumer(cons sarama.PartitionConsumer, errs *multierr.Errors) {
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), consumerDrainTimeout)
 	defer cancel()
 
-	errg, ctx := multierr.NewErrGroup(ctx)
+	errg, _ := multierr.NewErrGroup(context.Background())
 
 	// drain errors channel
 	errg.Go(func() error {
+		var errs *multierror.Error
+
 		for {
 			select {
-			case <-ctx.Done():
+			case <-timeoutCtx.Done():
 				p.log.Printf("draining errors channel timed out")
-				return nil
+				return errs
 			case err, ok := <-cons.Errors():
 				if !ok {
-					return nil
+					return errs
 				}
-				errs.Collect(err)
+				errs = multierror.Append(errs, err)
 			}
 		}
 	})
@@ -469,7 +433,7 @@ func (p *PartitionTable) drainConsumer(cons sarama.PartitionConsumer, errs *mult
 	errg.Go(func() error {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-timeoutCtx.Done():
 				p.log.Printf("draining messages channel timed out")
 				return nil
 			case _, ok := <-cons.Messages():
@@ -480,30 +444,31 @@ func (p *PartitionTable) drainConsumer(cons sarama.PartitionConsumer, errs *mult
 		}
 	})
 
-	errg.Wait()
+	return errg.Wait().ErrorOrNil()
 }
 
-func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.PartitionConsumer, partitionHwm int64, stopAfterCatchup bool) (rerr error) {
-	errs := new(multierr.Errors)
-
-	// deferred error handling
-	defer func() {
-		errs.Collect(rerr)
-
-		rerr = errs.NilOrError()
-		return
-	}()
+func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.PartitionConsumer, partitionHwm int64, stopAfterCatchup bool) error {
 
 	stallTicker := time.NewTicker(p.stallPeriod)
 	defer stallTicker.Stop()
 
 	lastMessage := time.Now()
 
+	messages := cons.Messages()
+	errors := cons.Errors()
+
 	for {
 		select {
-		case msg, ok := <-cons.Messages():
+		case err, ok := <-errors:
 			if !ok {
-				return
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+		case msg, ok := <-messages:
+			if !ok {
+				return nil
 			}
 
 			// This case is for the Tester to achieve synchronity.
@@ -521,8 +486,7 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 
 			lastMessage = time.Now()
 			if err := p.storeEvent(string(msg.Key), msg.Value, msg.Offset, msg.Headers); err != nil {
-				errs.Collect(fmt.Errorf("load: error updating storage: %v", err))
-				return
+				return fmt.Errorf("load: error updating storage: %v", err)
 			}
 
 			if stopAfterCatchup {
@@ -532,7 +496,7 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 			p.enqueueStatsUpdate(ctx, func() { p.trackIncomingMessageStats(msg) })
 
 			if stopAfterCatchup && msg.Offset >= partitionHwm-1 {
-				return
+				return nil
 			}
 
 		case now := <-stallTicker.C:
@@ -543,7 +507,7 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 			}
 
 		case <-ctx.Done():
-			return
+			return nil
 		}
 	}
 }
@@ -711,7 +675,7 @@ func (p *PartitionTable) IteratorWithRange(start []byte, limit []byte) (storage.
 
 func (p *PartitionTable) readyToRead() error {
 	pstate := p.CurrentState()
-	if pstate != PartitionRunning {
+	if pstate < PartitionConnecting {
 		return fmt.Errorf("Partition is not running (but %v) so it's not safe to read values", pstate)
 	}
 	return nil
