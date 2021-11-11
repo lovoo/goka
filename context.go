@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/multierr"
+	"github.com/hashicorp/go-multierror"
 )
 
 type emitter func(topic string, key string, value []byte, headers Headers) *Promise
@@ -177,7 +177,7 @@ type cbContext struct {
 		dones  int
 		stores int
 	}
-	errors multierr.Errors
+	errors *multierror.Error
 	m      sync.Mutex
 	wg     *sync.WaitGroup
 }
@@ -438,7 +438,7 @@ func (ctx *cbContext) start() {
 // this function must be called from a locked function.
 func (ctx *cbContext) tryCommit(err error) {
 	if err != nil {
-		_ = ctx.errors.Collect(err)
+		ctx.errors = multierror.Append(ctx.errors, err)
 	}
 
 	// not all calls are done yet, do not send the ack upstream.
@@ -447,8 +447,8 @@ func (ctx *cbContext) tryCommit(err error) {
 	}
 
 	// commit if no errors, otherwise fail context
-	if ctx.errors.HasErrors() {
-		ctx.asyncFailer(ctx.errors.NilOrError())
+	if ctx.errors.ErrorOrNil() != nil {
+		ctx.asyncFailer(ctx.errors.ErrorOrNil())
 	} else {
 		ctx.commit()
 	}

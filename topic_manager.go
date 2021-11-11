@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/multierr"
 )
 
 // TopicManager provides an interface to create/check topics and their partitions
@@ -106,10 +105,7 @@ func checkBroker(broker Broker, config *sarama.Config) error {
 }
 
 func (m *topicManager) Close() error {
-	errs := new(multierr.Errors)
-	errs.Collect(m.client.Close())
-
-	return errs.NilOrError()
+	return m.client.Close()
 }
 
 func (m *topicManager) Partitions(topic string) ([]int32, error) {

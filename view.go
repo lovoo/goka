@@ -331,6 +331,11 @@ func (v *View) Topic() string {
 // Get can be called by multiple goroutines concurrently.
 // Get can only be called after Recovered returns true.
 func (v *View) Get(key string) (interface{}, error) {
+
+	if v.state.IsState(State(ViewStateIdle)) || v.state.IsState(State(ViewStateInitializing)) {
+		return nil, fmt.Errorf("View is either not running, not correctly initialized or stopped again. It's not safe to retrieve values")
+	}
+
 	// find partition where key is located
 	partTable, err := v.find(key)
 	if err != nil {
@@ -425,6 +430,12 @@ func (v *View) Evict(key string) error {
 
 // Recovered returns true when the view has caught up with events from kafka.
 func (v *View) Recovered() bool {
+	// no partitions --> never recover
+	// Otherwise we might mask errors of initializing the view
+	if len(v.partitions) == 0 {
+		return false
+	}
+
 	for _, p := range v.partitions {
 		if !p.IsRecovered() {
 			return false

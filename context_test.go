@@ -121,7 +121,7 @@ func TestContext_DeferCommit_witherror(t *testing.T) {
 	doneFunc(fmt.Errorf("async error"))
 	// no commit, no ack, so we'll get the message again.
 	test.AssertEqual(t, ack, 0)
-	test.AssertEqual(t, ctx.errors.NilOrError().Error(), "async error")
+	test.AssertStringContains(t, ctx.errors.ErrorOrNil().Error(), "async error")
 }
 
 func TestContext_Timestamp(t *testing.T) {
@@ -584,6 +584,7 @@ func TestContext_Lookup(t *testing.T) {
 		msg:   &message{key: key},
 		views: map[string]*View{
 			string(table): {
+				state: newViewSignal().SetState(State(ViewStateRunning)),
 				opts: &voptions{
 					tableCodec: c,
 					hasher:     DefaultHasher(),
