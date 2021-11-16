@@ -32,6 +32,11 @@ var (
 	gokaPackageRegex = regexp.MustCompile(fmt.Sprintf(`%s(?:@[^/]+)?/[^/]+$`, reflect.TypeOf(Processor{}).PkgPath()))
 )
 
+var (
+	// ErrVisitAborted indicates a call to VisitAll could not finish due to rebalance or processor shutdown
+	ErrVisitAborted = errors.New("VisitAll aborted due to context cancel or rebalance")
+)
+
 // type to indicate that some non-transient error occurred while processing
 // the message, e.g. panic, decoding/encoding errors or invalid usage of context.
 type errProcessing struct {

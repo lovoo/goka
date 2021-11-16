@@ -3,6 +3,7 @@ package systemtest
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"testing"
@@ -21,7 +22,7 @@ import (
 // after initializing and sending a message to each partition, we verify that the hot-standby-processor
 // has both values in the respective storage
 func TestHotStandby(t *testing.T) {
-
+	t.Parallel()
 	var (
 		group       goka.Group = goka.Group(fmt.Sprintf("%s-%d", "goka-systemtest-hotstandby", time.Now().Unix()))
 		inputStream string     = string(group) + "-input"
@@ -158,7 +159,7 @@ func TestHotStandby(t *testing.T) {
 // Two processors are initialized, but they share an input topic which has only one partition. This
 // Test makes sure that still both processors recover the views/tables
 func TestRecoverAhead(t *testing.T) {
-
+	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
@@ -288,7 +289,7 @@ func TestRecoverAhead(t *testing.T) {
 // TestRebalance runs some processors to test rebalance. It's merely a
 // runs-without-errors test, not a real functional test.
 func TestRebalance(t *testing.T) {
-
+	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
@@ -356,13 +357,12 @@ func TestRebalance(t *testing.T) {
 }
 
 func TestCallbackFail(t *testing.T) {
-
+	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
 		group       goka.Group = goka.Group(fmt.Sprintf("goka-systemtest-callback-fail-%d", time.Now().Unix()))
 		inputStream string     = string(group) + "-input"
-		basepath               = os.TempDir()
 	)
 
 	tmc := goka.NewTopicManagerConfig()
@@ -372,56 +372,58 @@ func TestCallbackFail(t *testing.T) {
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
 	test.AssertNil(t, err)
 
-	err = tm.EnsureStreamExists(inputStream, 1)
+	err = tm.EnsureStreamExists(inputStream, 10)
 	test.AssertNil(t, err)
 
 	em, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.Int64))
 	test.AssertNil(t, err)
+	defer em.Finish()
 
 	proc, err := goka.NewProcessor(brokers,
 		goka.DefineGroup(
 			group,
 			goka.Input(goka.Stream(inputStream), new(codec.Int64), func(ctx goka.Context, msg interface{}) {
-				val := msg.(int64)
-				time.Sleep(1 * time.Millisecond)
-				if ctx.Partition() == 0 && val > 100 {
-					// do an invalid action
-					ctx.Emit("blubbasdf", "asdf", nil)
+				if ctx.Key() == "key-9995" {
+					ctx.Emit("some-invalid-emit", "", nil)
 				}
 			}),
 		),
 		goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
-		goka.WithStorageBuilder(storage.DefaultBuilder(basepath)),
-		goka.WithPartitionChannelSize(1),
+		goka.WithStorageBuilder(storage.MemoryBuilder()),
 	)
-
 	test.AssertNil(t, err)
 
-	errg, ctx := multierr.NewErrGroup(context.Background())
+	proc, cancel, done := runProc(proc)
 
-	errg.Go(func() error {
-		ticker := time.NewTicker(50 * time.Microsecond)
-		defer em.Finish()
-		var i int64
-		for {
-			select {
-			case <-ticker.C:
-				i++
-				test.AssertNil(t, em.EmitSync(fmt.Sprintf("%d", i%20), i))
-			case <-ctx.Done():
-				return nil
-			}
+	pollTimed(t, "recovered", 5, proc.Recovered)
+
+	go func() {
+		for i := 0; i < 10000; i++ {
+			em.Emit(fmt.Sprintf("key-%d", i), int64(1))
 		}
+	}()
+
+	defer cancel()
+	pollTimed(t, "error-response", 1, func() bool {
+		select {
+		case err, ok := <-done:
+			if !ok {
+				return false
+			}
+			if err == nil {
+				return false
+			}
+			if err != nil {
+				return true
+			}
+		default:
+		}
+		return false
 	})
-	errg.Go(func() error {
-		return proc.Run(ctx)
-	})
-	err = errg.Wait().ErrorOrNil()
-	test.AssertTrue(t, strings.Contains(err.Error(), "error processing message"))
 }
 
 func TestProcessorSlowStuck(t *testing.T) {
-
+	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
@@ -490,7 +492,7 @@ func TestProcessorSlowStuck(t *testing.T) {
 // * restart this processor a couple of times and check whether it stays 10.
 //
 func TestMessageCommit(t *testing.T) {
-
+	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
@@ -518,9 +520,6 @@ func TestMessageCommit(t *testing.T) {
 	test.AssertNil(t, err)
 
 	tm.EnsureStreamExists(string(inputStream), 10)
-
-	// give it time to actually create the topic
-	time.Sleep(10 * time.Second)
 
 	for i := 0; i < numMessages; i++ {
 		emitter.EmitSync("1", int64(1))
@@ -565,4 +564,114 @@ func TestMessageCommit(t *testing.T) {
 		cancel()
 		<-done
 	}
+}
+
+func TestProcessorGracefulShutdownContinue(t *testing.T) {
+	t.Parallel()
+	brokers := initSystemTest(t)
+
+	var (
+		group       goka.Group  = goka.Group(fmt.Sprintf("%s-%d", "goka-systemtest-graceful-shutdown-continue", time.Now().Unix()))
+		inputStream goka.Stream = goka.Stream(group) + "-input"
+	)
+
+	emitter, err := goka.NewEmitter(brokers, inputStream, new(codec.Int64))
+	test.AssertNil(t, err)
+
+	// some boiler plate code to create the topics in kafka using
+	// only one replication
+	tmc := goka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+	cfg := goka.DefaultConfig()
+	// we want to consume all messages
+	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
+	goka.ReplaceGlobalConfig(cfg)
+
+	tmBuilder := goka.TopicManagerBuilderWithConfig(cfg, tmc)
+	tm, err := tmBuilder(brokers)
+	test.AssertNil(t, err)
+
+	tm.EnsureStreamExists(string(inputStream), 10)
+
+	emitterCtx, cancelEmitter := context.WithCancel(context.Background())
+	emitterDone := make(chan struct{})
+
+	var valueSum = make(map[string]int64)
+	go func() {
+		defer close(emitterDone)
+		for i := 0; emitterCtx.Err() == nil; i++ {
+			time.Sleep(1 * time.Millisecond)
+			key := fmt.Sprintf("key-%d", i%23)
+			emitter.Emit(key, int64(i))
+			valueSum[key] += int64(i)
+		}
+	}()
+
+	createProc := func() *goka.Processor {
+		proc, err := goka.NewProcessor(brokers, goka.DefineGroup(group,
+			goka.Input(inputStream, new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+				if val := ctx.Value(); val == nil {
+					ctx.SetValue(msg)
+				} else {
+					ctx.SetValue(val.(int64) + msg.(int64))
+				}
+			}),
+			goka.Persist(new(codec.Int64)),
+		),
+			goka.WithTopicManagerBuilder(tmBuilder),
+			goka.WithStorageBuilder(storage.MemoryBuilder()),
+		)
+		test.AssertNil(t, err)
+		return proc
+	}
+
+	proc, cancelProc, procDone := runProc(createProc())
+
+	pollTimed(t, "proc-running", 10, proc.Recovered)
+
+	// stop it
+	cancelProc()
+	test.AssertNil(t, <-procDone)
+
+	// start it again --> must fail
+	_, _, procDone = runProc(proc)
+	test.AssertNotNil(t, <-procDone)
+
+	// start it 10 more times in a row and stop it
+	for i := 0; i < 10; i++ {
+		log.Printf("creating proc round %d", i)
+		proc, cancelProc, procDone := runProc(createProc())
+		pollTimed(t, "proc-running", 10, proc.Recovered)
+		// stop it
+		cancelProc()
+		test.AssertNil(t, <-procDone)
+
+	}
+	// stop emitter
+	cancelEmitter()
+	<-emitterDone
+
+	// start one last time to check the values
+	log.Printf("creating a proc for the last time to check values")
+	proc, cancelProc, procDone = runProc(createProc())
+	pollTimed(t, "proc-running", 10, proc.Recovered)
+
+	pollTimed(t, "correct-values", 10, func() bool {
+		for key, value := range valueSum {
+			tableVal, err := proc.Get(key)
+			if tableVal == nil || err != nil {
+				return false
+			}
+			if tableVal.(int64) < value {
+				return false
+			}
+		}
+		return true
+	})
+
+	// stop it
+	cancelProc()
+	test.AssertNil(t, <-procDone)
+
 }

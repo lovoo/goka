@@ -121,9 +121,12 @@ func main() {
 
 	time.Sleep(5 * time.Second)
 
-	if err := proc.VisitAll(ctx, "reset", int64(0)); err != nil {
+	visited, err := proc.VisitAllWithStats(ctx, "reset", int64(0))
+	if err != nil {
 		log.Printf("error visiting: %v", err)
 	}
+
+	log.Printf("visited %d values", visited)
 
 	time.Sleep(5 * time.Second)
 	log.Printf("stopping...")
