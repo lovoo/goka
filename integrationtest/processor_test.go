@@ -209,8 +209,10 @@ func TestProcessorVisit(t *testing.T) {
 	_, _, ok := outputTracker.Next()
 	test.AssertFalse(t, ok)
 
-	proc.VisitAll(ctx, "reset", int64(15))
-	time.Sleep(100 * time.Millisecond)
+	visited, err := proc.VisitAllWithStats(ctx, "reset", int64(15))
+	test.AssertNil(t, err)
+	test.AssertEqual(t, visited, int64(1))
+
 	k, v, ok := outputTracker.Next()
 	test.AssertTrue(t, ok)
 	test.AssertEqual(t, k, "a")

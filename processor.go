@@ -896,53 +896,50 @@ func (g *Processor) Stop() {
 	g.cancel()
 }
 
-// VisitAll visits all keys in parallel by passing the visit request
+// VisitAllWithStats visits all keys in parallel by passing the visit request
 // to all partitions.
-// An optional argument "meta" can be passed that will be forwarded to
-// the visit-function of each key of the table.
-// The function returns when a visit to all keys has been triggered or the context is cancelled.
-// Note that this does not imply that all processor callback have already processed the visit-request.
-//
-// TODO (fe): currently we're not triggering to abort a visit upon rebalance, because
-// a partition processor does not know when it's shutting down.
-// That implies that a rebalance will be blocked if there's a running visit request
-func (g *Processor) VisitAll(ctx context.Context, name string, meta interface{}) error {
+// The optional argument "meta" will be forwarded to the visit-function of each key of the table.
+// The function returns when
+// * all values have been visited or
+// * the context is cancelled or
+// * the processor rebalances/shuts down
+// Return parameters:
+// * number of visited items
+// * error
+func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta interface{}) (int64, error) {
 	g.mTables.RLock()
-	defer g.mTables.RUnlock()
 
-	errg, ctx := multierr.NewErrGroup(ctx)
+	if g.isStateless() {
+		return 0, fmt.Errorf("cannot visit values in stateless processor")
+	}
 
-	var wg sync.WaitGroup
+	errg, visitCtx := multierr.NewErrGroup(ctx)
+	var (
+		visited int64
+	)
 	for _, part := range g.partitions {
 		// we'll only do the visit for active mode partitions
+		// because visit essentially provides write access, which passive partitions don't have
 		if part.runMode != runModeActive {
 			continue
 		}
 		part := part
-		wg.Add(1)
 		errg.Go(func() error {
-			defer wg.Done()
-			return part.VisitValues(ctx, name, &wg, meta)
+			return part.VisitValues(visitCtx, name, meta, &visited)
 		})
 	}
 
-	// wait for the waitgroup. We have to wrap it into an extra goroutine using a closing
-	// channel, since on an explicit stop, the waitgroup will never finish, so we would wait
-	// forever here.
-	errg.Go(func() error {
-		wgDone := make(chan struct{})
-		go func() {
-			defer close(wgDone)
-			wg.Wait()
-		}()
-		select {
-		case <-ctx.Done():
-		case <-wgDone:
-		}
-		return nil
-	})
+	g.mTables.RUnlock()
 
-	return errg.Wait().ErrorOrNil()
+	// wait for the visitors
+	err := errg.Wait().ErrorOrNil()
+	return visited, err
+}
+
+// VisitAll visits all values from the processor table.
+func (g *Processor) VisitAll(ctx context.Context, name string, meta interface{}) error {
+	_, err := g.VisitAllWithStats(ctx, name, meta)
+	return err
 }
 
 func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, err error) {

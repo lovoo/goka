@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -307,6 +308,9 @@ func (pp *PartitionProcessor) Stop() error {
 	pp.state.SetState(PPStateStopping)
 	defer pp.state.SetState(PPStateStopped)
 
+	close(pp.input)
+	close(pp.visitInput)
+
 	if pp.cancelRunnerGroup != nil {
 		pp.cancelRunnerGroup()
 	}
@@ -390,18 +394,20 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 				newErrProcessing(pp.partition, fmt.Errorf("panic in callback: %v\n%v", r, strings.Join(userStacktrace(), "\n"))),
 			)
 			mutexErr.Unlock()
-			return
+			wg.Done()
 		}
 
 		done := make(chan struct{})
 		go func() {
+			defer close(done)
 			wg.Wait()
-			close(done)
 		}()
 
+		timeout := time.NewTimer(60 * time.Second)
+		defer timeout.Stop()
 		select {
 		case <-done:
-		case <-time.NewTimer(60 * time.Second).C:
+		case <-timeout.C:
 			pp.log.Printf("partition processor did not shutdown in time. Will stop waiting")
 		}
 	}()
@@ -563,7 +569,7 @@ func (pp *PartitionProcessor) enqueueTrackOutputStats(ctx context.Context, topic
 	})
 }
 
-func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGroup, v *visit, syncFailer func(err error), asyncFailer func(err error)) error {
+func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGroup, v *visit, syncFailer func(err error), asyncFailer func(err error)) (rerr error) {
 	cb, ok := pp.visitCallbacks[v.name]
 	// no callback registered for visit
 	if !ok {
@@ -595,10 +601,21 @@ func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGro
 	// start context and call the ProcessorCallback cb
 	msgContext.start()
 
+	defer func() {
+		if r := recover(); r != nil {
+			rerr = fmt.Errorf("panic in visit: %v", r)
+			// mark the visit done, otherwise the processor gets stuck and the caller of `visit` never returns.
+			v.done()
+
+			// throw the panic upwards so the caller can handle the wg.Done
+			panic(r)
+		}
+	}()
+
 	// now call cb
 	cb(msgContext, v.meta)
 	msgContext.finish(nil)
-	return nil
+	return
 }
 
 func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitGroup, msg *message, syncFailer func(err error), asyncFailer func(err error)) error {
@@ -665,10 +682,8 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 
 // VisitValues iterates over all values in the table and calls the "visit"-callback for the passed name.
 // Optional parameter value can be set, which will just be forwarded to the visitor-function
-func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, wg *sync.WaitGroup, meta interface{}) error {
-	if pp.table == nil {
-		return fmt.Errorf("cannot visit values in stateless processor")
-	}
+// the function returns after all items of the table have been added to the channel.
+func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta interface{}, visited *int64) error {
 	if _, ok := pp.visitCallbacks[name]; !ok {
 		return fmt.Errorf("unconfigured visit callback. Did you initialize the processor with DefineGroup(..., Visit(%s, ...), ...)?", name)
 	}
@@ -677,28 +692,63 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, wg *
 	if err != nil {
 		return fmt.Errorf("error creating storage iterator")
 	}
+
+	var wg sync.WaitGroup
+	// drain the channel and set all items to done we have added.
+	// Otherwise the caller will wait forever on the waitgroup
+	drainVisitInput := func() {
+		for {
+			select {
+			case <-pp.visitInput:
+				wg.Done()
+			default:
+				return
+			}
+		}
+	}
+
 	defer it.Release()
 	for it.Next() {
-
-		// add one that we're going to put into the queue
-		// wg.Done will be called by the visit handler
+		// add one that we were able to be put into the queue.
+		// wg.Done will be called by the visit handler as commit
 		wg.Add(1)
 		select {
-		case <-ctx.Done():
-			// context is closed, so we know that the current visit never entered the channel
-			// so we have to remove it from the waitgroup to avoid the lock.
+		case <-pp.stopping():
+			drainVisitInput()
 			wg.Done()
-			return nil
+			return ErrVisitAborted
+		case <-ctx.Done():
+			drainVisitInput()
+			wg.Done()
+			return ctx.Err()
 		// enqueue the visit
 		case pp.visitInput <- &visit{
 			key:  string(it.Key()),
 			name: name,
 			meta: meta,
-			done: wg.Done,
+			done: func() {
+				atomic.AddInt64(visited, 1)
+				wg.Done()
+			},
 		}:
-			// TODO (fe): add a notification when the processor shuts down so we can react to that instead of waiting for the global context
-			// In this case we also have to drain the visitInput channel and call wg.Done() for each visit, so the caller does not wait for the waitgroup
 		}
+	}
+
+	// wait for all visits. We have to wrap it into an extra goroutine using a closing
+	// channel, since on an explicit stop, the waitgroup will never finish, so we would wait
+	// forever here.
+	wgDone := make(chan struct{})
+	go func() {
+		defer close(wgDone)
+		wg.Wait()
+	}()
+	select {
+	case <-pp.stopping():
+		drainVisitInput()
+		return ErrVisitAborted
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-wgDone:
 	}
 	return nil
 }

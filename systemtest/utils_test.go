@@ -1,6 +1,7 @@
 package systemtest
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -26,6 +27,32 @@ func pollTimed(t *testing.T, what string, secTimeout float64, pollers ...func() 
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("waiting for %s timed out", what)
+}
+
+// runProc runs a processor in a go-routine and returns it along with the cancel-func and an error-channel being closed
+// when the processor terminates (with an error that might have been returned)
+func runProc(proc *goka.Processor) (*goka.Processor, context.CancelFunc, chan error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		done <- proc.Run(ctx)
+	}()
+
+	return proc, cancel, done
+}
+
+// runView runs a view in a go-routine and returns it along with the cancel-func and an error-channel being closed
+// when the view terminates (with an error that might have been returned)
+func runView(proc *goka.View) (*goka.View, context.CancelFunc, chan error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		done <- proc.Run(ctx)
+	}()
+
+	return proc, cancel, done
 }
 
 // hash the key using number of partitions using goka's default hashing mechanism
