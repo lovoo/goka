@@ -1,6 +1,0 @@
-language: go
-
-gobuild_args: -race
-
-go:
-  - 1.15
