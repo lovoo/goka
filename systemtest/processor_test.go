@@ -356,6 +356,118 @@ func TestRebalance(t *testing.T) {
 	test.AssertNil(t, errg.Wait().ErrorOrNil())
 }
 
+// TestRebalanceSharePartitions runs two processors one after each other
+// and asserts that they rebalance partitions appropriately
+func TestRebalanceSharePartitions(t *testing.T) {
+	t.Parallel()
+	brokers := initSystemTest(t)
+
+	var (
+		group         goka.Group = "goka-systemtest-rebalance-share-partitions"
+		inputStream   string     = string(group) + "-input"
+		numPartitions            = 20
+	)
+
+	tmc := goka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+	cfg := goka.DefaultConfig()
+	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
+	test.AssertNil(t, err)
+
+	err = tm.EnsureStreamExists(inputStream, numPartitions)
+	test.AssertNil(t, err)
+
+	// start an emitter
+	cancelEmit, emitDone := runWithContext(func(ctx context.Context) error {
+		em, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.Int64))
+		test.AssertNil(t, err)
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		defer em.Finish()
+		for i := 0; ; i++ {
+			select {
+			case <-ticker.C:
+				_, err := em.Emit(fmt.Sprintf("%d", i%100), int64(i))
+				if err != nil {
+					return nil
+				}
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	})
+
+	createProc := func() *goka.Processor {
+		proc, err := goka.NewProcessor(brokers,
+			goka.DefineGroup(
+				group,
+				goka.Input(goka.Stream(inputStream), new(codec.Int64), func(ctx goka.Context, msg interface{}) { ctx.SetValue(msg) }),
+				goka.Persist(new(codec.Int64)),
+			),
+			goka.WithRecoverAhead(),
+			goka.WithHotStandby(),
+			goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
+			goka.WithStorageBuilder(storage.MemoryBuilder()),
+		)
+
+		test.AssertNil(t, err)
+		return proc
+	}
+
+	activePassivePartitions := func(stats *goka.ProcessorStats) (active, passive int) {
+		for _, part := range stats.Group {
+			if part.TableStats != nil && part.TableStats.RunMode == 0 {
+				active++
+			} else {
+				passive++
+			}
+		}
+		return
+	}
+
+	p1, cancelP1, p1Done := runProc(createProc())
+	pollTimed(t, "p1 started", 10, p1.Recovered)
+
+	// p1 has all active partitions
+	p1Stats := p1.Stats()
+	p1Active, p1Passive := activePassivePartitions(p1Stats)
+	test.AssertEqual(t, p1Active, numPartitions)
+	test.AssertEqual(t, p1Passive, 0)
+
+	p2, cancelP2, p2Done := runProc(createProc())
+	pollTimed(t, "p2 started", 10, p2.Recovered)
+	pollTimed(t, "p1 still running", 10, p1.Recovered)
+
+	// now p1 and p2 share the partitions
+	p2Stats := p2.Stats()
+	p2Active, p2Passive := activePassivePartitions(p2Stats)
+	test.AssertEqual(t, p2Active, numPartitions/2)
+	test.AssertEqual(t, p2Passive, numPartitions/2)
+	p1Stats = p1.Stats()
+	p1Active, p1Passive = activePassivePartitions(p1Stats)
+	test.AssertEqual(t, p1Active, numPartitions/2)
+	test.AssertEqual(t, p1Passive, numPartitions/2)
+
+	// p1 is down
+	cancelP1()
+	test.AssertTrue(t, <-p1Done == nil)
+
+	// p2 should have all partitions
+	pollTimed(t, "p2 has all partitions", 10, func() bool {
+		p2Stats = p2.Stats()
+		p2Active, p2Passive := activePassivePartitions(p2Stats)
+		return p2Active == numPartitions && p2Passive == 0
+	})
+
+	cancelP2()
+	test.AssertTrue(t, <-p2Done == nil)
+
+	// stop emitter
+	cancelEmit()
+	test.AssertTrue(t, <-emitDone == nil)
+}
+
 func TestCallbackFail(t *testing.T) {
 	t.Parallel()
 	brokers := initSystemTest(t)
