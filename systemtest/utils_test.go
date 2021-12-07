@@ -29,6 +29,19 @@ func pollTimed(t *testing.T, what string, secTimeout float64, pollers ...func() 
 	t.Fatalf("waiting for %s timed out", what)
 }
 
+// runWithContext runs a context-aware function in another go-routine and returns a function to
+// cancel the context and an error channel.
+func runWithContext(fun func(ctx context.Context) error) (context.CancelFunc, chan error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		done <- fun(ctx)
+	}()
+
+	return cancel, done
+}
+
 // runProc runs a processor in a go-routine and returns it along with the cancel-func and an error-channel being closed
 // when the processor terminates (with an error that might have been returned)
 func runProc(proc *goka.Processor) (*goka.Processor, context.CancelFunc, chan error) {

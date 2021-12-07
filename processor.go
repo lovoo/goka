@@ -363,7 +363,7 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 
 		select {
 		case <-time.After(5 * time.Second):
-		case <-sessionCtx.Done():
+		case <-ctx.Done():
 			return nil
 		}
 	}
