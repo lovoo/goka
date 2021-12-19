@@ -43,7 +43,13 @@ type RebalanceCallback func(a Assignment)
 const (
 	defaultBaseStoragePath = "/tmp/goka"
 	defaultClientID        = "goka"
-	defaultBackoffRestTime = time.Minute
+
+	// duration, after which we'll reset the backoff
+	defaultBackoffResetTime = 60 * time.Second
+	// duration to increase each time retrying
+	defaultBackoffStep = 10 * time.Second
+	// maximum duration to wait for the backoff
+	defaultBackoffMax = 120 * time.Second
 )
 
 // DefaultProcessorStoragePath is the default path where processor state
@@ -323,7 +329,7 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	opt.clientID = defaultClientID
 	opt.log = defaultLogger
 	opt.hasher = DefaultHasher()
-	opt.backoffResetTime = defaultBackoffRestTime
+	opt.backoffResetTime = defaultBackoffResetTime
 
 	for _, o := range opts {
 		o(opt, gg)
@@ -494,7 +500,7 @@ func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) 
 	opt.clientID = defaultClientID
 	opt.log = defaultLogger
 	opt.hasher = DefaultHasher()
-	opt.backoffResetTime = defaultBackoffRestTime
+	opt.backoffResetTime = defaultBackoffResetTime
 
 	for _, o := range opts {
 		o(opt, topic, codec)
