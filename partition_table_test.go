@@ -32,7 +32,7 @@ func defaultPT(
 		updateCallback,
 		bm.getStorageBuilder(),
 		defaultLogger,
-		NewSimpleBackoff(time.Second*10),
+		NewSimpleBackoff(defaultBackoffStep, defaultBackoffMax),
 		time.Minute,
 	), bm, ctrl
 }
@@ -581,6 +581,12 @@ func TestPT_loadMessages(t *testing.T) {
 			updateCB,
 		)
 		defer ctrl.Finish()
+		// need to make the message-buffer 0-size, to avoid a race-condition in the test.
+		// Closing the partition-consumer while loading will close the error channel, which will stop
+		// message processing. Usually this isn't a problem, because the partition table usually stops by itself
+		// when reaching HWM. For the test though, it would not recover the expected messages, because it'll drain the channels only.
+		// By setting chan-size to 0, we'll ensure the message is processed.
+		consumer.config.ChannelBufferSize = 0
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		bm.mst.EXPECT().Open().Return(nil)
@@ -592,8 +598,10 @@ func TestPT_loadMessages(t *testing.T) {
 			test.AssertNil(t, err)
 		}()
 		go func(ctx context.Context) {
-			lock := sync.Mutex{}
-			open := true
+			var (
+				lock sync.Mutex
+				open = true
+			)
 			go func() {
 				lock.Lock()
 				defer lock.Unlock()

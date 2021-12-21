@@ -232,7 +232,7 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 			pp.opts.updateCallback,
 			pp.opts.builders.storage,
 			pp.log.Prefix(fmt.Sprintf("Join %s", join.Topic())),
-			NewSimpleBackoff(time.Second*10),
+			NewSimpleBackoff(defaultBackoffStep, defaultBackoffMax),
 			time.Minute,
 		)
 		pp.joins[join.Topic()] = table

@@ -540,7 +540,7 @@ func TestView_Run(t *testing.T) {
 			updateCB,
 			bm.getStorageBuilder(),
 			defaultLogger,
-			NewSimpleBackoff(time.Second*10),
+			NewSimpleBackoff(defaultBackoffStep, defaultBackoffMax),
 			time.Minute,
 		)
 
@@ -595,7 +595,7 @@ func TestView_Run(t *testing.T) {
 			updateCB,
 			bm.getStorageBuilder(),
 			defaultLogger,
-			NewSimpleBackoff(time.Second*10),
+			NewSimpleBackoff(defaultBackoffStep, defaultBackoffMax),
 			time.Minute,
 		)
 

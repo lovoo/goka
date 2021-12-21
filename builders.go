@@ -2,7 +2,6 @@ package goka
 
 import (
 	"hash"
-	"time"
 
 	"github.com/Shopify/sarama"
 )
@@ -93,7 +92,7 @@ func SaramaConsumerBuilderWithConfig(config *sarama.Config) SaramaConsumerBuilde
 // BackoffBuilder creates a backoff
 type BackoffBuilder func() (Backoff, error)
 
-// DefaultBackoffBuilder returnes a simpleBackoff with 10 second steps
+// DefaultBackoffBuilder returnes a simpleBackoff with 10 seconds step increase and 2 minutes max wait
 func DefaultBackoffBuilder() (Backoff, error) {
-	return NewSimpleBackoff(time.Second * 10), nil
+	return NewSimpleBackoff(defaultBackoffStep, defaultBackoffMax), nil
 }
