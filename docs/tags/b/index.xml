@@ -1,12 +1,12 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Goka – b</title>
-    <link>goka/tags/b/</link>
+    <link>/goka/tags/b/</link>
     <description>Recent content in b on Goka</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     
-	  <atom:link href="goka/tags/b/index.xml" rel="self" type="application/rss+xml" />
+	  <atom:link href="/goka/tags/b/index.xml" rel="self" type="application/rss+xml" />
     
     
       
@@ -16,10 +16,10 @@
     
     <item>
       <title>Docs: Building Blocks</title>
-      <link>goka/docs/guide/building_blocks/</link>
+      <link>/goka/docs/guide/building_blocks/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/guide/building_blocks/</guid>
+      <guid>/goka/docs/guide/building_blocks/</guid>
       <description>
         
         

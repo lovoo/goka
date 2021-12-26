@@ -1,12 +1,12 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Goka – Goka</title>
-    <link>goka/</link>
+    <link>/goka/</link>
     <description>Recent content on Goka</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     
-	  <atom:link href="goka/index.xml" rel="self" type="application/rss+xml" />
+	  <atom:link href="/goka/index.xml" rel="self" type="application/rss+xml" />
     
     
       
