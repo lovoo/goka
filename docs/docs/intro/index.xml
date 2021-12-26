@@ -1,12 +1,12 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Goka – Intro</title>
-    <link>goka/docs/intro/</link>
+    <link>/goka/docs/intro/</link>
     <description>Recent content in Intro on Goka</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     
-	  <atom:link href="goka/docs/intro/index.xml" rel="self" type="application/rss+xml" />
+	  <atom:link href="/goka/docs/intro/index.xml" rel="self" type="application/rss+xml" />
     
     
       
@@ -16,10 +16,10 @@
     
     <item>
       <title>Docs: What&#39;s Kafka?</title>
-      <link>goka/docs/intro/whats_kafka/</link>
+      <link>/goka/docs/intro/whats_kafka/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/intro/whats_kafka/</guid>
+      <guid>/goka/docs/intro/whats_kafka/</guid>
       <description>
         
         
@@ -29,10 +29,10 @@
     
     <item>
       <title>Docs: why goka</title>
-      <link>goka/docs/intro/why_goka/</link>
+      <link>/goka/docs/intro/why_goka/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/intro/why_goka/</guid>
+      <guid>/goka/docs/intro/why_goka/</guid>
       <description>
         
         

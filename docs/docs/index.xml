@@ -1,12 +1,12 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Goka – Documentation</title>
-    <link>goka/docs/</link>
+    <link>/goka/docs/</link>
     <description>Recent content in Documentation on Goka</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     
-	  <atom:link href="goka/docs/index.xml" rel="self" type="application/rss+xml" />
+	  <atom:link href="/goka/docs/index.xml" rel="self" type="application/rss+xml" />
     
     
       
@@ -16,10 +16,10 @@
     
     <item>
       <title>Docs: Example Page</title>
-      <link>goka/docs/getting-started/example-page/</link>
+      <link>/goka/docs/getting-started/example-page/</link>
       <pubDate>Thu, 05 Jan 2017 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/getting-started/example-page/</guid>
+      <guid>/goka/docs/getting-started/example-page/</guid>
       <description>
         
         
@@ -329,10 +329,10 @@ bar := &amp;quot;foo&amp;quot;;
     
     <item>
       <title>Docs: Building Blocks</title>
-      <link>goka/docs/guide/building_blocks/</link>
+      <link>/goka/docs/guide/building_blocks/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/guide/building_blocks/</guid>
+      <guid>/goka/docs/guide/building_blocks/</guid>
       <description>
         
         
@@ -406,10 +406,10 @@ component&amp;rsquo;s constructor, e.g.&lt;/p&gt;
     
     <item>
       <title>Docs: Custom Datastructures</title>
-      <link>goka/docs/cookbook/custom_datastructures/</link>
+      <link>/goka/docs/cookbook/custom_datastructures/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/cookbook/custom_datastructures/</guid>
+      <guid>/goka/docs/cookbook/custom_datastructures/</guid>
       <description>
         
         
@@ -419,10 +419,10 @@ component&amp;rsquo;s constructor, e.g.&lt;/p&gt;
     
     <item>
       <title>Docs: Delivery Semantics</title>
-      <link>goka/docs/guide/concistency/</link>
+      <link>/goka/docs/guide/concistency/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/guide/concistency/</guid>
+      <guid>/goka/docs/guide/concistency/</guid>
       <description>
         
         
@@ -443,10 +443,10 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
     
     <item>
       <title>Docs: Hot Failover</title>
-      <link>goka/docs/cookbook/hot_failover/</link>
+      <link>/goka/docs/cookbook/hot_failover/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/cookbook/hot_failover/</guid>
+      <guid>/goka/docs/cookbook/hot_failover/</guid>
       <description>
         
         
@@ -457,10 +457,10 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
     
     <item>
       <title>Docs: Local Storage</title>
-      <link>goka/docs/guide/local_storage/</link>
+      <link>/goka/docs/guide/local_storage/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/guide/local_storage/</guid>
+      <guid>/goka/docs/guide/local_storage/</guid>
       <description>
         
         
@@ -470,10 +470,10 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
     
     <item>
       <title>Docs: Local vs Global Configuration</title>
-      <link>goka/docs/cookbook/configuration/</link>
+      <link>/goka/docs/cookbook/configuration/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/cookbook/configuration/</guid>
+      <guid>/goka/docs/cookbook/configuration/</guid>
       <description>
         
         
@@ -483,10 +483,10 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
     
     <item>
       <title>Docs: Loops, Joins, Lookups</title>
-      <link>goka/docs/guide/lookups/</link>
+      <link>/goka/docs/guide/lookups/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/guide/lookups/</guid>
+      <guid>/goka/docs/guide/lookups/</guid>
       <description>
         
         
@@ -496,10 +496,10 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
     
     <item>
       <title>Docs: Monitoring</title>
-      <link>goka/docs/guide/monitoring/</link>
+      <link>/goka/docs/guide/monitoring/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/guide/monitoring/</guid>
+      <guid>/goka/docs/guide/monitoring/</guid>
       <description>
         
         
@@ -509,10 +509,10 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
     
     <item>
       <title>Docs: Partitioning and Hashing</title>
-      <link>goka/docs/cookbook/partitioning_hashing/</link>
+      <link>/goka/docs/cookbook/partitioning_hashing/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/cookbook/partitioning_hashing/</guid>
+      <guid>/goka/docs/cookbook/partitioning_hashing/</guid>
       <description>
         
         
@@ -522,10 +522,10 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
     
     <item>
       <title>Docs: Reconnecting Views</title>
-      <link>goka/docs/cookbook/reconnecting_views/</link>
+      <link>/goka/docs/cookbook/reconnecting_views/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/cookbook/reconnecting_views/</guid>
+      <guid>/goka/docs/cookbook/reconnecting_views/</guid>
       <description>
         
         
@@ -536,10 +536,10 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
     
     <item>
       <title>Docs: What&#39;s Kafka?</title>
-      <link>goka/docs/intro/whats_kafka/</link>
+      <link>/goka/docs/intro/whats_kafka/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/intro/whats_kafka/</guid>
+      <guid>/goka/docs/intro/whats_kafka/</guid>
       <description>
         
         
@@ -549,10 +549,10 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
     
     <item>
       <title>Docs: why goka</title>
-      <link>goka/docs/intro/why_goka/</link>
+      <link>/goka/docs/intro/why_goka/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/intro/why_goka/</guid>
+      <guid>/goka/docs/intro/why_goka/</guid>
       <description>
         
         

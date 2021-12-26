@@ -1,12 +1,12 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Goka – Getting Started</title>
-    <link>goka/docs/getting-started/</link>
+    <link>/goka/docs/getting-started/</link>
     <description>Recent content in Getting Started on Goka</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     
-	  <atom:link href="goka/docs/getting-started/index.xml" rel="self" type="application/rss+xml" />
+	  <atom:link href="/goka/docs/getting-started/index.xml" rel="self" type="application/rss+xml" />
     
     
       
@@ -16,10 +16,10 @@
     
     <item>
       <title>Docs: Example Page</title>
-      <link>goka/docs/getting-started/example-page/</link>
+      <link>/goka/docs/getting-started/example-page/</link>
       <pubDate>Thu, 05 Jan 2017 00:00:00 +0000</pubDate>
       
-      <guid>goka/docs/getting-started/example-page/</guid>
+      <guid>/goka/docs/getting-started/example-page/</guid>
       <description>
         
         
