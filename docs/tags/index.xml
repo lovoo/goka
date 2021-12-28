@@ -1,13 +1,12 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Goka – Tags</title>
-    <link>/goka/tags/</link>
+    <link>https://lovoo.github.io/goka/tags/</link>
     <description>Recent content in Tags on Goka</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Thu, 05 Jan 2017 00:00:00 +0000</lastBuildDate>
     
-	  <atom:link href="/goka/tags/index.xml" rel="self" type="application/rss+xml" />
+	  <atom:link href="https://lovoo.github.io/goka/tags/index.xml" rel="self" type="application/rss+xml" />
     
     
       

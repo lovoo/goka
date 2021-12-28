@@ -1,44 +1,18 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Goka – Documentation</title>
-    <link>https://lovoo.github.io/goka/docs/</link>
-    <description>Recent content in Documentation on Goka</description>
+    <title>Goka – Getting Started</title>
+    <link>https://lovoo.github.io/goka/docs/getting_started/</link>
+    <description>Recent content in Getting Started on Goka</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     
-	  <atom:link href="https://lovoo.github.io/goka/docs/index.xml" rel="self" type="application/rss+xml" />
+	  <atom:link href="https://lovoo.github.io/goka/docs/getting_started/index.xml" rel="self" type="application/rss+xml" />
     
     
       
         
       
     
-    
-    <item>
-      <title>Docs: Guide</title>
-      <link>https://lovoo.github.io/goka/docs/guide/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      
-      <guid>https://lovoo.github.io/goka/docs/guide/</guid>
-      <description>
-        
-        
-        
-      </description>
-    </item>
-    
-    <item>
-      <title>Docs: Cookbook</title>
-      <link>https://lovoo.github.io/goka/docs/cookbook/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      
-      <guid>https://lovoo.github.io/goka/docs/cookbook/</guid>
-      <description>
-        
-        
-        
-      </description>
-    </item>
     
     <item>
       <title>Docs: First Steps</title>
