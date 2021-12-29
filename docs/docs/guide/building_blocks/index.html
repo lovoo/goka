@@ -4,7 +4,6 @@
     <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <meta name="generator" content="Hugo 0.89.4" />
-<link rel="alternate" type="application/rss&#43;xml" href="https://lovoo.github.io/goka/docs/guide/index.xml">
 <meta name="robots" content="index, follow">
 
 
@@ -19,21 +18,26 @@
 <link rel="icon" type="image/png" href="/goka/favicons/android-144x144.png" sizes="144x144">
 <link rel="icon" type="image/png" href="/goka/favicons/android-192x192.png" sizes="192x192">
 
-<title>Guide | Goka</title>
-<meta name="description" content="Indepth description of all features of Goka
-">
-<meta property="og:title" content="Guide" />
-<meta property="og:description" content="Indepth description of all features of Goka
-" />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://lovoo.github.io/goka/docs/guide/" />
+<title>Building Blocks | Goka</title>
+<meta name="description" content="Goka encourages the developer to decompose the application into microservices using three different components: emitters, processors, and views.
+The …">
+<meta property="og:title" content="Building Blocks" />
+<meta property="og:description" content="Goka encourages the developer to decompose the application into microservices using three different components: emitters, processors, and views. The figure below depicts the abstract application again, but now showing the use of these three components together with Kafka and the external API.
+Emitters. Part of the API offers operations that can modify the state. Calls to these operations are transformed into streams of messages with the help of an emitter, i." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://lovoo.github.io/goka/docs/guide/building_blocks/" /><meta property="article:section" content="docs" />
 
-<meta itemprop="name" content="Guide">
-<meta itemprop="description" content="Indepth description of all features of Goka
-"><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="Guide"/>
-<meta name="twitter:description" content="Indepth description of all features of Goka
-"/>
+<meta property="article:modified_time" content="2021-12-28T22:50:11+01:00" />
+
+<meta itemprop="name" content="Building Blocks">
+<meta itemprop="description" content="Goka encourages the developer to decompose the application into microservices using three different components: emitters, processors, and views. The figure below depicts the abstract application again, but now showing the use of these three components together with Kafka and the external API.
+Emitters. Part of the API offers operations that can modify the state. Calls to these operations are transformed into streams of messages with the help of an emitter, i.">
+<meta itemprop="dateModified" content="2021-12-28T22:50:11+01:00" />
+<meta itemprop="wordCount" content="839">
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Building Blocks"/>
+<meta name="twitter:description" content="Goka encourages the developer to decompose the application into microservices using three different components: emitters, processors, and views. The figure below depicts the abstract application again, but now showing the use of these three components together with Kafka and the external API.
+Emitters. Part of the API offers operations that can modify the state. Calls to these operations are transformed into streams of messages with the help of an emitter, i."/>
 
 
 
@@ -58,7 +62,7 @@ if (!doNotTrack) {
 <script async src='https://www.google-analytics.com/analytics.js'></script>
 
   </head>
-  <body class="td-section">
+  <body class="td-page">
     <header>
       
 <nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
@@ -127,7 +131,7 @@ if (!doNotTrack) {
 </li>
   </ul>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child active-path" id="m-gokadocsguide-li">
-  <a href="/goka/docs/guide/" class="align-left pl-0 active td-sidebar-link td-sidebar-link__section" id="m-gokadocsguide"><span class="td-sidebar-nav-active-item">Guide</span></a>
+  <a href="/goka/docs/guide/" class="align-left pl-0 td-sidebar-link td-sidebar-link__section" id="m-gokadocsguide"><span class="">Guide</span></a>
   <ul class="ul-2 foldable">
     <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguideprocessor-li">
   <a href="/goka/docs/guide/processor/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguideprocessor"><span class="">Using Processors</span></a>
@@ -139,8 +143,8 @@ if (!doNotTrack) {
   <a href="/goka/docs/guide/deployment/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguidedeployment"><span class=""></span></a>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguideview-li">
   <a href="/goka/docs/guide/view/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguideview"><span class=""></span></a>
-</li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguidebuilding_blocks-li">
-  <a href="/goka/docs/guide/building_blocks/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguidebuilding_blocks"><span class="">Building Blocks</span></a>
+</li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child active-path" id="m-gokadocsguidebuilding_blocks-li">
+  <a href="/goka/docs/guide/building_blocks/" class="align-left pl-0 active td-sidebar-link td-sidebar-link__page" id="m-gokadocsguidebuilding_blocks"><span class="td-sidebar-nav-active-item">Building Blocks</span></a>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguideconcistency-li">
   <a href="/goka/docs/guide/concistency/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguideconcistency"><span class="">Delivery Semantics</span></a>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguidelocal_storage-li">
@@ -177,16 +181,24 @@ if (!doNotTrack) {
           <aside class="d-none d-xl-block col-xl-2 td-sidebar-toc d-print-none">
             
 <div class="td-page-meta ml-2 pb-1 pt-2 mb-0">
-<a href="https://github.com/lovoo/goka/tree/master/content/en/docs/guide/_index.md" class="td-page-meta--view" target="_blank" rel="noopener"><i class="fa fa-file-alt fa-fw"></i> View page source</a>
-  <a href="https://github.com/lovoo/goka/edit/master/content/en/docs/guide/_index.md" class="td-page-meta--edit" target="_blank" rel="noopener"><i class="fa fa-edit fa-fw"></i> Edit this page</a>
-  <a href="https://github.com/lovoo/goka/new/master/content/en/docs/guide/_index.md?filename=change-me.md&amp;value=---%0Atitle%3A&#43;%22Long&#43;Page&#43;Title%22%0AlinkTitle%3A&#43;%22Short&#43;Nav&#43;Title%22%0Aweight%3A&#43;100%0Adescription%3A&#43;%3E-%0A&#43;&#43;&#43;&#43;&#43;Page&#43;description&#43;for&#43;heading&#43;and&#43;indexes.%0A---%0A%0A%23%23&#43;Heading%0A%0AEdit&#43;this&#43;template&#43;to&#43;create&#43;your&#43;new&#43;page.%0A%0A%2A&#43;Give&#43;it&#43;a&#43;good&#43;name%2C&#43;ending&#43;in&#43;%60.md%60&#43;-&#43;e.g.&#43;%60getting-started.md%60%0A%2A&#43;Edit&#43;the&#43;%22front&#43;matter%22&#43;section&#43;at&#43;the&#43;top&#43;of&#43;the&#43;page&#43;%28weight&#43;controls&#43;how&#43;its&#43;ordered&#43;amongst&#43;other&#43;pages&#43;in&#43;the&#43;same&#43;directory%3B&#43;lowest&#43;number&#43;first%29.%0A%2A&#43;Add&#43;a&#43;good&#43;commit&#43;message&#43;at&#43;the&#43;bottom&#43;of&#43;the&#43;page&#43;%28%3C80&#43;characters%3B&#43;use&#43;the&#43;extended&#43;description&#43;field&#43;for&#43;more&#43;detail%29.%0A%2A&#43;Create&#43;a&#43;new&#43;branch&#43;so&#43;you&#43;can&#43;preview&#43;your&#43;new&#43;file&#43;and&#43;request&#43;a&#43;review&#43;via&#43;Pull&#43;Request.%0A" class="td-page-meta--child" target="_blank" rel="noopener"><i class="fa fa-edit fa-fw"></i> Create child page</a>
-  <a href="https://github.com/lovoo/goka/issues/new?title=Guide" class="td-page-meta--issue" target="_blank" rel="noopener"><i class="fab fa-github fa-fw"></i> Create documentation issue</a>
+<a href="https://github.com/lovoo/goka/tree/master/content/en/docs/guide/building_blocks.md" class="td-page-meta--view" target="_blank" rel="noopener"><i class="fa fa-file-alt fa-fw"></i> View page source</a>
+  <a href="https://github.com/lovoo/goka/edit/master/content/en/docs/guide/building_blocks.md" class="td-page-meta--edit" target="_blank" rel="noopener"><i class="fa fa-edit fa-fw"></i> Edit this page</a>
+  <a href="https://github.com/lovoo/goka/new/master/content/en/docs/guide/building_blocks.md?filename=change-me.md&amp;value=---%0Atitle%3A&#43;%22Long&#43;Page&#43;Title%22%0AlinkTitle%3A&#43;%22Short&#43;Nav&#43;Title%22%0Aweight%3A&#43;100%0Adescription%3A&#43;%3E-%0A&#43;&#43;&#43;&#43;&#43;Page&#43;description&#43;for&#43;heading&#43;and&#43;indexes.%0A---%0A%0A%23%23&#43;Heading%0A%0AEdit&#43;this&#43;template&#43;to&#43;create&#43;your&#43;new&#43;page.%0A%0A%2A&#43;Give&#43;it&#43;a&#43;good&#43;name%2C&#43;ending&#43;in&#43;%60.md%60&#43;-&#43;e.g.&#43;%60getting-started.md%60%0A%2A&#43;Edit&#43;the&#43;%22front&#43;matter%22&#43;section&#43;at&#43;the&#43;top&#43;of&#43;the&#43;page&#43;%28weight&#43;controls&#43;how&#43;its&#43;ordered&#43;amongst&#43;other&#43;pages&#43;in&#43;the&#43;same&#43;directory%3B&#43;lowest&#43;number&#43;first%29.%0A%2A&#43;Add&#43;a&#43;good&#43;commit&#43;message&#43;at&#43;the&#43;bottom&#43;of&#43;the&#43;page&#43;%28%3C80&#43;characters%3B&#43;use&#43;the&#43;extended&#43;description&#43;field&#43;for&#43;more&#43;detail%29.%0A%2A&#43;Create&#43;a&#43;new&#43;branch&#43;so&#43;you&#43;can&#43;preview&#43;your&#43;new&#43;file&#43;and&#43;request&#43;a&#43;review&#43;via&#43;Pull&#43;Request.%0A" class="td-page-meta--child" target="_blank" rel="noopener"><i class="fa fa-edit fa-fw"></i> Create child page</a>
+  <a href="https://github.com/lovoo/goka/issues/new?title=Building%20Blocks" class="td-page-meta--issue" target="_blank" rel="noopener"><i class="fab fa-github fa-fw"></i> Create documentation issue</a>
   <a href="https://github.com/lovoo/goka/issues/new" class="td-page-meta--project-issue" target="_blank" rel="noopener"><i class="fas fa-tasks fa-fw"></i> Create project issue</a>
   
 </div>
 
             
 
+
+<div class="td-toc"><nav id="TableOfContents">
+  <ul>
+    <li><a href="#installation">Installation</a></li>
+    <li><a href="#configuration">Configuration</a></li>
+    <li><a href="#concepts">Concepts</a></li>
+  </ul>
+</nav></div>
 
 
 
@@ -226,15 +238,18 @@ if (!doNotTrack) {
   <li class="breadcrumb-item">
     <a href="https://lovoo.github.io/goka/docs/">Documentation</a>
   </li>
-  <li class="breadcrumb-item active" aria-current="page">
+  <li class="breadcrumb-item">
     <a href="https://lovoo.github.io/goka/docs/guide/">Guide</a>
+  </li>
+  <li class="breadcrumb-item active" aria-current="page">
+    <a href="https://lovoo.github.io/goka/docs/guide/building_blocks/">Building Blocks</a>
   </li>
   </ol>
 </nav>
             
 <div class="td-content">
-	<h1>Guide</h1>
-  <div class="lead">Indepth description of all features of Goka</div>
+	<h1>Building Blocks</h1>
+	
 	<header class="article-meta">
 		
 		
@@ -249,106 +264,80 @@ if (!doNotTrack) {
 			
 		
 		
-	</header>
-	
-        <div class="section-index">
-    
-    
-    
-    
-    
-    
-    
-    
-    <hr class="panel-line">
-        
-            
-            <div class="entry">
-                <h5>
-                    <a href="/goka/docs/guide/processor/">Using Processors</a>
-                </h5>
-                <p>How processors work and how to set them up</p>
-            </div>
-        
-            
-            <div class="entry">
-                <h5>
-                    <a href="/goka/docs/guide/partitions/">Partitions and Partitioning</a>
-                </h5>
-                <p>Things to know about partitioning and partitions</p>
-            </div>
-        
-            
-            <div class="entry">
-                <h5>
-                    <a href="/goka/docs/guide/codecs/"></a>
-                </h5>
-                <p></p>
-            </div>
-        
-            
-            <div class="entry">
-                <h5>
-                    <a href="/goka/docs/guide/deployment/"></a>
-                </h5>
-                <p></p>
-            </div>
-        
-            
-            <div class="entry">
-                <h5>
-                    <a href="/goka/docs/guide/view/"></a>
-                </h5>
-                <p></p>
-            </div>
-        
-            
-            <div class="entry">
-                <h5>
-                    <a href="/goka/docs/guide/building_blocks/">Building Blocks</a>
-                </h5>
-                <p></p>
-            </div>
-        
-            
-            <div class="entry">
-                <h5>
-                    <a href="/goka/docs/guide/concistency/">Delivery Semantics</a>
-                </h5>
-                <p></p>
-            </div>
-        
-            
-            <div class="entry">
-                <h5>
-                    <a href="/goka/docs/guide/local_storage/">Local Storage</a>
-                </h5>
-                <p></p>
-            </div>
-        
-            
-            <div class="entry">
-                <h5>
-                    <a href="/goka/docs/guide/lookups/">Loops, Joins, Lookups</a>
-                </h5>
-                <p></p>
-            </div>
-        
-            
-            <div class="entry">
-                <h5>
-                    <a href="/goka/docs/guide/monitoring/">Monitoring</a>
-                </h5>
-                <p></p>
-            </div>
-        
-    
-</div>
+	</header>    
+	<p>Goka encourages the developer to decompose the application into microservices using three different components: emitters, processors, and views.
+The figure below depicts the abstract application again, but now showing the use of these three components together with Kafka and the external API.</p>
+<p><img src="/goka/goka-arch-simple.png" alt="simple application"></p>
+<p><strong>Emitters.</strong> Part of the API offers operations that can modify the state.
+Calls to these operations are transformed into streams of messages with the help of an emitter, i.e., the state modification is persisted before performing the actual action as in the <a href="https://martinfowler.com/eaaDev/EventSourcing.html">event sourcing pattern</a>.
+An <em>emitter</em> emits an event as a key-value message to Kafka.
+In Kafka&rsquo;s parlance, emitters are called producers and messages are called records.
+We employ the modified terminology to focus this discussion to the scope of Goka only.
+Messages are grouped in topics, e.g., a topic could be a type of click event in the interface of the application. In Kafka, topics are partitioned and the message&rsquo;s key is used to calculate the partition into which the message is emitted.</p>
+<p><strong>Processors.</strong> A <em>processor</em> is a set of callback functions that modify the content of a key-value table upon the arrival of messages. A processor consumes from a set of input topics (i.e., input streams).
+Whenever a message <em>m</em> arrives from one of the input topics, the appropriate callback is invoked.
+The callback can then modify the table&rsquo;s value associated with <em>m</em>&rsquo;s key.</p>
+<p><strong>Processor groups.</strong> Multiple instances of a processor can partition the work of consuming the input topics and updating the table.
+These instances are all part of the same processor group.
+A <em>processor group</em> is Kafka&rsquo;s consumer group bound to the table it modifies.</p>
+<p><strong>Group table and group topic.</strong> Each processor group is bound to a single table (that represents its state) and has exclusive write-access to it.
+We call this table the <em>group table</em>.
+The <em>group topic</em> keeps track of the group table updates, allowing for recovery and rebalance of processor instances as described later. Each processor instance keeps the content of the partitions it is responsible for in its local storage, by default <a href="https://github.com/syndtr/goleveldb">LevelDB</a>.
+A local storage in disk allows a small memory footprint and minimizes the recovery time.</p>
+<p><strong>Views.</strong> A <em>view</em> is a persistent cache of a group table. A view subscribes to the updates of all partitions of a group topic, keeping a local disk storage in sync with the table. With a view, one can easily serve up-to-date content of the group table via, for example, <a href="https://github.com/grpc/grpc-go">gRPC</a>.</p>
+<p>As we present next, the composability, scalability, and fault-tolerance aspects of Goka are strongly related to Kafka. For example, emitters, processors, and views can be deployed in different hosts and scaled in different ways because they communicate exclusively via Kafka. Before discussing these aspects though, we take a look at a simple example.</p>
+<p>Package API documentation is available at [GoDoc] and the <a href="https://github.com/lovoo/goka/wiki/Tips#configuring-log-compaction-for-table-topics">Wiki</a> provides several tips for configuring, extending, and deploying Goka applications.</p>
+<h2 id="installation">Installation</h2>
+<p>You can install Goka by running the following command:</p>
+<p><code>$ go get -u github.com/lovoo/goka</code></p>
+<h2 id="configuration">Configuration</h2>
+<p>Goka relies on <a href="https://github.com/Shopify/sarama">Sarama</a> to perform the actual communication with Kafka, which offers many configuration settings. The config is documented <a href="https://godoc.org/github.com/Shopify/sarama#Config">here</a>.</p>
+<p>In most cases, you need to modify the config, e.g. to set the Kafka Version.</p>
+<div class="highlight"><pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#000">cfg</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">goka</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DefaultConfig</span><span style="color:#000;font-weight:bold">()</span>
+<span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Version</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">sarama</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">V2_4_0_0</span>
+<span style="color:#000">goka</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ReplaceGlobalConfig</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">)</span>
+</code></pre></div><p>This makes all goka components use the updated config.</p>
+<p>If you do need specific configuration for different components, you need to pass customized builders to the
+component&rsquo;s constructor, e.g.</p>
+<div class="highlight"><pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#000">cfg</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">goka</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DefaultConfig</span><span style="color:#000;font-weight:bold">()</span>
+<span style="color:#8f5902;font-style:italic">// modify the config with component-specific settings
+</span><span style="color:#8f5902;font-style:italic"></span>
+
+<span style="color:#8f5902;font-style:italic">// use the config by creating a builder which allows to override global config
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#000">goka</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewProcessor</span><span style="color:#000;font-weight:bold">(</span><span style="color:#8f5902;font-style:italic">// ...,
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">goka</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">WithConsumerGroupBuilder</span><span style="color:#000;font-weight:bold">(</span>
+		<span style="color:#000">goka</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConsumerGroupBuilderWithConfig</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">),</span>
+	<span style="color:#000;font-weight:bold">),</span>
+	<span style="color:#8f5902;font-style:italic">// ...
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#000;font-weight:bold">)</span>
+</code></pre></div><h2 id="concepts">Concepts</h2>
+<p>Goka relies on Kafka for message passing, fault-tolerant state storage and workload partitioning.</p>
+<ul>
+<li>
+<p><strong>Emitters</strong> deliver key-value messages into Kafka. As an example, an emitter could be a database handler emitting the state changes into Kafka for other interested applications to consume.</p>
+</li>
+<li>
+<p><strong>Processor</strong> is a set of callback functions that consume and perform state transformations upon delivery of these emitted messages. <em>Processor groups</em> are formed of one or more instances of a processor. Goka distributes the partitions of the input topics across all processor instances in a processor group. This enables effortless scaling and fault-tolerance. If a processor instance fails, its partitions and state are reassigned to the remaining healthy members of the processor group. Processors can also emit further messages into Kafka.</p>
+</li>
+<li>
+<p><strong>Group table</strong> is the state of a processor group. It is a partitioned key-value table stored in Kafka that belongs to a single processor group. If a processor instance fails, the remaining instances will take over the group table partitions of the failed instance recovering them from Kafka.</p>
+</li>
+<li>
+<p><strong>Views</strong> are local caches of a complete group table. Views provide read-only access to the group tables and can be used to provide external services for example through a gRPC interface.</p>
+</li>
+<li>
+<p><strong>Local storage</strong> keeps a local copy of the group table partitions to speedup recovery and reduce memory utilization. By default, the local storage uses <a href="https://github.com/syndtr/goleveldb">LevelDB</a>, but in-memory map and <a href="https://github.com/lovoo/goka/tree/master/storage/redis">Redis-based storage</a> are also available.</p>
+</li>
+</ul>
 
 	
 	
-	
+	<div class="text-muted mt-5 pt-3 border-top">
+  Last modified December 28, 2021: <a href="https://github.com/lovoo/goka/commit/350ba3ecc94c727c0a270f8d30192b845966ccae">wip (350ba3e)</a>
 </div>
+
+</div>
+
 
           </main>
         </div>

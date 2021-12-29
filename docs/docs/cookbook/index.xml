@@ -1,0 +1,85 @@
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Goka – Cookbook</title>
+    <link>https://lovoo.github.io/goka/docs/cookbook/</link>
+    <description>Recent content in Cookbook on Goka</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    
+	  <atom:link href="https://lovoo.github.io/goka/docs/cookbook/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+      
+        
+      
+    
+    
+    <item>
+      <title>Docs: Custom Datastructures</title>
+      <link>https://lovoo.github.io/goka/docs/cookbook/custom_datastructures/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://lovoo.github.io/goka/docs/cookbook/custom_datastructures/</guid>
+      <description>
+        
+        
+        
+      </description>
+    </item>
+    
+    <item>
+      <title>Docs: Hot Failover</title>
+      <link>https://lovoo.github.io/goka/docs/cookbook/hot_failover/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://lovoo.github.io/goka/docs/cookbook/hot_failover/</guid>
+      <description>
+        
+        
+        &lt;p&gt;How to use hot fail over and recover-ahead&lt;/p&gt;
+
+      </description>
+    </item>
+    
+    <item>
+      <title>Docs: Local vs Global Configuration</title>
+      <link>https://lovoo.github.io/goka/docs/cookbook/configuration/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://lovoo.github.io/goka/docs/cookbook/configuration/</guid>
+      <description>
+        
+        
+        
+      </description>
+    </item>
+    
+    <item>
+      <title>Docs: Partitioning and Hashing</title>
+      <link>https://lovoo.github.io/goka/docs/cookbook/partitioning_hashing/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://lovoo.github.io/goka/docs/cookbook/partitioning_hashing/</guid>
+      <description>
+        
+        
+        
+      </description>
+    </item>
+    
+    <item>
+      <title>Docs: Reconnecting Views</title>
+      <link>https://lovoo.github.io/goka/docs/cookbook/reconnecting_views/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://lovoo.github.io/goka/docs/cookbook/reconnecting_views/</guid>
+      <description>
+        
+        
+        &lt;p&gt;How to get high availability with reconnecting views&lt;/p&gt;
+
+      </description>
+    </item>
+    
+  </channel>
+</rss>
