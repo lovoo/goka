@@ -6,25 +6,25 @@ import (
 	"github.com/IBM/sarama"
 )
 
-// ProducerBuilder create a Kafka producer.
-type ProducerBuilder func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error)
+// // ProducerBuilder create a Kafka producer.
+// type ProducerBuilder func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error)
 
-// DefaultProducerBuilder creates a Kafka producer using the Sarama library.
-func DefaultProducerBuilder(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
-	config := globalConfig
-	config.ClientID = clientID
-	config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
-	return NewProducer(brokers, &config)
-}
+// // DefaultProducerBuilder creates a Kafka producer using the Sarama library.
+// func DefaultProducerBuilder(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
+// 	config := globalConfig
+// 	config.ClientID = clientID
+// 	config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
+// 	return NewProducer(brokers, &config)
+// }
 
-// ProducerBuilderWithConfig creates a Kafka consumer using the Sarama library.
-func ProducerBuilderWithConfig(config *sarama.Config) ProducerBuilder {
-	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
-		config.ClientID = clientID
-		config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
-		return NewProducer(brokers, config)
-	}
-}
+// // ProducerBuilderWithConfig creates a Kafka consumer using the Sarama library.
+// func ProducerBuilderWithConfig(config *sarama.Config) ProducerBuilder {
+// 	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
+// 		config.ClientID = clientID
+// 		config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
+// 		return NewProducer(brokers, config)
+// 	}
+// }
 
 // TopicManagerBuilder creates a TopicManager to check partition counts and
 // create tables.
@@ -86,6 +86,21 @@ func SaramaConsumerBuilderWithConfig(config *sarama.Config) SaramaConsumerBuilde
 	return func(brokers []string, clientID string) (sarama.Consumer, error) {
 		config.ClientID = clientID
 		return sarama.NewConsumer(brokers, config)
+	}
+}
+
+type SaramaProducerBuilder func(brokers []string, clientID string, hasher func() hash.Hash32) (sarama.AsyncProducer, error)
+
+func DefaultSaramaProducerBuilder() SaramaProducerBuilder {
+	config := globalConfig
+	return SaramaProducerBuilderWithConfig(&config)
+}
+
+func SaramaProducerBuilderWithConfig(config *sarama.Config) SaramaProducerBuilder {
+	return func(brokers []string, clientID string, hasher func() hash.Hash32) (sarama.AsyncProducer, error) {
+		config.ClientID = clientID
+		config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
+		return sarama.NewAsyncProducer(brokers, config)
 	}
 }
 

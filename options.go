@@ -144,9 +144,10 @@ type poptions struct {
 		storage        storage.Builder
 		consumerSarama SaramaConsumerBuilder
 		consumerGroup  ConsumerGroupBuilder
-		producer       ProducerBuilder
-		topicmgr       TopicManagerBuilder
-		backoff        BackoffBuilder
+		saramaProducer SaramaProducerBuilder
+		// producer       ProducerBuilder
+		topicmgr TopicManagerBuilder
+		backoff  BackoffBuilder
 	}
 }
 
@@ -202,10 +203,17 @@ func WithConsumerSaramaBuilder(cgb SaramaConsumerBuilder) ProcessorOption {
 	}
 }
 
-// WithProducerBuilder replaces the default producer builder.
-func WithProducerBuilder(pb ProducerBuilder) ProcessorOption {
+// // WithProducerBuilder replaces the default producer builder.
+// func WithProducerBuilder(pb ProducerBuilder) ProcessorOption {
+// 	return func(o *poptions, gg *GroupGraph) {
+// 		o.builders.producer = pb
+// 	}
+// }
+
+// WithSaramaProducerBuilder replaces the default builder for an sarama producer
+func WithSaramaProducerBuilder(spb SaramaProducerBuilder) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
-		o.builders.producer = pb
+		o.builders.saramaProducer = spb
 	}
 }
 
@@ -312,10 +320,10 @@ func WithNilHandling(nh NilHandling) ProcessorOption {
 // the tester.
 type Tester interface {
 	StorageBuilder() storage.Builder
-	ProducerBuilder() ProducerBuilder
+	SaramaProducerBuilder() SaramaProducerBuilder
 	ConsumerGroupBuilder() ConsumerGroupBuilder
 	ConsumerBuilder() SaramaConsumerBuilder
-	EmitterProducerBuilder() ProducerBuilder
+	EmitterProducerBuilder() SaramaProducerBuilder
 	TopicManagerBuilder() TopicManagerBuilder
 	RegisterGroupGraph(*GroupGraph) string
 	RegisterEmitter(Stream, Codec)
@@ -327,10 +335,10 @@ type Tester interface {
 func WithTester(t Tester) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.builders.storage = t.StorageBuilder()
-		o.builders.producer = t.ProducerBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
 		o.builders.consumerGroup = t.ConsumerGroupBuilder()
 		o.builders.consumerSarama = t.ConsumerBuilder()
+		o.builders.saramaProducer = t.SaramaProducerBuilder()
 		o.partitionChannelSize = 0
 		o.clientID = t.RegisterGroupGraph(gg)
 	}
@@ -357,8 +365,8 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 		return fmt.Errorf("Processors do not work with `Config.Producer.RequiredAcks==sarama.NoResponse`, as it uses the response's offset to store the value")
 	}
 
-	if opt.builders.producer == nil {
-		opt.builders.producer = DefaultProducerBuilder
+	if opt.builders.saramaProducer == nil {
+		opt.builders.saramaProducer = DefaultSaramaProducerBuilder()
 	}
 
 	if opt.builders.topicmgr == nil {
@@ -556,8 +564,8 @@ type eoptions struct {
 	defaultHeaders Headers
 
 	builders struct {
-		topicmgr TopicManagerBuilder
-		producer ProducerBuilder
+		topicmgr       TopicManagerBuilder
+		saramaProducer SaramaProducerBuilder
 	}
 }
 
@@ -587,10 +595,16 @@ func WithEmitterTopicManagerBuilder(tmb TopicManagerBuilder) EmitterOption {
 	}
 }
 
-// WithEmitterProducerBuilder replaces the default producer builder.
-func WithEmitterProducerBuilder(pb ProducerBuilder) EmitterOption {
+// // WithEmitterProducerBuilder replaces the default producer builder.
+// func WithEmitterProducerBuilder(pb ProducerBuilder) EmitterOption {
+// 	return func(o *eoptions, topic Stream, codec Codec) {
+// 		o.builders.producer = pb
+// 	}
+// }
+// WithSaramaProducerBuilder replaces the default builder for an sarama producer
+func WithEmitterSaramaProducerBuilder(spb SaramaProducerBuilder) EmitterOption {
 	return func(o *eoptions, topic Stream, codec Codec) {
-		o.builders.producer = pb
+		o.builders.saramaProducer = spb
 	}
 }
 
@@ -605,7 +619,7 @@ func WithEmitterHasher(hasher func() hash.Hash32) EmitterOption {
 // This is used for component tests
 func WithEmitterTester(t Tester) EmitterOption {
 	return func(o *eoptions, topic Stream, codec Codec) {
-		o.builders.producer = t.EmitterProducerBuilder()
+		o.builders.saramaProducer = t.EmitterSaramaProducerBuilder()
 		o.builders.topicmgr = t.TopicManagerBuilder()
 		t.RegisterEmitter(topic, codec)
 	}
@@ -629,8 +643,8 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 	}
 
 	// config not set, use default one
-	if opt.builders.producer == nil {
-		opt.builders.producer = DefaultProducerBuilder
+	if opt.builders.saramaProducer == nil {
+		opt.builders.saramaProducer = DefaultSaramaProducerBuilder()
 	}
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = DefaultTopicManagerBuilder

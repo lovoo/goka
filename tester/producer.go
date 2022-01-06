@@ -1,6 +1,7 @@
 package tester
 
 import (
+	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka"
 )
 
@@ -8,36 +9,55 @@ import (
 // simulate producer errors
 type emitHandler func(topic string, key string, value []byte, options ...EmitOption) *goka.Promise
 
-type producerMock struct {
+type producer struct {
 	emitter emitHandler
 }
 
-func newProducerMock(emitter emitHandler) *producerMock {
-	return &producerMock{
+func newProducerMock(emitter emitHandler) *producer {
+	return &producer{
 		emitter: emitter,
 	}
 }
 
-// Emit emits messages to arbitrary topics.
-// The mock simply forwards the emit to the KafkaMock which takes care of queueing calls
-// to handled topics or putting the emitted messages in the emitted-messages-list
-func (p *producerMock) EmitWithHeaders(topic string, key string, value []byte, headers goka.Headers) *goka.Promise {
-	return p.emitter(topic, key, value, WithHeaders(headers))
+func (p *producer) AsyncClose() {
+
 }
 
-// Emit emits messages to arbitrary topics.
-// The mock simply forwards the emit to the KafkaMock which takes care of queueing calls
-// to handled topics or putting the emitted messages in the emitted-messages-list
-func (p *producerMock) Emit(topic string, key string, value []byte) *goka.Promise {
-	return p.emitter(topic, key, value)
-}
-
-// Close closes the producer mock
-// No action required in the mock.
-func (p *producerMock) Close() error {
-	logger.Printf("Closing producer mock")
+func (p *producer) Close() error {
 	return nil
 }
+func (p *producer) Input() chan<- *sarama.ProducerMessage {
+	return nil
+}
+
+func (p *producer) Successes() <-chan *sarama.ProducerMessage {
+	return nil
+}
+
+func (p *producer) Errors() <-chan *sarama.ProducerError {
+	return nil
+}
+
+// // Emit emits messages to arbitrary topics.
+// // The mock simply forwards the emit to the KafkaMock which takes care of queueing calls
+// // to handled topics or putting the emitted messages in the emitted-messages-list
+// func (p *producerMock) EmitWithHeaders(topic string, key string, value []byte, headers goka.Headers) *goka.Promise {
+// 	return p.emitter(topic, key, value, WithHeaders(headers))
+// }
+
+// // Emit emits messages to arbitrary topics.
+// // The mock simply forwards the emit to the KafkaMock which takes care of queueing calls
+// // to handled topics or putting the emitted messages in the emitted-messages-list
+// func (p *producerMock) Emit(topic string, key string, value []byte) *goka.Promise {
+// 	return p.emitter(topic, key, value)
+// }
+
+// // Close closes the producer mock
+// // No action required in the mock.
+// func (p *producerMock) Close() error {
+// 	logger.Printf("Closing producer mock")
+// 	return nil
+// }
 
 // flushingProducer wraps the producer and
 // waits for all consumers after the Emit.

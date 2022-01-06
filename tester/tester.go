@@ -53,7 +53,7 @@ type T interface {
 // Tester mimicks kafka for complex highlevel testing of single or multiple processors/views/emitters
 type Tester struct {
 	t        T
-	producer *producerMock
+	producer *producer
 	tmgr     goka.TopicManager
 
 	mClients sync.RWMutex
@@ -131,16 +131,23 @@ func (tt *Tester) ConsumerBuilder() goka.SaramaConsumerBuilder {
 	}
 }
 
-// EmitterProducerBuilder creates a producer builder used for Emitters.
-// Emitters need to flush when emitting messages.
-func (tt *Tester) EmitterProducerBuilder() goka.ProducerBuilder {
-	builder := tt.ProducerBuilder()
-	return func(b []string, cid string, hasher func() hash.Hash32) (goka.Producer, error) {
-		prod, err := builder(b, cid, hasher)
-		return &flushingProducer{
-			tester:   tt,
-			producer: prod,
-		}, err
+// // EmitterProducerBuilder creates a producer builder used for Emitters.
+// // Emitters need to flush when emitting messages.
+// func (tt *Tester) EmitterSaramaProducerBuilder() sarama.AsyncProducer {
+// 	builder := tt.ProducerBuilder()
+// 	return func(b []string, cid string, hasher func() hash.Hash32) (goka.Producer, error) {
+// 		prod, err := builder(b, cid, hasher)
+// 		return &flushingProducer{
+// 			tester:   tt,
+// 			producer: prod,
+// 		}, err
+// 	}
+// }
+
+func (tt *Tester) EmitterSaramaProducerBuilder() goka.SaramaProducerBuilder {
+	return func(brokers []string, clientID string, hasher func() hash.Hash32) (sarama.AsyncProducer, error) {
+		// TODO: add the flushing
+		return tt.producer, nil
 	}
 }
 
@@ -159,8 +166,12 @@ func (tt *Tester) pushMessage(topic string, key string, data []byte, headers gok
 	return tt.getOrCreateQueue(topic).push(key, data, headers)
 }
 
-func (tt *Tester) ProducerBuilder() goka.ProducerBuilder {
-	return func(b []string, cid string, hasher func() hash.Hash32) (goka.Producer, error) {
+func (tt *Tester) SaramaProducerBuilder() goka.SaramaProducerBuilder {
+	return nil
+}
+
+func (tt *Tester) ProducerBuilder() goka.SaramaProducerBuilder {
+	return func(brokers []string, clientID string, hasher func() hash.Hash32) (sarama.AsyncProducer, error) {
 		return tt.producer, nil
 	}
 }

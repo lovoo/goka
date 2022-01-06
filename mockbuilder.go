@@ -62,7 +62,7 @@ func (bm *builderMock) getTopicManagerBuilder() TopicManagerBuilder {
 	}
 }
 
-func (bm *builderMock) getProducerBuilder() ProducerBuilder {
+func (bm *builderMock) getAsyncProducerBuilder() ProducerBuilder {
 	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
 		return bm.producer, nil
 	}

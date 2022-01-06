@@ -2,6 +2,7 @@ package goka
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"sort"
 
@@ -55,6 +56,11 @@ func (s *copartitioningStrategy) Plan(members map[string]sarama.ConsumerGroupMem
 		allTopics     []string
 		allMembers    []string
 	)
+
+	for key, member := range members {
+		log.Printf(" members %s: %v", key, string(member.UserData))
+	}
+
 	// (1) collect all topics and check they're copartitioned
 	for topic, topicPartitions := range topics {
 		allTopics = append(allTopics, topic)

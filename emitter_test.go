@@ -25,7 +25,7 @@ func createEmitter(t *testing.T, options ...EmitterOption) (*Emitter, *builderMo
 	emitter, _ := NewEmitter(emitterTestBrokers, emitterTestTopic, emitterIntCodec, append([]EmitterOption{
 		WithEmitterClientID(emitterTestClientID),
 		WithEmitterTopicManagerBuilder(bm.getTopicManagerBuilder()),
-		WithEmitterProducerBuilder(bm.getProducerBuilder()),
+		WithEmitterSaramaProducerBuilder(bm.getSaramaProducerBuilder()),
 		WithEmitterHasher(func() hash.Hash32 { return newConstHasher(0) }),
 	}, options...)...)
 	return emitter, bm, ctrl
