@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
@@ -71,6 +72,7 @@ func (i *memiter) Seek(key []byte) bool {
 }
 
 type memory struct {
+	sync.RWMutex
 	keys      []string
 	storage   map[string][]byte
 	offset    *int64
@@ -87,16 +89,24 @@ func NewMemory() Storage {
 }
 
 func (m *memory) Has(key string) (bool, error) {
+	m.RLock()
+	defer m.RUnlock()
+
 	_, has := m.storage[key]
 	return has, nil
 }
 
 func (m *memory) Get(key string) ([]byte, error) {
+	m.RLock()
+	defer m.RUnlock()
+
 	value := m.storage[key]
 	return value, nil
 }
 
 func (m *memory) Set(key string, value []byte) error {
+	m.Lock()
+	defer m.Unlock()
 	if value == nil {
 		return fmt.Errorf("cannot write nil value")
 	}
@@ -109,6 +119,8 @@ func (m *memory) Set(key string, value []byte) error {
 }
 
 func (m *memory) Delete(key string) error {
+	m.Lock()
+	defer m.Unlock()
 	delete(m.storage, key)
 	for i, k := range m.keys {
 		if k == key {
@@ -124,6 +136,8 @@ func (m *memory) Delete(key string) error {
 // The iterator is not concurrency-safe, but multiple iterators can
 // be used concurrently.
 func (m *memory) Iterator() (Iterator, error) {
+	m.RLock()
+	defer m.RUnlock()
 	keys := make([]string, len(m.keys))
 	copy(keys, m.keys)
 	storage := make(map[string][]byte, len(m.storage))
@@ -138,6 +152,8 @@ func (m *memory) Iterator() (Iterator, error) {
 // The iterator is not concurrency-safe, but multiple iterators can
 // be used concurrently.
 func (m *memory) IteratorWithRange(start, limit []byte) (Iterator, error) {
+	m.RLock()
+	defer m.RUnlock()
 	keys := []string{} // using slice as keys has an unknown size
 	if len(limit) == 0 {
 		limit = util.BytesPrefix(start).Limit
@@ -162,11 +178,15 @@ func (m *memory) Recovered() bool {
 }
 
 func (m *memory) SetOffset(offset int64) error {
+	m.Lock()
+	defer m.Unlock()
 	m.offset = &offset
 	return nil
 }
 
 func (m *memory) GetOffset(defValue int64) (int64, error) {
+	m.RLock()
+	defer m.RUnlock()
 	if m.offset == nil {
 		return defValue, nil
 	}
