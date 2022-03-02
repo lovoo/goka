@@ -159,7 +159,6 @@ func TestHotStandby(t *testing.T) {
 // Two processors are initialized, but they share an input topic which has only one partition. This
 // Test makes sure that still both processors recover the views/tables
 func TestRecoverAhead(t *testing.T) {
-	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
