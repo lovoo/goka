@@ -82,6 +82,14 @@ func (cm *consumerMock) Close() error {
 	return nil
 }
 
+func (cm *consumerMock) Pause(topicPartitions map[string][]int32) {}
+
+func (cm *consumerMock) Resume(topicPartitions map[string][]int32) {}
+
+func (cm *consumerMock) PauseAll() {}
+
+func (cm *consumerMock) ResumeAll() {}
+
 func (cm *consumerMock) waitRequiredConsumersStartup() {
 	doCheck := func() bool {
 		cm.RLock()
@@ -154,4 +162,12 @@ func (pcm *partConsumerMock) Errors() <-chan *sarama.ConsumerError {
 
 func (pcm *partConsumerMock) HighWaterMarkOffset() int64 {
 	return pcm.queue.Hwm()
+}
+
+func (pcm *partConsumerMock) Pause() {}
+
+func (pcm *partConsumerMock) Resume() {}
+
+func (pcm *partConsumerMock) IsPaused() bool {
+	return false
 }

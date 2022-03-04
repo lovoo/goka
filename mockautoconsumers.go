@@ -144,6 +144,14 @@ func (c *MockAutoConsumer) Close() error {
 	return nil
 }
 
+func (c *MockAutoConsumer) Pause(topicPartitions map[string][]int32) {}
+
+func (c *MockAutoConsumer) Resume(topicPartitions map[string][]int32) {}
+
+func (c *MockAutoConsumer) PauseAll() {}
+
+func (c *MockAutoConsumer) ResumeAll() {}
+
 ///////////////////////////////////////////////////
 // Expectation API
 ///////////////////////////////////////////////////
@@ -332,6 +340,24 @@ func (pc *MockAutoPartitionConsumer) ExpectMessagesDrainedOnClose() {
 // expectation is not met, an error is reported to the error reporter.
 func (pc *MockAutoPartitionConsumer) ExpectErrorsDrainedOnClose() {
 	pc.errorsShouldBeDrained = true
+}
+
+// Pause suspends fetching from this partition. Future calls to the broker will not return
+// any records from these partition until it have been resumed using Resume().
+// Note that this method does not affect partition subscription.
+// In particular, it does not cause a group rebalance when automatic assignment is used.
+func (pc *MockAutoPartitionConsumer) Pause() {
+}
+
+// Resume resumes this partition which have been paused with Pause().
+// New calls to the broker will return records from these partitions if there are any to be fetched.
+// If the partition was not previously paused, this method is a no-op.
+func (pc *MockAutoPartitionConsumer) Resume() {
+}
+
+// IsPaused indicates if this partition consumer is paused or not
+func (pc *MockAutoPartitionConsumer) IsPaused() bool {
+	return false
 }
 
 // MockConsumerGroupSession mocks the consumer group session used for testing
@@ -635,3 +661,11 @@ func (cg *MockConsumerGroup) Close() error {
 	close(cg.errs)
 	return nil
 }
+
+func (cg *MockConsumerGroup) Pause(partitions map[string][]int32) {}
+
+func (cg *MockConsumerGroup) Resume(partitions map[string][]int32) {}
+
+func (cg *MockConsumerGroup) PauseAll() {}
+
+func (cg *MockConsumerGroup) ResumeAll() {}

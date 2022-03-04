@@ -112,7 +112,7 @@ func bindataWebTemplatesActionsIndexGoHtml() (*asset, error) {
 		size: 2222,
 		md5checksum: "",
 		mode: os.FileMode(420),
-		modTime: time.Unix(1623164537, 0),
+		modTime: time.Unix(1635221948, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -142,7 +142,7 @@ func bindataWebTemplatesBindataGo() (*asset, error) {
 		size: 12288,
 		md5checksum: "",
 		mode: os.FileMode(420),
-		modTime: time.Unix(1623164539, 0),
+		modTime: time.Unix(1646257461, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -202,7 +202,7 @@ func bindataWebTemplatesCommonHeadGoHtml() (*asset, error) {
 		size: 1256,
 		md5checksum: "",
 		mode: os.FileMode(420),
-		modTime: time.Unix(1623156331, 0),
+		modTime: time.Unix(1635221948, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
@@ -232,7 +232,7 @@ func bindataWebTemplatesCommonMenuGoHtml() (*asset, error) {
 		size: 364,
 		md5checksum: "",
 		mode: os.FileMode(420),
-		modTime: time.Unix(1623157755, 0),
+		modTime: time.Unix(1635221948, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}

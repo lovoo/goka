@@ -145,6 +145,14 @@ func (cg *consumerGroup) Close() error {
 	return nil
 }
 
+func (cg *consumerGroup) Pause(partitions map[string][]int32) {}
+
+func (cg *consumerGroup) Resume(partitions map[string][]int32) {}
+
+func (cg *consumerGroup) PauseAll() {}
+
+func (cg *consumerGroup) ResumeAll() {}
+
 type cgSession struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
