@@ -51,9 +51,7 @@ func expectCGLoop(bm *builderMock, loop string, msgs []*sarama.ConsumerMessage) 
 }
 
 func expectCGConsume(bm *builderMock, table string, msgs []*sarama.ConsumerMessage) {
-	var (
-		current int64
-	)
+	var current int64
 
 	bm.producer.EXPECT().Close().Return(nil).AnyTimes()
 
@@ -85,7 +83,6 @@ func accumulate(ctx Context, msg interface{}) {
 }
 
 func TestProcessor_Run(t *testing.T) {
-
 	t.Run("input-persist", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
@@ -139,7 +136,11 @@ func TestProcessor_Run(t *testing.T) {
 
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
-		test.AssertNil(t, procErr)
+		select {
+		case <-done:
+			test.AssertNil(t, procErr)
+		default:
+		}
 
 		for _, msg := range toEmit {
 			cg.SendMessageWait(msg)
@@ -213,7 +214,11 @@ func TestProcessor_Run(t *testing.T) {
 
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
-		test.AssertNil(t, procErr)
+		select {
+		case <-done:
+			test.AssertNil(t, procErr)
+		default:
+		}
 
 		for _, msg := range toEmit {
 			cg.SendMessageWait(msg)
@@ -261,13 +266,16 @@ func TestProcessor_Run(t *testing.T) {
 
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
-		test.AssertNil(t, procErr)
+		select {
+		case <-done:
+			test.AssertNil(t, procErr)
+		default:
+		}
 		cg.SendError(fmt.Errorf("test-error"))
 		cancel()
 		<-done
 		// the errors sent back by the consumergroup do not lead to a failure of the processor
 		test.AssertNil(t, procErr)
-
 	})
 	t.Run("setup-error", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)

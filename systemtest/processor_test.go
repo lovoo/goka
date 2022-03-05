@@ -22,7 +22,7 @@ import (
 // after initializing and sending a message to each partition, we verify that the hot-standby-processor
 // has both values in the respective storage
 func TestHotStandby(t *testing.T) {
-	t.Parallel()
+	goka.Debug(true, true)
 	var (
 		group       goka.Group = goka.Group(fmt.Sprintf("%s-%d", "goka-systemtest-hotstandby", time.Now().Unix()))
 		inputStream string     = string(group) + "-input"
@@ -119,7 +119,7 @@ func TestHotStandby(t *testing.T) {
 	joinStorage2 := proc2Storages.storages[proc2Storages.key(string(joinTable), party)]
 
 	// wait until the keys are present
-	pollTimed(t, "key-values are present", 2,
+	pollTimed(t, "key-values are present", 10,
 		func() bool {
 			has, _ := tableStorage1.Has("key1")
 			return has
@@ -249,7 +249,7 @@ func TestRecoverAhead(t *testing.T) {
 	joinStorage2 := proc2Storages.storages[proc2Storages.key(string(joinTable), 0)]
 
 	// wait until the keys are present
-	pollTimed(t, "key-values are present", 2,
+	pollTimed(t, "key-values are present", 10.0,
 		func() bool {
 			has, _ := tableStorage1.Has("key1")
 			return has
@@ -506,7 +506,7 @@ func TestCallbackFail(t *testing.T) {
 
 	proc, cancel, done := runProc(proc)
 
-	pollTimed(t, "recovered", 5, proc.Recovered)
+	pollTimed(t, "recovered", 10, proc.Recovered)
 
 	go func() {
 		for i := 0; i < 10000; i++ {
@@ -515,7 +515,7 @@ func TestCallbackFail(t *testing.T) {
 	}()
 
 	defer cancel()
-	pollTimed(t, "error-response", 1, func() bool {
+	pollTimed(t, "error-response", 10, func() bool {
 		select {
 		case err, ok := <-done:
 			if !ok {

@@ -246,7 +246,7 @@ func (m *topicManager) waitForCreated(topic string) error {
 			return fmt.Errorf("error checking topic: %w", err)
 		}
 	}
-	return fmt.Errorf("Waiting for topic %s to be created timed out", topic)
+	return fmt.Errorf("waiting for topic %s to be created timed out", topic)
 }
 
 func (m *topicManager) adminSupported() bool {
@@ -261,7 +261,7 @@ func (m *topicManager) getTopicConfigMap(topic string) (map[string]sarama.Config
 
 	// now it does not exist anymore -- this means the cluster is somehow unstable
 	if err != nil {
-		return nil, fmt.Errorf("Error getting config for topic %s", topic)
+		return nil, fmt.Errorf("Error getting config for topic %s: %w", topic, err)
 	}
 
 	// remap the config values to a map
@@ -275,10 +275,10 @@ func (m *topicManager) getTopicConfigMap(topic string) (map[string]sarama.Config
 func (m *topicManager) getTopicMinReplicas(topic string) (int, error) {
 	topicsMeta, err := m.admin.DescribeTopics([]string{topic})
 	if err != nil {
-		return 0, fmt.Errorf("Error describing topic %s", topic)
+		return 0, fmt.Errorf("Error describing topic %s: %w", topic, err)
 	}
 	if len(topicsMeta) != 1 {
-		return 0, fmt.Errorf("Cannot find meta data for topic %s", topic)
+		return 0, fmt.Errorf("cannot find meta data for topic %s", topic)
 	}
 
 	topicMeta := topicsMeta[0]
