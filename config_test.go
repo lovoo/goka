@@ -4,23 +4,23 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConfig_DefaultConfig(t *testing.T) {
 	t.Run("equal", func(t *testing.T) {
 		cfg := DefaultConfig()
-		test.AssertTrue(t, cfg.Version == sarama.V2_0_0_0)
-		test.AssertTrue(t, cfg.Consumer.Return.Errors == true)
-		test.AssertTrue(t, cfg.Consumer.MaxProcessingTime == defaultMaxProcessingTime)
-		test.AssertTrue(t, cfg.Consumer.Offsets.Initial == sarama.OffsetNewest)
-		test.AssertTrue(t, cfg.Producer.RequiredAcks == sarama.WaitForLocal)
-		test.AssertTrue(t, cfg.Producer.Compression == sarama.CompressionSnappy)
-		test.AssertTrue(t, cfg.Producer.Flush.Frequency == defaultFlushFrequency)
-		test.AssertTrue(t, cfg.Producer.Flush.Bytes == defaultFlushBytes)
-		test.AssertTrue(t, cfg.Producer.Return.Successes == true)
-		test.AssertTrue(t, cfg.Producer.Return.Errors == true)
-		test.AssertTrue(t, cfg.Producer.Retry.Max == defaultProducerMaxRetries)
+		require.True(t, cfg.Version == sarama.V2_0_0_0)
+		require.True(t, cfg.Consumer.Return.Errors == true)
+		require.True(t, cfg.Consumer.MaxProcessingTime == defaultMaxProcessingTime)
+		require.True(t, cfg.Consumer.Offsets.Initial == sarama.OffsetNewest)
+		require.True(t, cfg.Producer.RequiredAcks == sarama.WaitForLocal)
+		require.True(t, cfg.Producer.Compression == sarama.CompressionSnappy)
+		require.True(t, cfg.Producer.Flush.Frequency == defaultFlushFrequency)
+		require.True(t, cfg.Producer.Flush.Bytes == defaultFlushBytes)
+		require.True(t, cfg.Producer.Return.Successes == true)
+		require.True(t, cfg.Producer.Return.Errors == true)
+		require.True(t, cfg.Producer.Retry.Max == defaultProducerMaxRetries)
 	})
 }
 
@@ -29,7 +29,7 @@ func TestConfig_ReplaceGlobalConfig(t *testing.T) {
 		custom := DefaultConfig()
 		custom.Version = sarama.V0_8_2_0
 		ReplaceGlobalConfig(custom)
-		test.AssertEqual(t, globalConfig.Version, custom.Version)
+		require.Equal(t, custom.Version, globalConfig.Version)
 	})
 	t.Run("panic", func(t *testing.T) {
 		defer func() {

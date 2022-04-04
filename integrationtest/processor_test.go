@@ -9,8 +9,8 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/tester"
+	"github.com/stretchr/testify/require"
 )
 
 // codec that fails on decode
@@ -28,7 +28,6 @@ func (fc *failingDecode) Encode(msg interface{}) ([]byte, error) {
 
 // Tests that errors inside the callback lead to processor shutdown
 func TestErrorCallback(t *testing.T) {
-
 	for _, tcase := range []struct {
 		name    string
 		consume func(ctx goka.Context, msg interface{})
@@ -83,9 +82,9 @@ func TestErrorCallback(t *testing.T) {
 
 			select {
 			case <-done:
-				test.AssertNotNil(t, err)
+				require.Error(t, err)
 
-				test.AssertTrue(t, strings.Contains(err.Error(), "error processing message"))
+				require.True(t, strings.Contains(err.Error(), "error processing message"))
 			case <-time.After(10 * time.Second):
 				t.Errorf("processor did not shut down as expected")
 			}
@@ -150,19 +149,19 @@ func TestHeaders(t *testing.T) {
 
 	// make sure received the message in the output
 	outputHeaders, key, value, valid := mt.NextWithHeaders()
-	test.AssertTrue(t, valid)
-	test.AssertEqual(t, key, "key")
-	test.AssertEqual(t, value, "forwarded: some-message")
+	require.True(t, valid)
+	require.Equal(t, key, "key")
+	require.Equal(t, value, "forwarded: some-message")
 
 	// Check headers sent by Emit...
-	test.AssertEqual(t, string(outputHeaders["Header1"]), "to output1")
-	test.AssertEqual(t, string(outputHeaders["Header2"]), "to output2b")
-	test.AssertEqual(t, string(outputHeaders["Header3"]), "to output3")
+	require.Equal(t, string(outputHeaders["Header1"]), "to output1")
+	require.Equal(t, string(outputHeaders["Header2"]), "to output2b")
+	require.Equal(t, string(outputHeaders["Header3"]), "to output3")
 
 	// Check headers sent to processor
-	test.AssertEqual(t, string(processorHeaders["Header1"]), "value 1")
-	test.AssertEqual(t, string(processorHeaders["Header2"]), "value 2b")
-	test.AssertEqual(t, string(processorHeaders["Header3"]), "value 3")
+	require.Equal(t, string(processorHeaders["Header1"]), "value 1")
+	require.Equal(t, string(processorHeaders["Header2"]), "value 2b")
+	require.Equal(t, string(processorHeaders["Header3"]), "value 3")
 
 	cancel()
 	<-done
@@ -203,25 +202,25 @@ func TestProcessorVisit(t *testing.T) {
 	}()
 
 	gkt.Consume("input-topic", "a", int64(123))
-	test.AssertEqual(t, gkt.TableValue("test-table", "a"), int64(123))
+	require.Equal(t, int64(123), gkt.TableValue("test-table", "a"))
 
 	// no output yet
 	_, _, ok := outputTracker.Next()
-	test.AssertFalse(t, ok)
+	require.False(t, ok)
 
 	visited, err := proc.VisitAllWithStats(ctx, "reset", int64(15))
-	test.AssertNil(t, err)
-	test.AssertEqual(t, visited, int64(1))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), visited)
 
 	k, v, ok := outputTracker.Next()
-	test.AssertTrue(t, ok)
-	test.AssertEqual(t, k, "a")
-	test.AssertEqual(t, v, int64(15))
-	test.AssertEqual(t, gkt.TableValue("test-table", "a"), int64(15))
+	require.True(t, ok)
+	require.Equal(t, "a", k)
+	require.Equal(t, int64(15), v)
+	require.Equal(t, int64(15), gkt.TableValue("test-table", "a"))
 
 	cancel()
 	<-done
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 }
 
 /*

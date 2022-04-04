@@ -10,7 +10,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
 // TestEmitterOffset is a simple brute force test that ensure
@@ -18,7 +18,6 @@ import (
 // That is required to get rid of the former functionality "storeNewestOffset", that would ignore
 // older offsets.
 func TestEmitterOffset(t *testing.T) {
-
 	var topic goka.Stream = goka.Stream(fmt.Sprintf("%s-%d", "goka-systemtest-emitter-offset", time.Now().Unix()))
 
 	brokers := initSystemTest(t)
@@ -27,7 +26,7 @@ func TestEmitterOffset(t *testing.T) {
 	tmc.Table.Replication = 1
 	cfg := goka.DefaultConfig()
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 	tm.EnsureStreamExists(string(topic), 1)
 
 	var lastOffset int64

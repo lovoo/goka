@@ -12,9 +12,9 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
+	"github.com/stretchr/testify/require"
 )
 
 // Tests the processor option WithHotStandby. This requires a (local) running kafka cluster.
@@ -22,12 +22,11 @@ import (
 // after initializing and sending a message to each partition, we verify that the hot-standby-processor
 // has both values in the respective storage
 func TestHotStandby(t *testing.T) {
-	t.Parallel()
 	var (
 		group       goka.Group = goka.Group(fmt.Sprintf("%s-%d", "goka-systemtest-hotstandby", time.Now().Unix()))
 		inputStream string     = string(group) + "-input"
 		table                  = string(goka.GroupTable(group))
-		joinTable   goka.Table = goka.Table(fmt.Sprintf("%s-%d", "goka-systemtest-hotstandby-join", time.Now().Unix()))
+		joinTable   goka.Table = goka.Table(fmt.Sprintf("%s-join", group))
 	)
 
 	brokers := initSystemTest(t)
@@ -36,12 +35,12 @@ func TestHotStandby(t *testing.T) {
 	tmc.Table.Replication = 1
 	cfg := goka.DefaultConfig()
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	err = tm.EnsureStreamExists(inputStream, 2)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 	err = tm.EnsureTableExists(string(joinTable), 2)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	time.Sleep(1 * time.Second)
 
@@ -56,7 +55,7 @@ func TestHotStandby(t *testing.T) {
 		),
 		goka.WithStorageBuilder(proc1Storages.Build),
 	)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	proc2Storages := newStorageTracker()
 
@@ -71,46 +70,48 @@ func TestHotStandby(t *testing.T) {
 		goka.WithStorageBuilder(proc2Storages.Build),
 	)
 
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errg, ctx := multierr.NewErrGroup(ctx)
 
 	errg.Go(func() error {
-		return proc1.Run(ctx)
+		// simulatenously stopping multiple processors sometimes fails the processors, so this one gets delayed
+		// see issue #376 for details
+		return proc1.Run(DelayedCtxCloser(ctx, 5*time.Second))
 	})
 
 	errg.Go(func() error {
 		return proc2.Run(ctx)
 	})
 
-	pollTimed(t, "procs 1&2 recovered", 10.0, proc1.Recovered, proc2.Recovered)
+	pollTimed(t, "procs 1&2 recovered", 25.0, proc1.Recovered, proc2.Recovered)
 
 	// check the storages that were initalized by the processors:
 	// proc1 is without hotstandby -> only two storages: (1 for the table, 1 for the join)
 	// proc2 uses hotstandby --> 4 storages (2 for table, 2 for join)
-	test.AssertEqual(t, len(proc1Storages.storages), 2)
-	test.AssertEqual(t, len(proc2Storages.storages), 4)
+	require.Equal(t, 2, len(proc1Storages.storages))
+	require.Equal(t, 4, len(proc2Storages.storages))
 
 	inputEmitter, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.String))
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 	defer inputEmitter.Finish()
-	inputEmitter.EmitSync("key1", "message1")
-	inputEmitter.EmitSync("key2", "message2")
+	require.NoError(t, inputEmitter.EmitSync("key1", "message1"))
+	require.NoError(t, inputEmitter.EmitSync("key2", "message2"))
 
 	// emit something into the join table (like simulating a processor ctx.SetValue()).
 	// Our test processors should update their value in the join-table
 	joinEmitter, err := goka.NewEmitter(brokers, goka.Stream(joinTable), new(codec.String))
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 	defer joinEmitter.Finish()
-	joinEmitter.EmitSync("key1", "joinval1")
-	joinEmitter.EmitSync("key2", "joinval2")
+	require.NoError(t, joinEmitter.EmitSync("key1", "joinval1"))
+	require.NoError(t, joinEmitter.EmitSync("key2", "joinval2"))
 
 	// determine the partitions for both keys, assert they're not equal
 	// (note that the keys might have to be changed if goka's default hasher changes)
 	partx := hashKey("key1", 2)
 	party := hashKey("key2", 2)
-	test.AssertNotEqual(t, partx, party)
+	require.NotEqual(t, partx, party)
 
 	// get the corresponding storages for both table and join-partitions
 	tableStorage1 := proc2Storages.storages[proc2Storages.key(string(table), partx)]
@@ -119,7 +120,7 @@ func TestHotStandby(t *testing.T) {
 	joinStorage2 := proc2Storages.storages[proc2Storages.key(string(joinTable), party)]
 
 	// wait until the keys are present
-	pollTimed(t, "key-values are present", 2,
+	pollTimed(t, "key-values are present", 10,
 		func() bool {
 			has, _ := tableStorage1.Has("key1")
 			return has
@@ -141,18 +142,18 @@ func TestHotStandby(t *testing.T) {
 	// check the table-values
 	val1, _ := tableStorage1.Get("key1")
 	val2, _ := tableStorage2.Get("key2")
-	test.AssertEqual(t, string(val1), "message1")
-	test.AssertEqual(t, string(val2), "message2")
+	require.Equal(t, "message1", string(val1))
+	require.Equal(t, "message2", string(val2))
 
 	// check the join-values
 	joinval1, _ := joinStorage1.Get("key1")
 	joinval2, _ := joinStorage2.Get("key2")
-	test.AssertEqual(t, string(joinval1), "joinval1")
-	test.AssertEqual(t, string(joinval2), "joinval2")
+	require.Equal(t, "joinval1", string(joinval1))
+	require.Equal(t, "joinval2", string(joinval2))
 
 	// stop everything and wait until it's shut down
 	cancel()
-	test.AssertNil(t, errg.Wait().ErrorOrNil())
+	require.NoError(t, errg.Wait().ErrorOrNil())
 }
 
 // Tests the processor option WithRecoverAhead. This requires a (local) running kafka cluster.
@@ -160,25 +161,43 @@ func TestHotStandby(t *testing.T) {
 // Test makes sure that still both processors recover the views/tables
 func TestRecoverAhead(t *testing.T) {
 	brokers := initSystemTest(t)
-
 	var (
-		group       goka.Group = "goka-systemtest-recoverahead"
-		inputStream string     = string(group) + "-input"
-		table                  = string(goka.GroupTable(group))
-		joinTable   goka.Table = "goka-systemtest-recoverahead-join"
+		group       = goka.Group(fmt.Sprintf("goka-systemtest-recoverahead-%d", time.Now().Unix()))
+		inputStream = fmt.Sprintf("%s-input", group)
+		table       = string(goka.GroupTable(group))
+		joinTable   = goka.Table(fmt.Sprintf("%s-join", group))
 	)
 
 	tmc := goka.NewTopicManagerConfig()
 	tmc.Table.Replication = 1
 	tmc.Stream.Replication = 1
 	cfg := goka.DefaultConfig()
+	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
+	goka.ReplaceGlobalConfig(cfg)
+
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	err = tm.EnsureStreamExists(inputStream, 1)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 	err = tm.EnsureTableExists(string(joinTable), 1)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
+	err = tm.EnsureTableExists(string(table), 1)
+	require.NoError(t, err)
+
+	// emit something into the join table (like simulating a processor ctx.SetValue()).
+	// Our test processors should update their value in the join-table
+	joinEmitter, err := goka.NewEmitter(brokers, goka.Stream(joinTable), new(codec.String))
+	require.NoError(t, err)
+	require.NoError(t, joinEmitter.EmitSync("key1", "joinval1"))
+	require.NoError(t, joinEmitter.Finish())
+
+	// emit something into the join table (like simulating a processor ctx.SetValue()).
+	// Our test processors should update their value in the join-table
+	tableEmitter, err := goka.NewEmitter(brokers, goka.Stream(table), new(codec.String))
+	require.NoError(t, err)
+	require.NoError(t, tableEmitter.EmitSync("key1", "tableval1"))
+	require.NoError(t, tableEmitter.Finish())
 
 	proc1Storages := newStorageTracker()
 
@@ -192,7 +211,7 @@ func TestRecoverAhead(t *testing.T) {
 		goka.WithRecoverAhead(),
 		goka.WithStorageBuilder(proc1Storages.Build),
 	)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	proc2Storages := newStorageTracker()
 
@@ -206,50 +225,43 @@ func TestRecoverAhead(t *testing.T) {
 		goka.WithRecoverAhead(),
 		goka.WithStorageBuilder(proc2Storages.Build),
 	)
+	require.NoError(t, err)
 
-	// emit something into the join table (like simulating a processor ctx.SetValue()).
-	// Our test processors should update their value in the join-table
-	joinEmitter, err := goka.NewEmitter(brokers, goka.Stream(joinTable), new(codec.String))
-	test.AssertNil(t, err)
-	defer joinEmitter.Finish()
-	joinEmitter.EmitSync("key1", "joinval1")
-
-	// emit something into the join table (like simulating a processor ctx.SetValue()).
-	// Our test processors should update their value in the join-table
-	tableEmitter, err := goka.NewEmitter(brokers, goka.Stream(table), new(codec.String))
-	test.AssertNil(t, err)
-	defer tableEmitter.Finish()
-	tableEmitter.EmitSync("key1", "tableval1")
-
-	test.AssertNil(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errg, ctx := multierr.NewErrGroup(ctx)
 
 	errg.Go(func() error {
-		return proc1.Run(ctx)
+		// simulatenously stopping multiple processors sometimes fails the processors, so this one gets delayed
+		// see issue #376 for details
+		return proc1.Run(DelayedCtxCloser(ctx, 5*time.Second))
 	})
 
 	errg.Go(func() error {
 		return proc2.Run(ctx)
 	})
 
-	pollTimed(t, "procs 1&2 recovered", 10.0, proc1.Recovered, proc2.Recovered)
+	pollTimed(t, "procs 1&2 recovered", 10.0, func() bool {
+		return true
+	}, proc1.Recovered, proc2.Recovered)
 
 	// check the storages that were initalized by the processors:
-	// proc1 is without hotstandby -> only two storages: (1 for the table, 1 for the join)
-	// proc2 uses hotstandby --> 4 storages (2 for table, 2 for join)
-	test.AssertEqual(t, len(proc1Storages.storages), 2)
-	test.AssertEqual(t, len(proc2Storages.storages), 2)
+	// both have each 2 storages, because all tables only have 1 partition
+	require.Equal(t, 2, len(proc1Storages.storages))
+	require.Equal(t, 2, len(proc2Storages.storages))
 
 	// get the corresponding storages for both table and join-partitions
-	tableStorage1 := proc2Storages.storages[proc1Storages.key(string(table), 0)]
+	tableStorage1 := proc1Storages.storages[proc1Storages.key(string(table), 0)]
 	tableStorage2 := proc2Storages.storages[proc2Storages.key(string(table), 0)]
 	joinStorage1 := proc1Storages.storages[proc1Storages.key(string(joinTable), 0)]
 	joinStorage2 := proc2Storages.storages[proc2Storages.key(string(joinTable), 0)]
 
 	// wait until the keys are present
-	pollTimed(t, "key-values are present", 2,
+	pollTimed(t, "key-values are present", 20.0,
+
+		func() bool {
+			return true
+		},
 		func() bool {
 			has, _ := tableStorage1.Has("key1")
 			return has
@@ -271,18 +283,18 @@ func TestRecoverAhead(t *testing.T) {
 	// check the table-values
 	val1, _ := tableStorage1.Get("key1")
 	val2, _ := tableStorage2.Get("key1")
-	test.AssertEqual(t, string(val1), "tableval1")
-	test.AssertEqual(t, string(val2), "tableval1")
+	require.Equal(t, "tableval1", string(val1))
+	require.Equal(t, "tableval1", string(val2))
 
 	// check the join-values
 	joinval1, _ := joinStorage1.Get("key1")
 	joinval2, _ := joinStorage2.Get("key1")
-	test.AssertEqual(t, string(joinval1), "joinval1")
-	test.AssertEqual(t, string(joinval2), "joinval1")
+	require.Equal(t, "joinval1", string(joinval1))
+	require.Equal(t, "joinval1", string(joinval2))
 
 	// stop everything and wait until it's shut down
 	cancel()
-	test.AssertNil(t, errg.Wait().ErrorOrNil())
+	require.NoError(t, errg.Wait().ErrorOrNil())
 }
 
 // TestRebalance runs some processors to test rebalance. It's merely a
@@ -292,32 +304,32 @@ func TestRebalance(t *testing.T) {
 	brokers := initSystemTest(t)
 
 	var (
-		group       goka.Group = "goka-systemtest-rebalance"
-		inputStream string     = string(group) + "-input"
-		basepath               = "/tmp/goka-rebalance-test"
+		group              = goka.Group(fmt.Sprintf("goka-systemtest-rebalance-%d", time.Now().Unix()))
+		inputStream string = string(group) + "-input"
+		basepath           = "/tmp/goka-rebalance-test"
 	)
 
-	test.AssertNil(t, os.RemoveAll(basepath))
+	require.NoError(t, os.RemoveAll(basepath))
 
 	tmc := goka.NewTopicManagerConfig()
 	tmc.Table.Replication = 1
 	tmc.Stream.Replication = 1
 	cfg := goka.DefaultConfig()
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	err = tm.EnsureStreamExists(inputStream, 20)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	em, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.String))
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	go func() {
 		defer em.Finish()
 		i := 0
 		for {
 			i++
-			test.AssertNil(t, em.EmitSync(fmt.Sprintf("%d", i), "value"))
+			require.NoError(t, em.EmitSync(fmt.Sprintf("%d", i), "value"))
 			time.Sleep(50 * time.Microsecond)
 		}
 	}()
@@ -335,7 +347,7 @@ func TestRebalance(t *testing.T) {
 			goka.WithStorageBuilder(storage.DefaultBuilder(fmt.Sprintf("%s/proc-%d", basepath, id))),
 		)
 
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		return proc
 	}
 
@@ -352,7 +364,7 @@ func TestRebalance(t *testing.T) {
 		time.Sleep(2 * time.Second)
 	}
 
-	test.AssertNil(t, errg.Wait().ErrorOrNil())
+	require.NoError(t, errg.Wait().ErrorOrNil())
 }
 
 // TestRebalanceSharePartitions runs two processors one after each other
@@ -362,9 +374,9 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	brokers := initSystemTest(t)
 
 	var (
-		group         goka.Group = "goka-systemtest-rebalance-share-partitions"
-		inputStream   string     = string(group) + "-input"
-		numPartitions            = 20
+		group                = goka.Group(fmt.Sprintf("goka-systemtest-rebalance-share-partitions-%d", time.Now().Unix()))
+		inputStream   string = string(group) + "-input"
+		numPartitions        = 20
 	)
 
 	tmc := goka.NewTopicManagerConfig()
@@ -372,15 +384,15 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	tmc.Stream.Replication = 1
 	cfg := goka.DefaultConfig()
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	err = tm.EnsureStreamExists(inputStream, numPartitions)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	// start an emitter
 	cancelEmit, emitDone := runWithContext(func(ctx context.Context) error {
 		em, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.Int64))
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		defer em.Finish()
@@ -410,7 +422,7 @@ func TestRebalanceSharePartitions(t *testing.T) {
 			goka.WithStorageBuilder(storage.MemoryBuilder()),
 		)
 
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		return proc
 	}
 
@@ -431,8 +443,8 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	// p1 has all active partitions
 	p1Stats := p1.Stats()
 	p1Active, p1Passive := activePassivePartitions(p1Stats)
-	test.AssertEqual(t, p1Active, numPartitions)
-	test.AssertEqual(t, p1Passive, 0)
+	require.Equal(t, numPartitions, p1Active)
+	require.Equal(t, 0, p1Passive)
 
 	p2, cancelP2, p2Done := runProc(createProc())
 	pollTimed(t, "p2 started", 10, p2.Recovered)
@@ -441,16 +453,16 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	// now p1 and p2 share the partitions
 	p2Stats := p2.Stats()
 	p2Active, p2Passive := activePassivePartitions(p2Stats)
-	test.AssertEqual(t, p2Active, numPartitions/2)
-	test.AssertEqual(t, p2Passive, numPartitions/2)
+	require.Equal(t, numPartitions/2, p2Active)
+	require.Equal(t, numPartitions/2, p2Passive)
 	p1Stats = p1.Stats()
 	p1Active, p1Passive = activePassivePartitions(p1Stats)
-	test.AssertEqual(t, p1Active, numPartitions/2)
-	test.AssertEqual(t, p1Passive, numPartitions/2)
+	require.Equal(t, numPartitions/2, p1Active)
+	require.Equal(t, numPartitions/2, p1Passive)
 
 	// p1 is down
 	cancelP1()
-	test.AssertTrue(t, <-p1Done == nil)
+	require.True(t, <-p1Done == nil)
 
 	// p2 should have all partitions
 	pollTimed(t, "p2 has all partitions", 10, func() bool {
@@ -460,11 +472,11 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	})
 
 	cancelP2()
-	test.AssertTrue(t, <-p2Done == nil)
+	require.True(t, <-p2Done == nil)
 
 	// stop emitter
 	cancelEmit()
-	test.AssertTrue(t, <-emitDone == nil)
+	require.True(t, <-emitDone == nil)
 }
 
 func TestCallbackFail(t *testing.T) {
@@ -481,13 +493,13 @@ func TestCallbackFail(t *testing.T) {
 	tmc.Stream.Replication = 1
 	cfg := goka.DefaultConfig()
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	err = tm.EnsureStreamExists(inputStream, 10)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	em, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.Int64))
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 	defer em.Finish()
 
 	proc, err := goka.NewProcessor(brokers,
@@ -502,11 +514,11 @@ func TestCallbackFail(t *testing.T) {
 		goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
 		goka.WithStorageBuilder(storage.MemoryBuilder()),
 	)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	proc, cancel, done := runProc(proc)
 
-	pollTimed(t, "recovered", 5, proc.Recovered)
+	pollTimed(t, "recovered", 10, proc.Recovered)
 
 	go func() {
 		for i := 0; i < 10000; i++ {
@@ -515,7 +527,7 @@ func TestCallbackFail(t *testing.T) {
 	}()
 
 	defer cancel()
-	pollTimed(t, "error-response", 1, func() bool {
+	pollTimed(t, "error-response", 10, func() bool {
 		select {
 		case err, ok := <-done:
 			if !ok {
@@ -538,8 +550,8 @@ func TestProcessorSlowStuck(t *testing.T) {
 	brokers := initSystemTest(t)
 
 	var (
-		group       goka.Group = "goka-systemtest-slow-callback-fail"
-		inputStream string     = string(group) + "-input"
+		group              = goka.Group(fmt.Sprintf("goka-systemtest-slow-callback-fail-%d", time.Now().Unix()))
+		inputStream string = string(group) + "-input"
 	)
 
 	tmc := goka.NewTopicManagerConfig()
@@ -547,13 +559,13 @@ func TestProcessorSlowStuck(t *testing.T) {
 	tmc.Stream.Replication = 1
 	cfg := goka.DefaultConfig()
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	err = tm.EnsureStreamExists(inputStream, 2)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	em, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.Int64))
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	proc, err := goka.NewProcessor(brokers,
 		goka.DefineGroup(
@@ -571,7 +583,7 @@ func TestProcessorSlowStuck(t *testing.T) {
 		goka.WithPartitionChannelSize(10),
 	)
 
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	errg, ctx := multierr.NewErrGroup(context.Background())
 
@@ -583,7 +595,7 @@ func TestProcessorSlowStuck(t *testing.T) {
 			select {
 			case <-ticker.C:
 				i++
-				test.AssertNil(t, em.EmitSync(fmt.Sprintf("%d", i%20), i))
+				require.NoError(t, em.EmitSync(fmt.Sprintf("%d", i%20), i))
 			case <-ctx.Done():
 				return nil
 			}
@@ -593,7 +605,7 @@ func TestProcessorSlowStuck(t *testing.T) {
 		return proc.Run(ctx)
 	})
 	err = errg.Wait().ErrorOrNil()
-	test.AssertTrue(t, strings.Contains(err.Error(), "panic in callback"))
+	require.True(t, strings.Contains(err.Error(), "panic in callback"))
 }
 
 // Test the message commit of a processor, in particular to avoid reprocessing the last message after processor restart.
@@ -614,7 +626,7 @@ func TestMessageCommit(t *testing.T) {
 
 	// New Emitter that will in total send 10 messages
 	emitter, err := goka.NewEmitter(brokers, inputStream, new(codec.Int64))
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	// some boiler plate code to create the topics in kafka using
 	// only one replication
@@ -628,7 +640,7 @@ func TestMessageCommit(t *testing.T) {
 
 	tmBuilder := goka.TopicManagerBuilderWithConfig(cfg, tmc)
 	tm, err := tmBuilder(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	tm.EnsureStreamExists(string(inputStream), 10)
 
@@ -636,7 +648,7 @@ func TestMessageCommit(t *testing.T) {
 		emitter.EmitSync("1", int64(1))
 	}
 	// close emitter
-	test.AssertNil(t, emitter.Finish())
+	require.NoError(t, emitter.Finish())
 
 	// Start a processor a couple of times that accumulates the emitted value.
 	// It always end up with a state of "10", but only consume the messages the first time.
@@ -658,19 +670,19 @@ func TestMessageCommit(t *testing.T) {
 		),
 			goka.WithTopicManagerBuilder(tmBuilder),
 		)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		// run a new processor
 		go func() {
 			defer close(done)
 			err := proc.Run(ctx)
-			test.AssertNil(t, err)
+			require.NoError(t, err)
 		}()
 
 		time.Sleep(10 * time.Second)
 		val, err := proc.Get("1")
-		test.AssertNil(t, err)
-		test.AssertTrue(t, val != nil)
-		test.AssertEqual(t, val.(int64), int64(numMessages))
+		require.NoError(t, err)
+		require.True(t, val != nil)
+		require.Equal(t, int64(numMessages), val.(int64))
 
 		cancel()
 		<-done
@@ -687,7 +699,7 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 	)
 
 	emitter, err := goka.NewEmitter(brokers, inputStream, new(codec.Int64))
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	// some boiler plate code to create the topics in kafka using
 	// only one replication
@@ -701,14 +713,14 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 
 	tmBuilder := goka.TopicManagerBuilderWithConfig(cfg, tmc)
 	tm, err := tmBuilder(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	tm.EnsureStreamExists(string(inputStream), 10)
 
 	emitterCtx, cancelEmitter := context.WithCancel(context.Background())
 	emitterDone := make(chan struct{})
 
-	var valueSum = make(map[string]int64)
+	valueSum := make(map[string]int64)
 	go func() {
 		defer close(emitterDone)
 		for i := 0; emitterCtx.Err() == nil; i++ {
@@ -733,7 +745,7 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 			goka.WithTopicManagerBuilder(tmBuilder),
 			goka.WithStorageBuilder(storage.MemoryBuilder()),
 		)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		return proc
 	}
 
@@ -743,11 +755,11 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 
 	// stop it
 	cancelProc()
-	test.AssertNil(t, <-procDone)
+	require.NoError(t, <-procDone)
 
 	// start it again --> must fail
 	_, _, procDone = runProc(proc)
-	test.AssertNotNil(t, <-procDone)
+	require.Error(t, <-procDone)
 
 	// start it 10 more times in a row and stop it
 	for i := 0; i < 10; i++ {
@@ -756,7 +768,7 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 		pollTimed(t, "proc-running", 10, proc.Recovered)
 		// stop it
 		cancelProc()
-		test.AssertNil(t, <-procDone)
+		require.NoError(t, <-procDone)
 
 	}
 	// stop emitter
@@ -783,6 +795,5 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 
 	// stop it
 	cancelProc()
-	test.AssertNil(t, <-procDone)
-
+	require.NoError(t, <-procDone)
 }

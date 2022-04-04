@@ -268,6 +268,13 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 		return fmt.Errorf("Error creating consumer for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
 	}
 
+	// close sarama consume after we're done
+	defer func() {
+		if err := g.saramaConsumer.Close(); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("error closing sarama consumer: %w", err))
+		}
+	}()
+
 	g.tmgr, err = g.opts.builders.topicmgr(g.brokers)
 	if err != nil {
 		return fmt.Errorf("Error creating topic manager for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
@@ -303,7 +310,9 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	}
 	g.mTables.RUnlock()
 
-	g.waitForStartupTables(ctx)
+	if err := g.waitForStartupTables(ctx); err != nil {
+		return fmt.Errorf("error waiting for start up tables: %w", err)
+	}
 
 	// run the main rebalance-consume-loop
 	errg.Go(func() error {
@@ -314,7 +323,6 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 }
 
 func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
-
 	// create kafka consumer
 	consumerGroup, err := g.opts.builders.consumerGroup(g.brokers, string(g.graph.Group()), g.opts.clientID)
 	if err != nil {
@@ -337,10 +345,16 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 
 	defer func() {
 		g.log.Debugf("closing consumer group")
-		errs = multierror.Append(
-			errs,
-			consumerGroup.Close(),
-		)
+
+		closeErr := consumerGroup.Close()
+		if closeErr != nil {
+			g.log.Printf("Error closing consumer group: %v", closeErr)
+			errs = multierror.Append(
+				errs,
+				fmt.Errorf("Error closing consumer group: %w", closeErr),
+			)
+		}
+
 		g.log.Debugf("closing consumer group ... done")
 	}()
 
@@ -356,14 +370,14 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 
 		// error consuming, no way to recover so we have to kill the processor
 		if err != nil {
-			return err
+			return fmt.Errorf("error consuming from group consumer: %w", err)
 		}
-
-		g.log.Debugf("Consumer group returned, trying rebalance")
 
 		select {
 		case <-time.After(5 * time.Second):
+			g.log.Printf("Consumer group returned, Rebalancing.")
 		case <-ctx.Done():
+			g.log.Printf("Consumer group cancelled. Stopping")
 			return nil
 		}
 	}
@@ -406,7 +420,6 @@ func (g *Processor) handleSessionErrors(ctx, sessionCtx context.Context, session
 
 // waits for all tables that are supposed to start up
 func (g *Processor) waitForStartupTables(ctx context.Context) error {
-
 	errg, startupCtx := multierr.NewErrGroup(ctx)
 
 	var (
@@ -424,7 +437,6 @@ func (g *Processor) waitForStartupTables(ctx context.Context) error {
 		view := view
 
 		errg.Go(func() error {
-
 			name := fmt.Sprintf("lookup-table-%s", view.topic)
 			mWaitMap.Lock()
 			waitMap[name] = struct{}{}
@@ -502,7 +514,8 @@ func (g *Processor) waitForStartupTables(ctx context.Context) error {
 			// the error group is done, which means
 			// * err==nil --> it's done
 			// * err!=nil --> it failed, let's return the error
-		case err := <-errgWaiter:
+		case errs := <-errgWaiter:
+			err := errs.ErrorOrNil()
 			if err == nil {
 				g.log.Debugf("View catchup finished")
 			}
@@ -561,14 +574,11 @@ func (g *Processor) StateReader() StateReader {
 }
 
 func (g *Processor) assignmentFromSession(session sarama.ConsumerGroupSession) (Assignment, error) {
-	var (
-		assignment Assignment
-	)
+	var assignment Assignment
 
 	// get the partitions this processor is assigned to.
 	// We use that loop to verify copartitioning and fail otherwise
 	for _, claim := range session.Claims() {
-
 		// for first claim, generate the assignment
 		if assignment == nil {
 			assignment = Assignment{}
@@ -599,7 +609,7 @@ func (g *Processor) assignmentFromSession(session sarama.ConsumerGroupSession) (
 func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	g.state.SetState(ProcStateSetup)
 	defer g.state.SetState(ProcStateRunning)
-	g.log.Debugf("setup generation %d, claims=%#v", session.GenerationID(), session.Claims())
+	g.log.Printf("setup generation %d, claims=%#v", session.GenerationID(), session.Claims())
 	defer g.log.Debugf("setup generation %d ... done", session.GenerationID())
 
 	if err := g.createAssignedPartitions(session); err != nil {
@@ -667,7 +677,6 @@ func (g *Processor) createHotStandbyPartitions(session sarama.ConsumerGroupSessi
 		return nil
 	}
 	allPartitions, err := g.findStatefulPartitions()
-
 	if err != nil {
 		return fmt.Errorf("Error finding partitions for standby")
 	}
@@ -767,7 +776,7 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 	defer g.log.Debugf("ConsumeClaim done for topic/partition %s/%d", claim.Topic(), claim.Partition())
 	part, has := g.getPartProc(claim.Partition())
 	if !has {
-		return fmt.Errorf("No partition (%d) to handle input in topic %s", claim.Partition(), claim.Topic())
+		return fmt.Errorf("no partition (%d) to handle input in topic %s", claim.Partition(), claim.Topic())
 	}
 
 	messages := claim.Messages()
@@ -863,7 +872,6 @@ func (g *Processor) StatsWithContext(ctx context.Context) *ProcessorStats {
 
 // creates the partition that is responsible for the group processor's table
 func (g *Processor) createPartitionProcessor(ctx context.Context, partition int32, runMode PPRunMode, commit commitCallback) (*PartitionProcessor, error) {
-
 	g.log.Debugf("Creating partition processor for partition %d", partition)
 	if _, has := g.getPartProc(partition); has {
 		return nil, fmt.Errorf("processor [%s]: partition %d already exists", g.graph.Group(), partition)
@@ -891,7 +899,7 @@ func (g *Processor) createPartitionProcessor(ctx context.Context, partition int3
 // This is semantically equivalent of closing the Context
 // that was passed to Processor.Run(..).
 // This method will return immediately, errors during running
-// will be returned from teh Processor.Run(..)
+// will be returned from Processor.Run(..)
 func (g *Processor) Stop() {
 	g.cancel()
 }
@@ -914,9 +922,7 @@ func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta int
 	}
 
 	errg, visitCtx := multierr.NewErrGroup(ctx)
-	var (
-		visited int64
-	)
+	var visited int64
 	for _, part := range g.partitions {
 		// we'll only do the visit for active mode partitions
 		// because visit essentially provides write access, which passive partitions don't have

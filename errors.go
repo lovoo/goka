@@ -17,25 +17,21 @@ var (
 	errTopicNotFound = errors.New("requested topic was not found")
 )
 
-var (
-	// this regex matches the package name + some hash info, if we're in gomod but not subpackages
-	// examples which match
-	// * github.com/lovoo/goka/processor.go
-	// * github.com/lovoo/goka@v1.0.0/view.go
-	// * github.com/some-fork/goka/view.go
-	// examples which do not match
-	// * github.com/something/else
-	// * github.com/lovoo/goka/subpackage/file.go
-	// this regex is used to filter out entries from the stack trace that origin
-	// from the root-package of go (but not the subpackages, otherwise we would not see the stack in the example-tests)
-	// reflect.TypeOf(Processor{}).PkgPath() returns (in the main repo) "github.com/lovoo/goka"
-	gokaPackageRegex = regexp.MustCompile(fmt.Sprintf(`%s(?:@[^/]+)?/[^/]+$`, reflect.TypeOf(Processor{}).PkgPath()))
-)
+// this regex matches the package name + some hash info, if we're in gomod but not subpackages
+// examples which match
+// * github.com/lovoo/goka/processor.go
+// * github.com/lovoo/goka@v1.0.0/view.go
+// * github.com/some-fork/goka/view.go
+// examples which do not match
+// * github.com/something/else
+// * github.com/lovoo/goka/subpackage/file.go
+// this regex is used to filter out entries from the stack trace that origin
+// from the root-package of go (but not the subpackages, otherwise we would not see the stack in the example-tests)
+// reflect.TypeOf(Processor{}).PkgPath() returns (in the main repo) "github.com/lovoo/goka"
+var gokaPackageRegex = regexp.MustCompile(fmt.Sprintf(`%s(?:@[^/]+)?/[^/]+$`, reflect.TypeOf(Processor{}).PkgPath()))
 
-var (
-	// ErrVisitAborted indicates a call to VisitAll could not finish due to rebalance or processor shutdown
-	ErrVisitAborted = errors.New("VisitAll aborted due to context cancel or rebalance")
-)
+// ErrVisitAborted indicates a call to VisitAll could not finish due to rebalance or processor shutdown
+var ErrVisitAborted = errors.New("VisitAll aborted due to context cancel or rebalance")
 
 // type to indicate that some non-transient error occurred while processing
 // the message, e.g. panic, decoding/encoding errors or invalid usage of context.
@@ -55,6 +51,10 @@ func newErrProcessing(partition int32, err error) error {
 	}
 }
 
+func (ec *errProcessing) Unwrap() error {
+	return ec.err
+}
+
 // type to indicate that some non-transient error occurred while setting up the partitions on
 // rebalance.
 type errSetup struct {
@@ -64,6 +64,10 @@ type errSetup struct {
 
 func (ec *errSetup) Error() string {
 	return fmt.Sprintf("error setting up (partition=%d): %v", ec.partition, ec.err)
+}
+
+func (ec *errSetup) Unwrap() error {
+	return ec.err
 }
 
 func newErrSetup(partition int32, err error) error {
@@ -77,7 +81,6 @@ func newErrSetup(partition int32, err error) error {
 // This is mainly used to properly format the error message built after a panic happened in a
 // processor-callback.
 func userStacktrace() []string {
-
 	trace := stack.Trace()
 
 	// pop calls from the top that are either from runtime or goka's internal functions

@@ -4,16 +4,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOnce_Do(t *testing.T) {
 	var o once
 
 	err := o.Do(func() error { return errors.New("some error") })
-	test.AssertNotNil(t, err)
+	require.Error(t, err)
 
 	err2 := o.Do(func() error { return nil })
-	test.AssertNotNil(t, err2)
-	test.AssertEqual(t, err, err2)
+	require.Error(t, err2)
+	require.Equal(t, err2, err)
 }

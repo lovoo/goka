@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -18,12 +18,12 @@ var (
 func TestGroupGraph_Validate(t *testing.T) {
 	g := DefineGroup("group")
 	err := g.Validate()
-	test.AssertStringContains(t, err.Error(), "no input")
+	require.Contains(t, err.Error(), "no input")
 
 	g = DefineGroup("group",
 		Input("input-topic", c, cb))
 	err = g.Validate()
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	g = DefineGroup("group",
 		Input("input-topic", c, cb),
@@ -31,7 +31,7 @@ func TestGroupGraph_Validate(t *testing.T) {
 		Loop(c, cb),
 	)
 	err = g.Validate()
-	test.AssertStringContains(t, err.Error(), "more than one loop")
+	require.Contains(t, err.Error(), "more than one loop")
 
 	g = DefineGroup("group",
 		Input("input-topic", c, cb),
@@ -39,49 +39,49 @@ func TestGroupGraph_Validate(t *testing.T) {
 		Persist(c),
 	)
 	err = g.Validate()
-	test.AssertStringContains(t, err.Error(), "more than one group table")
+	require.Contains(t, err.Error(), "more than one group table")
 
 	g = DefineGroup("group",
 		Input(Stream(tableName("group")), c, cb),
 		Persist(c),
 	)
 	err = g.Validate()
-	test.AssertStringContains(t, err.Error(), "group table")
+	require.Contains(t, err.Error(), "group table")
 
 	g = DefineGroup("group",
 		Input(Stream(loopName("group")), c, cb),
 		Loop(c, cb),
 	)
 	err = g.Validate()
-	test.AssertStringContains(t, err.Error(), "loop stream")
+	require.Contains(t, err.Error(), "loop stream")
 
 	g = DefineGroup("group",
 		Input("input-topic", c, cb),
 		Join(Table(loopName("group")), c),
 	)
 	err = g.Validate()
-	test.AssertStringContains(t, err.Error(), "loop stream")
+	require.Contains(t, err.Error(), "loop stream")
 
 	g = DefineGroup("group",
 		Input("input-topic", c, cb),
 		Output(Stream(loopName("group")), c),
 	)
 	err = g.Validate()
-	test.AssertStringContains(t, err.Error(), "loop stream")
+	require.Contains(t, err.Error(), "loop stream")
 
 	g = DefineGroup("group",
 		Input("input-topic", c, cb),
 		Lookup(Table(loopName("group")), c),
 	)
 	err = g.Validate()
-	test.AssertStringContains(t, err.Error(), "loop stream")
+	require.Contains(t, err.Error(), "loop stream")
 }
 
 func TestGroupGraph_chainEdges(t *testing.T) {
-	test.AssertEqual(t, len(chainEdges()), 0)
-	test.AssertEqual(t, len(chainEdges(Edges{}, Edges{})), 0)
-	test.AssertEqual(t, chainEdges(Edges{Join("a", nil)}, Edges{}), Edges{Join("a", nil)})
-	test.AssertEqual(t, chainEdges(Edges{Join("a", nil)}, Edges{Join("a", nil), Join("b", nil)}), Edges{Join("a", nil), Join("a", nil), Join("b", nil)})
+	require.Empty(t, chainEdges())
+	require.Empty(t, chainEdges(Edges{}, Edges{}))
+	require.Equal(t, Edges{Join("a", nil)}, chainEdges(Edges{Join("a", nil)}, Edges{}))
+	require.Equal(t, Edges{Join("a", nil), Join("a", nil), Join("b", nil)}, chainEdges(Edges{Join("a", nil)}, Edges{Join("a", nil), Join("b", nil)}))
 }
 
 func TestGroupGraph_codec(t *testing.T) {
@@ -92,7 +92,7 @@ func TestGroupGraph_codec(t *testing.T) {
 
 	for _, topic := range []string{"input-topic", "input-topic2", "input-topic3"} {
 		codec := g.codec(topic)
-		test.AssertEqual(t, codec, c)
+		require.Equal(t, c, codec)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestGroupGraph_callback(t *testing.T) {
 
 	for _, topic := range []string{"input-topic", "input-topic2", "input-topic3"} {
 		callback := g.callback(topic)
-		test.AssertTrue(t, reflect.ValueOf(callback).Pointer() == reflect.ValueOf(cb).Pointer())
+		require.True(t, reflect.ValueOf(callback).Pointer() == reflect.ValueOf(cb).Pointer())
 	}
 }
 
@@ -117,10 +117,10 @@ func TestGroupGraph_getters(t *testing.T) {
 		Output("t5", c),
 		Inputs(Streams{"t6", "t7"}, c, cb),
 	)
-	test.AssertTrue(t, g.Group() == "group")
-	test.AssertTrue(t, len(g.InputStreams()) == 4)
-	test.AssertTrue(t, len(g.OutputStreams()) == 3)
-	test.AssertTrue(t, g.LoopStream() == nil)
+	require.True(t, g.Group() == "group")
+	require.True(t, len(g.InputStreams()) == 4)
+	require.True(t, len(g.OutputStreams()) == 3)
+	require.True(t, g.LoopStream() == nil)
 
 	g = DefineGroup("group",
 		Input("t1", c, cb),
@@ -130,10 +130,10 @@ func TestGroupGraph_getters(t *testing.T) {
 		Output("t5", c),
 		Loop(c, cb),
 	)
-	test.AssertTrue(t, len(g.InputStreams()) == 2)
-	test.AssertTrue(t, len(g.OutputStreams()) == 3)
-	test.AssertTrue(t, g.GroupTable() == nil)
-	test.AssertEqual(t, g.LoopStream().Topic(), loopName("group"))
+	require.True(t, len(g.InputStreams()) == 2)
+	require.True(t, len(g.OutputStreams()) == 3)
+	require.True(t, g.GroupTable() == nil)
+	require.Equal(t, loopName("group"), g.LoopStream().Topic())
 
 	g = DefineGroup("group",
 		Input("t1", c, cb),
@@ -150,17 +150,17 @@ func TestGroupGraph_getters(t *testing.T) {
 		Lookup("b2", c),
 		Persist(c),
 	)
-	test.AssertTrue(t, len(g.InputStreams()) == 2)
-	test.AssertTrue(t, len(g.OutputStreams()) == 3)
-	test.AssertTrue(t, len(g.JointTables()) == 4)
-	test.AssertTrue(t, len(g.LookupTables()) == 2)
-	test.AssertEqual(t, g.GroupTable().Topic(), tableName("group"))
+	require.True(t, len(g.InputStreams()) == 2)
+	require.True(t, len(g.OutputStreams()) == 3)
+	require.True(t, len(g.JointTables()) == 4)
+	require.True(t, len(g.LookupTables()) == 2)
+	require.Equal(t, tableName("group"), g.GroupTable().Topic())
 }
 
 func TestGroupGraph_Inputs(t *testing.T) {
 	topics := Inputs(Streams{"a", "b", "c"}, c, cb)
-	test.AssertEqual(t, topics.Topic(), "a,b,c")
-	test.AssertTrue(t, strings.Contains(topics.String(), "a,b,c/*codec.String"))
+	require.Equal(t, "a,b,c", topics.Topic())
+	require.True(t, strings.Contains(topics.String(), "a,b,c/*codec.String"))
 }
 
 func TestGroupGraph_UpdateSuffixes(t *testing.T) {
@@ -173,27 +173,29 @@ func TestGroupGraph_UpdateSuffixes(t *testing.T) {
 		Persist(c),
 	)
 
-	test.AssertEqual(t, tableName(g.Group()), "group-table1")
-	test.AssertEqual(t, loopName(g.Group()), "group-loop1")
+	require.Equal(t, "group-table1", tableName(g.Group()))
+	require.Equal(t, "group-loop1", loopName(g.Group()))
 
 	ResetSuffixes()
 
-	test.AssertEqual(t, tableName(g.Group()), fmt.Sprintf("group%s", defaultTableSuffix))
-	test.AssertEqual(t, loopName(g.Group()), fmt.Sprintf("group%s", defaultLoopSuffix))
+	require.Equal(t, fmt.Sprintf("group%s", defaultTableSuffix), tableName(g.Group()))
+	require.Equal(t, fmt.Sprintf("group%s", defaultLoopSuffix), loopName(g.Group()))
 }
 
 func TestStringsToStreams(t *testing.T) {
-	inputTopics := []string{"input1",
+	inputTopics := []string{
+		"input1",
 		"input2",
 	}
 
 	streams := StringsToStreams(inputTopics...)
-	test.AssertEqual(t, streams[0], Stream("input1"))
-	test.AssertEqual(t, streams[1], Stream("input2"))
+	require.Equal(t, Stream("input1"), streams[0])
+	require.Equal(t, Stream("input2"), streams[1])
 }
 
 func ExampleStringsToStreams() {
-	inputTopics := []string{"input1",
+	inputTopics := []string{
+		"input1",
 		"input2",
 		"input3",
 	}

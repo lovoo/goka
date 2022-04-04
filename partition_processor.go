@@ -101,8 +101,8 @@ func newPartitionProcessor(partition int32,
 	producer Producer,
 	tmgr TopicManager,
 	backoff Backoff,
-	backoffResetTime time.Duration) *PartitionProcessor {
-
+	backoffResetTime time.Duration,
+) *PartitionProcessor {
 	// collect all topics I am responsible for
 	topicMap := make(map[string]bool)
 	for _, stream := range graph.InputStreams() {
@@ -199,7 +199,6 @@ func (pp *PartitionProcessor) Recovered() bool {
 // * starting the message-processing-loop of the actual processor. This will keep running
 //   after `Start` returns, so it uses the second context.
 func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
-
 	if state := pp.state.State(); state != PPStateIdle {
 		return fmt.Errorf("partitionprocessor is not idle (but %v), cannot start", state)
 	}
@@ -363,7 +362,7 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 			case <-ctx.Done():
 				mutexErr.Lock()
 				rerr = multierror.Append(rerr,
-					newErrProcessing(pp.partition, fmt.Errorf("synchronous error in callback: %v", err)),
+					newErrProcessing(pp.partition, fmt.Errorf("synchronous error in callback: %w", err)),
 				)
 				mutexErr.Unlock()
 				return
@@ -379,7 +378,7 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 		// when the promise of an Emit (using a producer internally) fails
 		asyncFailer = func(err error) {
 			mutexErr.Lock()
-			rerr = multierror.Append(rerr, newErrProcessing(pp.partition, fmt.Errorf("asynchronous error from callback: %v", err)))
+			rerr = multierror.Append(rerr, newErrProcessing(pp.partition, fmt.Errorf("asynchronous error from callback: %w", err)))
 			mutexErr.Unlock()
 			closeOnce.Do(func() { close(asyncErrs) })
 		}
@@ -455,7 +454,6 @@ func (pp *PartitionProcessor) enqueueStatsUpdate(ctx context.Context, updater fu
 }
 
 func (pp *PartitionProcessor) runStatsLoop(ctx context.Context) {
-
 	updateHwmStatsTicker := time.NewTicker(statsHwmUpdateInterval)
 	defer updateHwmStatsTicker.Stop()
 	for {

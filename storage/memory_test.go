@@ -6,14 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/multierr"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMemoryStorage(t *testing.T) {
-
 	t.Run("concurrent", func(t *testing.T) {
-
 		mem := NewMemory()
 		defer mem.Close()
 
@@ -94,7 +92,6 @@ func TestMemoryStorage(t *testing.T) {
 		time.Sleep(1 * time.Second)
 		cancel()
 
-		test.AssertNil(t, errg.Wait())
+		require.NoError(t, errg.Wait().ErrorOrNil())
 	})
-
 }

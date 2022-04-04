@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCopartitioningStrategy(t *testing.T) {
 	t.Run("name", func(t *testing.T) {
-		test.AssertEqual(t, CopartitioningStrategy.Name(), "copartition")
+		require.Equal(t, "copartition", CopartitioningStrategy.Name())
 	})
 
 	for _, ttest := range []struct {
@@ -147,16 +147,15 @@ func TestCopartitioningStrategy(t *testing.T) {
 		},
 	} {
 		t.Run(ttest.name, func(t *testing.T) {
-
 			var strategy sarama.BalanceStrategy = CopartitioningStrategy
 			if ttest.useStrict {
 				strategy = StrictCopartitioningStrategy
 			}
 
 			plan, err := strategy.Plan(ttest.members, ttest.topics)
-			test.AssertEqual(t, err != nil, ttest.hasError)
+			require.Equal(t, ttest.hasError, err != nil)
 			if err == nil {
-				test.AssertTrue(t, reflect.DeepEqual(ttest.expected, plan), "expected", ttest.expected, "actual", plan)
+				require.True(t, reflect.DeepEqual(ttest.expected, plan), "expected", ttest.expected, "actual", plan)
 			}
 		})
 	}

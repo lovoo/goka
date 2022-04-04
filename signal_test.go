@@ -3,18 +3,17 @@ package goka
 import (
 	"testing"
 
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSignal_SetState(t *testing.T) {
-
 	sig := NewSignal(0, 1, 2)
-	test.AssertTrue(t, sig.IsState(0))
-	test.AssertFalse(t, sig.IsState(1))
+	require.True(t, sig.IsState(0))
+	require.False(t, sig.IsState(1))
 
 	sig.SetState(1)
-	test.AssertTrue(t, sig.IsState(1))
-	test.AssertFalse(t, sig.IsState(0))
+	require.True(t, sig.IsState(1))
+	require.False(t, sig.IsState(0))
 
 	defer func() {
 		err := recover()
@@ -43,11 +42,11 @@ func TestSignal_Wait(t *testing.T) {
 		hasState = true
 	}()
 
-	test.AssertFalse(t, hasState)
+	require.False(t, hasState)
 	sig.SetState(1)
 	// wait for the goroutine to catchup with the state
 	<-done
-	test.AssertTrue(t, hasState)
+	require.True(t, hasState)
 }
 
 func TestSignalWaitMin(t *testing.T) {
@@ -63,9 +62,9 @@ func TestSignalWaitMin(t *testing.T) {
 		hasState = true
 	}()
 
-	test.AssertFalse(t, hasState)
+	require.False(t, hasState)
 	sig.SetState(2)
 	// wait for the goroutine to catchup with the state
 	<-done
-	test.AssertTrue(t, hasState)
+	require.True(t, hasState)
 }

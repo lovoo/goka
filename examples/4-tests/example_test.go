@@ -9,8 +9,8 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/tester"
+	"github.com/stretchr/testify/require"
 )
 
 // Scenario (1)
@@ -43,7 +43,7 @@ func Test_1Input(t *testing.T) {
 	tt.Consume("input", "key", "some message")
 
 	// ensure the message was received
-	test.AssertEqual(t, receivedMessage, "some message")
+	require.Equal(t, "some message", receivedMessage)
 
 	// stop the processor and wait to finish
 	proc.Stop()
@@ -53,9 +53,7 @@ func Test_1Input(t *testing.T) {
 // Scenario (2)
 // One processor with only one input and one output
 func Test_2InputOutput(t *testing.T) {
-	var (
-		gkt = tester.New(t)
-	)
+	gkt := tester.New(t)
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
@@ -79,15 +77,13 @@ func Test_2InputOutput(t *testing.T) {
 
 	// make sure received the message in the output
 	key, value, valid := mt.Next()
-	test.AssertTrue(t, valid)
-	test.AssertEqual(t, key, "key")
-	test.AssertEqual(t, value, "forwarded: some-message")
+	require.True(t, valid)
+	require.Equal(t, "key", key)
+	require.Equal(t, "forwarded: some-message", value)
 }
 
 func Test_SetTableValue(t *testing.T) {
-	var (
-		gkt = tester.New(t)
-	)
+	gkt := tester.New(t)
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
@@ -107,14 +103,11 @@ func Test_SetTableValue(t *testing.T) {
 
 	// make sure it's correctly persisted in the state
 	value := gkt.TableValue("group-table", "value")
-	test.AssertEqual(t, value, int64(12))
+	require.Equal(t, int64(12), value)
 }
 
 func Test_JoinOutput(t *testing.T) {
-
-	var (
-		gkt = tester.New(t)
-	)
+	gkt := tester.New(t)
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
@@ -133,9 +126,7 @@ func Test_JoinOutput(t *testing.T) {
 // Scenario (3)
 // Instead of an output we will persist the message
 func Test_3Persist(t *testing.T) {
-	var (
-		gkt = tester.New(t)
-	)
+	gkt := tester.New(t)
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
@@ -155,16 +146,14 @@ func Test_3Persist(t *testing.T) {
 
 	// make sure it's correctly persisted in the state
 	value := gkt.TableValue("group-table", "key")
-	test.AssertEqual(t, value, "state: some-message")
+	require.Equal(t, "state: some-message", value)
 }
 
 // Scenario (4)
 // Often setting up a processor requires quite some boiler plate. This example
 // shows how to reuse it using subtests
 func Test_Subtest(t *testing.T) {
-	var (
-		gkt = tester.New(t)
-	)
+	gkt := tester.New(t)
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
@@ -191,17 +180,17 @@ func Test_Subtest(t *testing.T) {
 
 		// check it was emitted
 		key, value, ok := mt.Next()
-		test.AssertTrue(t, ok)
-		test.AssertEqual(t, key, "output-key")
-		test.AssertEqual(t, value, "forwarded: hello")
+		require.True(t, ok)
+		require.Equal(t, "output-key", key)
+		require.Equal(t, "forwarded: hello", value)
 
 		// we should be at the end
-		test.AssertEqual(t, mt.Hwm(), int64(1))
-		test.AssertEqual(t, mt.NextOffset(), int64(1))
+		require.Equal(t, int64(1), mt.Hwm())
+		require.Equal(t, int64(1), mt.NextOffset())
 
 		// this is equivalent
 		_, _, ok = mt.Next()
-		test.AssertFalse(t, ok)
+		require.False(t, ok)
 	})
 	t.Run("test-2", func(t *testing.T) {
 		// clear all values so we can start with an empty state
@@ -212,16 +201,14 @@ func Test_Subtest(t *testing.T) {
 
 		// do some state checks
 		value := gkt.TableValue("group-table", "bob")
-		test.AssertEqual(t, value, "state: hello")
+		require.Equal(t, "state: hello", value)
 	})
 }
 
 // Scenario (5)
 // It's perfectly fine to have loops and use multiple processors in one tester.
 func Test_Chain(t *testing.T) {
-	var (
-		gkt = tester.New(t)
-	)
+	gkt := tester.New(t)
 
 	// First processor:
 	// input -> loop -> output1
@@ -260,18 +247,16 @@ func Test_Chain(t *testing.T) {
 	// the value should be persisted in the second processor's table
 	value := gkt.TableValue("proc2-table", "bob")
 
-	test.AssertEqual(t, value, "persist: proc1-out: loop: hello world")
+	require.Equal(t, "persist: proc1-out: loop: hello world", value)
 }
 
 // Scenario (6)
 // Different failing scenarios where the user code throws an error
 // This is mainly to improve error reporting/stack trace, so run with "-v" to see the trace
 func Test_Failing(t *testing.T) {
-
 	for idx, testcase := range []struct {
 		failer func(ctx goka.Context)
 	}{
-
 		// panics explicitly
 		{
 			failer: func(ctx goka.Context) {
@@ -307,7 +292,6 @@ func Test_Failing(t *testing.T) {
 			},
 		},
 	} {
-
 		t.Run(fmt.Sprintf("failing-test-%d", idx), func(t *testing.T) {
 			gkt := tester.New(t)
 
@@ -334,7 +318,7 @@ func Test_Failing(t *testing.T) {
 			gkt.Consume("input", "key", "some-message")
 
 			<-done
-			test.AssertNotNil(t, runError)
+			require.Error(t, runError)
 			log.Printf("Reported (expected) error for test %d: %v", idx, runError)
 		})
 	}
