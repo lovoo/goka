@@ -6,15 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
-var (
-	actionRuntime = 10 * time.Millisecond
-)
+var actionRuntime = 10 * time.Millisecond
 
 func TestActionStart(t *testing.T) {
-
 	var run int64
 	actor := FuncActor("sleep", func(ctx context.Context, value string) error {
 		select {
@@ -33,12 +30,12 @@ func TestActionStart(t *testing.T) {
 			actor: actor,
 		}
 
-		test.AssertEqual(t, a.Name(), "test")
-		test.AssertEqual(t, a.Description(), "sleep")
-		test.AssertTrue(t, a.Error() == nil)
-		test.AssertFalse(t, a.IsRunning())
-		test.AssertEqual(t, a.StartTime(), "not started")
-		test.AssertEqual(t, a.FinishedTime(), "not finished")
+		require.Equal(t, a.Name(), "test")
+		require.Equal(t, a.Description(), "sleep")
+		require.True(t, a.Error() == nil)
+		require.False(t, a.IsRunning())
+		require.Equal(t, a.StartTime(), "not started")
+		require.Equal(t, a.FinishedTime(), "not finished")
 	})
 
 	t.Run("stop-only", func(t *testing.T) {
@@ -59,18 +56,18 @@ func TestActionStart(t *testing.T) {
 
 		// start and check it's running
 		a.Start("")
-		test.AssertTrue(t, a.IsRunning())
-		test.AssertNotEqual(t, a.StartTime(), "not started")
-		test.AssertEqual(t, a.FinishedTime(), "not finished")
+		require.True(t, a.IsRunning())
+		require.NotEqual(t, a.StartTime(), "not started")
+		require.Equal(t, a.FinishedTime(), "not finished")
 
 		a.Stop()
-		test.AssertFalse(t, a.IsRunning())
-		test.AssertNotEqual(t, a.StartTime(), "not started")
+		require.False(t, a.IsRunning())
+		require.NotEqual(t, a.StartTime(), "not started")
 		// it's finished
-		test.AssertNotEqual(t, a.FinishedTime(), "not finished")
-		test.AssertTrue(t, a.Error() != nil)
-		test.AssertEqual(t, a.Error().Error(), context.Canceled.Error())
-		test.AssertEqual(t, run, int64(0))
+		require.NotEqual(t, a.FinishedTime(), "not finished")
+		require.True(t, a.Error() != nil)
+		require.Equal(t, a.Error().Error(), context.Canceled.Error())
+		require.Equal(t, run, int64(0))
 	})
 
 	t.Run("start-finish", func(t *testing.T) {
@@ -83,11 +80,11 @@ func TestActionStart(t *testing.T) {
 		// start and check it's running
 		a.Start("")
 		time.Sleep(actionRuntime * 2)
-		test.AssertFalse(t, a.IsRunning())
-		test.AssertNotEqual(t, a.StartTime(), "not started")
-		test.AssertNotEqual(t, a.FinishedTime(), "not finished")
-		test.AssertTrue(t, a.Error() == nil)
-		test.AssertEqual(t, run, int64(1))
+		require.False(t, a.IsRunning())
+		require.NotEqual(t, a.StartTime(), "not started")
+		require.NotEqual(t, a.FinishedTime(), "not finished")
+		require.True(t, a.Error() == nil)
+		require.Equal(t, run, int64(1))
 	})
 
 	t.Run("start-restart-finish", func(t *testing.T) {
@@ -107,11 +104,10 @@ func TestActionStart(t *testing.T) {
 
 		a.Start("")
 		time.Sleep(actionRuntime * 2)
-		test.AssertFalse(t, a.IsRunning())
-		test.AssertNotEqual(t, a.StartTime(), "not started")
-		test.AssertNotEqual(t, a.FinishedTime(), "not finished")
-		test.AssertTrue(t, a.Error() == nil)
-		test.AssertEqual(t, run, int64(2))
+		require.False(t, a.IsRunning())
+		require.NotEqual(t, a.StartTime(), "not started")
+		require.NotEqual(t, a.FinishedTime(), "not finished")
+		require.True(t, a.Error() == nil)
+		require.Equal(t, run, int64(2))
 	})
-
 }

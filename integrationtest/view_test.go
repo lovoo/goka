@@ -6,8 +6,8 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/tester"
+	"github.com/stretchr/testify/require"
 )
 
 func TestView(t *testing.T) {
@@ -16,13 +16,13 @@ func TestView(t *testing.T) {
 
 		// create an empty view on table "test"
 		view, err := goka.NewView(nil, "test", new(codec.String), goka.WithViewTester(gkt))
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 
 		// try to get a value
 		val, err := view.Get("key")
 		// --> must fail, because the view is not running yet
-		test.AssertNotNil(t, err)
-		test.AssertNil(t, val)
+		require.Error(t, err)
+		require.Nil(t, val)
 
 		// start the view
 		ctx, cancel := context.WithCancel(context.Background())
@@ -39,29 +39,28 @@ func TestView(t *testing.T) {
 
 		// try to get some non-existent key
 		val, err = view.Get("not-existent")
-		test.AssertNil(t, err)
-		test.AssertNil(t, val)
-		test.AssertNil(t, nil)
+		require.NoError(t, err)
+		require.Nil(t, val)
+		require.NoError(t, nil)
 
 		// get the value we set earlier
 		val, err = view.Get("key")
-		test.AssertNil(t, err)
-		test.AssertEqual(t, val.(string), "value")
-		test.AssertNil(t, nil)
+		require.NoError(t, err)
+		require.Equal(t, val.(string), "value")
+		require.NoError(t, nil)
 
 		// get all the keys from table "test"
 		keys := gkt.GetTableKeys("test")
 		// at the moment we only have one key "key"
-		test.AssertEqual(t, keys, []string{"key"})
+		require.Equal(t, keys, []string{"key"})
 
 		// set a second key
 		gkt.SetTableValue("test", "key2", "value")
 		keys = gkt.GetTableKeys("test")
-		test.AssertEqual(t, keys, []string{"key", "key2"})
+		require.Equal(t, keys, []string{"key", "key2"})
 
 		// stop the view and wait for it to finish up
 		cancel()
 		<-done
 	})
-
 }

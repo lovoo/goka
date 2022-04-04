@@ -7,13 +7,10 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
-
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
-var (
-	tmTestBrokers = []string{"0"}
-)
+var tmTestBrokers = []string{"0"}
 
 func trueCheckFunc(broker Broker, config *sarama.Config) error {
 	return nil
@@ -47,7 +44,7 @@ func TestTM_checkBroker(t *testing.T) {
 		broker.EXPECT().Connected().Return(connected, nil)
 
 		err := checkBroker(broker, config)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("fail_open", func(t *testing.T) {
 		ctrl := NewMockController(t)
@@ -61,7 +58,7 @@ func TestTM_checkBroker(t *testing.T) {
 		broker.EXPECT().Open(config).Return(errRet)
 
 		err := checkBroker(broker, config)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 	t.Run("fail_connected", func(t *testing.T) {
 		ctrl := NewMockController(t)
@@ -77,7 +74,7 @@ func TestTM_checkBroker(t *testing.T) {
 		broker.EXPECT().Addr().Return("127.0.0.1")
 
 		err := checkBroker(broker, config)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 	t.Run("fail_not_connected", func(t *testing.T) {
 		ctrl := NewMockController(t)
@@ -94,7 +91,7 @@ func TestTM_checkBroker(t *testing.T) {
 		broker.EXPECT().Addr().Return("127.0.0.1")
 
 		err := checkBroker(broker, config)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -111,9 +108,9 @@ func TestTM_newTopicManager(t *testing.T) {
 			new(sarama.Broker),
 		})
 		tm, err := newTopicManager(tmTestBrokers, DefaultConfig(), NewTopicManagerConfig(), bm.client, trueCheckFunc)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, tm.client, bm.client)
-		test.AssertNotNil(t, tm.admin)
+		require.NoError(t, err)
+		require.Equal(t, tm.client, bm.client)
+		require.NotNil(t, tm.admin)
 	})
 	t.Run("fail_missing_stuff", func(t *testing.T) {
 		ctrl := NewMockController(t)
@@ -121,10 +118,10 @@ func TestTM_newTopicManager(t *testing.T) {
 		bm := newBuilderMock(ctrl)
 
 		_, err := newTopicManager(tmTestBrokers, nil, nil, bm.client, trueCheckFunc)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 
 		_, err = newTopicManager(tmTestBrokers, nil, NewTopicManagerConfig(), nil, trueCheckFunc)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 	t.Run("fail_check", func(t *testing.T) {
 		ctrl := NewMockController(t)
@@ -137,7 +134,7 @@ func TestTM_newTopicManager(t *testing.T) {
 		})
 
 		_, err := newTopicManager(tmTestBrokers, DefaultConfig(), NewTopicManagerConfig(), bm.client, falseCheckFunc)
-		test.AssertEqual(t, err.Error(), "broker check error")
+		require.Equal(t, err.Error(), "broker check error")
 	})
 }
 
@@ -147,14 +144,14 @@ func TestTM_Close(t *testing.T) {
 		defer ctrl.Finish()
 		bm.client.EXPECT().Close().Return(nil)
 		err := tm.Close()
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
 		bm.client.EXPECT().Close().Return(errors.New("some-error"))
 		err := tm.Close()
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -162,26 +159,22 @@ func TestTM_Partitions(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
-		var (
-			topic = "some-topic"
-		)
+		topic := "some-topic"
 		bm.client.EXPECT().RefreshMetadata().Return(nil)
 		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
 		_, err := tm.Partitions(topic)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
-		var (
-			topic = "some-topic"
-		)
+		topic := "some-topic"
 		bm.client.EXPECT().RefreshMetadata().Return(nil)
 		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, errors.New("some-error"))
 		_, err := tm.Partitions(topic)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -196,7 +189,7 @@ func TestTM_GetOffset(t *testing.T) {
 		)
 		bm.client.EXPECT().GetOffset(topic, partition, offset).Return(sarama.OffsetNewest, nil)
 		_, err := tm.GetOffset(topic, partition, offset)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -208,7 +201,7 @@ func TestTM_GetOffset(t *testing.T) {
 		)
 		bm.client.EXPECT().GetOffset(topic, partition, offset).Return(sarama.OffsetNewest, errors.New("some-error"))
 		_, err := tm.GetOffset(topic, partition, offset)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -231,7 +224,7 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
 
 		err := tm.EnsureStreamExists(topic, npar)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("create", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -254,7 +247,7 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(nil)
 
 		err := tm.EnsureStreamExists(topic, npar)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -269,7 +262,7 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 		bm.client.EXPECT().Topics().Return(nil, retErr)
 
 		err := tm.EnsureStreamExists(topic, npar)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -295,7 +288,7 @@ func TestTM_createTopic(t *testing.T) {
 
 		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(nil)
 		err := tm.createTopic(topic, npar, rfactor, config)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -311,7 +304,7 @@ func TestTM_createTopic(t *testing.T) {
 		)
 		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(retErr)
 		err := tm.createTopic(topic, npar, rfactor, config)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -336,7 +329,7 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
 
 		err := tm.EnsureTopicExists(topic, npar, rfactor, config)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("exists_diff_partitions_ignore", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -353,7 +346,7 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
 
 		err := tm.EnsureStreamExists(topic, npar)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("exists_diff_partitions_fail", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -370,7 +363,7 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		bm.client.EXPECT().Partitions(topic).Return([]int32{0, 1}, nil)
 
 		err := tm.EnsureTopicExists(topic, npar, 1, map[string]string{})
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 	t.Run("exists_diff_config", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -393,7 +386,7 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 			Name: topic,
 		}).Return([]sarama.ConfigEntry{{Name: "a", Value: "b"}}, nil)
 		err := tm.EnsureTopicExists(topic, npar, 1, map[string]string{"a": "diff-value"})
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 	t.Run("exists_diff_rfactor", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -430,7 +423,7 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 
 		// fails because rfactor is requested as 2, but the smallest one is 1
 		err := tm.EnsureTopicExists(topic, npar, 2, map[string]string{})
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 	t.Run("exists_same", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -466,7 +459,7 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 
 		// fails because rfactor is requested as 2, but the smallest one is 1
 		err := tm.EnsureTopicExists(topic, npar, 2, map[string]string{"a": "b"})
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("create", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -490,7 +483,7 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(nil)
 
 		err := tm.EnsureTopicExists(topic, npar, rfactor, config)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("create-nowait", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -511,7 +504,7 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		bm.admin.EXPECT().CreateTopic(gomock.Any(), gomock.Any(), false).Return(nil)
 
 		err := tm.EnsureTopicExists(topic, npar, rfactor, config)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
@@ -530,14 +523,14 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		bm.client.EXPECT().RefreshMetadata().Return(nil)
 		bm.client.EXPECT().Topics().Return(nil, retErr)
 		err := tm.EnsureTopicExists(topic, npar, rfactor, config)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 
 		// client.Partitions() fails
 		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
 		bm.client.EXPECT().RefreshMetadata().Return(nil)
 		bm.client.EXPECT().Partitions(topic).Return(nil, retErr)
 		err = tm.EnsureTopicExists(topic, npar, rfactor, config)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 
 		// client.DescribeConfig() fails
 		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
@@ -548,7 +541,7 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		bm.client.EXPECT().Config().Return(cfg)
 		bm.admin.EXPECT().DescribeConfig(gomock.Any()).Return(nil, retErr)
 		err = tm.EnsureTopicExists(topic, npar, rfactor, config)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 
 		// client.DescribeTopics() fails
 		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
@@ -558,6 +551,6 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		bm.admin.EXPECT().DescribeConfig(gomock.Any()).Return([]sarama.ConfigEntry{{Name: "a", Value: "a"}}, nil)
 		bm.admin.EXPECT().DescribeTopics(gomock.Any()).Return(nil, retErr)
 		err = tm.EnsureTopicExists(topic, npar, rfactor, config)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }

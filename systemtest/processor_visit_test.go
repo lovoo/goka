@@ -9,8 +9,8 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/storage"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -28,13 +28,11 @@ func TestProcessorVisit(t *testing.T) {
 	tmc.Stream.Replication = 1
 	cfg := goka.DefaultConfig()
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
-	var (
-		// counts tests executed to get a unique id for group/topic to have every test start
-		// with empty topics on kafka
-		testNum int
-	)
+	// counts tests executed to get a unique id for group/topic to have every test start
+	// with empty topics on kafka
+	var testNum int
 	nextTopics := func() (goka.Group, goka.Stream) {
 		testNum++
 		group := goka.Group(fmt.Sprintf("goka-systemtest-processor-visit-%d-%d", time.Now().Unix(), testNum))
@@ -42,16 +40,15 @@ func TestProcessorVisit(t *testing.T) {
 	}
 
 	createEmitter := func(topic goka.Stream) (*goka.Emitter, func()) {
-
 		err = tm.EnsureStreamExists(string(topic), 10)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 
 		em, err := goka.NewEmitter(brokers, topic, new(codec.Int64),
 			goka.WithEmitterTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
 		)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		return em, func() {
-			test.AssertNil(t, em.Finish())
+			require.NoError(t, em.Finish())
 		}
 	}
 
@@ -73,7 +70,7 @@ func TestProcessorVisit(t *testing.T) {
 			goka.WithStorageBuilder(storage.MemoryBuilder()),
 		)
 
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 
 		return proc
 	}
@@ -86,7 +83,7 @@ func TestProcessorVisit(t *testing.T) {
 			goka.WithViewStorageBuilder(storage.MemoryBuilder()),
 		)
 
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 
 		return view
 	}
@@ -106,14 +103,14 @@ func TestProcessorVisit(t *testing.T) {
 			return val1 != nil && val1.(int64) == 1
 		})
 
-		test.AssertNil(t, proc.VisitAll(context.Background(), "visitor", int64(25)))
+		require.NoError(t, proc.VisitAll(context.Background(), "visitor", int64(25)))
 		pollTimed(t, "values-ok", emitWaitTimeoutSecs, func() bool {
 			val1, _ := proc.Get("value1")
 			return val1 != nil && val1.(int64) == 25
 		})
 
 		cancel()
-		test.AssertNil(t, <-done)
+		require.NoError(t, <-done)
 	})
 	t.Run("visit-panic", func(t *testing.T) {
 		group, input := nextTopics()
@@ -130,11 +127,11 @@ func TestProcessorVisit(t *testing.T) {
 			return val1 != nil && val1.(int64) == 1
 		})
 
-		test.AssertNil(t, proc.VisitAll(context.Background(), "visitor", "asdf")) // pass wrong type to visitor -> which will be passed to the visit --> will panic
+		require.NoError(t, proc.VisitAll(context.Background(), "visitor", "asdf")) // pass wrong type to visitor -> which will be passed to the visit --> will panic
 
 		// no need to cancel, the visitAll will kill the processor.
 		_ = cancel
-		test.AssertNotNil(t, <-done)
+		require.Error(t, <-done)
 	})
 
 	t.Run("visit-shutdown", func(t *testing.T) {
@@ -174,29 +171,29 @@ func TestProcessorVisit(t *testing.T) {
 		visitCancel()
 
 		<-visitDone
-		test.AssertEqual(t, visited, int64(1))
-		test.AssertTrue(t, errors.Is(err, context.Canceled), err)
+		require.Equal(t, visited, int64(1))
+		require.True(t, errors.Is(err, context.Canceled), err)
 
 		val1, _ := proc.Get("0")
 		val2, _ := proc.Get("02")
 
 		// val1 was visited, the other was cancelled
-		test.AssertEqual(t, val1.(int64), int64(42))
-		test.AssertEqual(t, val2.(int64), int64(1))
+		require.Equal(t, val1.(int64), int64(42))
+		require.Equal(t, val2.(int64), int64(1))
 
 		// let's revisit everything again.
 		visited, err = proc.VisitAllWithStats(context.Background(), "visitor", int64(43))
-		test.AssertNil(t, err)
-		test.AssertEqual(t, visited, int64(2))
+		require.NoError(t, err)
+		require.Equal(t, visited, int64(2))
 		val1, _ = proc.Get("0")
 		val2, _ = proc.Get("02")
 		// both were visited
-		test.AssertEqual(t, val1.(int64), int64(43))
-		test.AssertEqual(t, val2.(int64), int64(43))
+		require.Equal(t, val1.(int64), int64(43))
+		require.Equal(t, val2.(int64), int64(43))
 
 		// shutdown processor without error
 		cancel()
-		test.AssertNil(t, <-done)
+		require.NoError(t, <-done)
 	})
 
 	t.Run("processor-shutdown", func(t *testing.T) {
@@ -245,15 +242,14 @@ func TestProcessorVisit(t *testing.T) {
 
 		// shutdown processor without error
 		cancel()
-		test.AssertNil(t, <-done)
+		require.NoError(t, <-done)
 		<-visitDone
 
-		test.AssertTrue(t, visited > 0 && visited < 100, fmt.Sprintf("visited is %d", visited))
-		test.AssertTrue(t, errors.Is(err, goka.ErrVisitAborted), err)
+		require.True(t, visited > 0 && visited < 100, fmt.Sprintf("visited is %d", visited))
+		require.True(t, errors.Is(err, goka.ErrVisitAborted), err)
 
 		viewCancel()
-		test.AssertNil(t, <-viewDone)
-
+		require.NoError(t, <-viewDone)
 	})
 
 	t.Run("processor-rebalance", func(t *testing.T) {
@@ -309,8 +305,8 @@ func TestProcessorVisit(t *testing.T) {
 
 		// shutdown all processors
 		cancel1()
-		test.AssertNil(t, <-done1)
+		require.NoError(t, <-done1)
 		cancel2()
-		test.AssertNil(t, <-done2)
+		require.NoError(t, <-done2)
 	})
 }

@@ -11,9 +11,9 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 )
 
 func newEmitter(err error, done func(err error)) emitter {
@@ -54,7 +54,7 @@ func TestContext_Emit(t *testing.T) {
 	// after that the message is processed
 	ctx.emitter = newEmitter(nil, func(err error) {
 		emitted++
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 
 	ctx.start()
@@ -66,8 +66,8 @@ func TestContext_Emit(t *testing.T) {
 	ctx.wg.Wait()
 
 	// check everything is done
-	test.AssertEqual(t, emitted, 1)
-	test.AssertEqual(t, ack, 1)
+	require.Equal(t, emitted, 1)
+	require.Equal(t, ack, 1)
 }
 
 func TestContext_DeferCommit(t *testing.T) {
@@ -88,9 +88,9 @@ func TestContext_DeferCommit(t *testing.T) {
 	ctx.finish(nil)
 
 	// ack is not done
-	test.AssertEqual(t, ack, 0)
+	require.Equal(t, ack, 0)
 	doneFunc(nil)
-	test.AssertEqual(t, ack, 1)
+	require.Equal(t, ack, 1)
 }
 
 func TestContext_DeferCommit_witherror(t *testing.T) {
@@ -101,7 +101,7 @@ func TestContext_DeferCommit_witherror(t *testing.T) {
 	)
 
 	failer := func(err error) {
-		test.AssertTrue(t, strings.Contains(err.Error(), errToEmit.Error()))
+		require.True(t, strings.Contains(err.Error(), errToEmit.Error()))
 	}
 
 	ctx := &cbContext{
@@ -117,11 +117,11 @@ func TestContext_DeferCommit_witherror(t *testing.T) {
 	ctx.finish(nil)
 
 	// ack is not done
-	test.AssertEqual(t, ack, 0)
+	require.Equal(t, ack, 0)
 	doneFunc(fmt.Errorf("async error"))
 	// no commit, no ack, so we'll get the message again.
-	test.AssertEqual(t, ack, 0)
-	test.AssertStringContains(t, ctx.errors.ErrorOrNil().Error(), "async error")
+	require.Equal(t, ack, 0)
+	require.Contains(t, ctx.errors.ErrorOrNil().Error(), "async error")
 }
 
 func TestContext_Timestamp(t *testing.T) {
@@ -133,7 +133,7 @@ func TestContext_Timestamp(t *testing.T) {
 		},
 	}
 
-	test.AssertEqual(t, ctx.Timestamp(), ts)
+	require.Equal(t, ctx.Timestamp(), ts)
 }
 
 func TestContext_EmitError(t *testing.T) {
@@ -145,7 +145,7 @@ func TestContext_EmitError(t *testing.T) {
 	)
 
 	failer := func(err error) {
-		test.AssertTrue(t, strings.Contains(err.Error(), errToEmit.Error()))
+		require.True(t, strings.Contains(err.Error(), errToEmit.Error()))
 	}
 
 	// test error case
@@ -158,8 +158,8 @@ func TestContext_EmitError(t *testing.T) {
 	}
 	ctx.emitter = newEmitter(errToEmit, func(err error) {
 		emitted++
-		test.AssertNotNil(t, err)
-		test.AssertEqual(t, err, errToEmit)
+		require.Error(t, err)
+		require.Equal(t, err, errToEmit)
 	})
 
 	ctx.start()
@@ -171,34 +171,29 @@ func TestContext_EmitError(t *testing.T) {
 	ctx.wg.Wait()
 
 	// check everything is done
-	test.AssertEqual(t, emitted, 1)
+	require.Equal(t, emitted, 1)
 
 	// nothing should be committed here
-	test.AssertEqual(t, ack, 0)
-
+	require.Equal(t, ack, 0)
 }
 
 func TestContext_EmitToStateTopic(t *testing.T) {
-	var (
-		group Group = "some-group"
-	)
+	var group Group = "some-group"
 
 	ctx := &cbContext{
 		graph:      DefineGroup(group, Persist(c), Loop(c, cb)),
 		syncFailer: func(err error) { panic(err) },
 	}
-	func() {
-		defer test.PanicAssertEqual(t, errors.New("cannot emit to table topic (use SetValue instead)"))
-		ctx.Emit(Stream(tableName(group)), "key", []byte("value"))
-	}()
-	func() {
-		defer test.PanicAssertEqual(t, errors.New("cannot emit to loop topic (use Loopback instead)"))
-		ctx.Emit(Stream(loopName(group)), "key", []byte("value"))
-	}()
-	func() {
-		defer test.PanicAssertEqual(t, errors.New("cannot emit to empty topic"))
-		ctx.Emit("", "key", []byte("value"))
-	}()
+	require.PanicsWithError(t,
+		"cannot emit to table topic (use SetValue instead)",
+		func() { ctx.Emit(Stream(tableName(group)), "key", []byte("value")) },
+	)
+	require.PanicsWithError(t, "cannot emit to loop topic (use Loopback instead)",
+		func() { ctx.Emit(Stream(loopName(group)), "key", []byte("value")) },
+	)
+	require.PanicsWithError(t, "cannot emit to empty topic",
+		func() { ctx.Emit("", "key", []byte("value")) },
+	)
 }
 
 func TestContext_GetSetStateless(t *testing.T) {
@@ -208,14 +203,8 @@ func TestContext_GetSetStateless(t *testing.T) {
 		msg:        new(message),
 		syncFailer: func(err error) { panic(err) },
 	}
-	func() {
-		defer test.PanicAssertStringContains(t, "stateless")
-		_ = ctx.Value()
-	}()
-	func() {
-		defer test.PanicAssertStringContains(t, "stateless")
-		ctx.SetValue("whatever")
-	}()
+	require.PanicsWithError(t, "Cannot access state in stateless processor", func() { ctx.Value() })
+	require.PanicsWithError(t, "Cannot access state in stateless processor", func() { ctx.SetValue("whatever") })
 }
 
 func TestContext_Delete(t *testing.T) {
@@ -250,12 +239,12 @@ func TestContext_Delete(t *testing.T) {
 
 	ctx.start()
 	err := ctx.deleteKey(key, nil)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 	ctx.finish(nil)
 
 	ctx.wg.Wait()
 
-	test.AssertEqual(t, ctx.counters, struct {
+	require.Equal(t, ctx.counters, struct {
 		emits  int
 		dones  int
 		stores int
@@ -280,7 +269,7 @@ func TestContext_DeleteStateless(t *testing.T) {
 	ctx.emitter = newEmitter(nil, nil)
 
 	err := ctx.deleteKey(key, nil)
-	test.AssertTrue(t, strings.Contains(err.Error(), "Cannot access state in stateless processor"))
+	require.True(t, strings.Contains(err.Error(), "Cannot access state in stateless processor"))
 }
 
 func TestContext_DeleteStorageError(t *testing.T) {
@@ -313,7 +302,7 @@ func TestContext_DeleteStorageError(t *testing.T) {
 	ctx.emitter = newEmitter(nil, nil)
 
 	err := ctx.deleteKey(key, nil)
-	test.AssertTrue(t, strings.Contains(err.Error(), "error deleting key (key) from storage: storage error"))
+	require.True(t, strings.Contains(err.Error(), "error deleting key (key) from storage: storage error"))
 }
 
 func TestContext_Set(t *testing.T) {
@@ -351,17 +340,17 @@ func TestContext_Set(t *testing.T) {
 
 	ctx.start()
 	err := ctx.setValueForKey(key, value, nil)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 	ctx.finish(nil)
 
 	ctx.wg.Wait()
 
-	test.AssertEqual(t, ctx.counters, struct {
+	require.Equal(t, ctx.counters, struct {
 		emits  int
 		dones  int
 		stores int
 	}{1, 1, 1})
-	test.AssertEqual(t, ack, 1)
+	require.Equal(t, ack, 1)
 }
 
 func TestContext_GetSetStateful(t *testing.T) {
@@ -399,22 +388,22 @@ func TestContext_GetSetStateful(t *testing.T) {
 		msg:              &message{key: key, offset: offset},
 		emitter: func(tp string, k string, v []byte, h Headers) *Promise {
 			wg.Add(1)
-			test.AssertEqual(t, tp, graph.GroupTable().Topic())
-			test.AssertEqual(t, string(k), key)
-			test.AssertEqual(t, string(v), value)
-			test.AssertEqual(t, h, headers)
+			require.Equal(t, tp, graph.GroupTable().Topic())
+			require.Equal(t, string(k), key)
+			require.Equal(t, string(v), value)
+			require.Equal(t, h, headers)
 			return NewPromise().finish(nil, nil)
 		},
 		ctx: context.Background(),
 	}
 
 	val := ctx.Value()
-	test.AssertTrue(t, val == nil)
+	require.True(t, val == nil)
 
 	ctx.SetValue(value, WithCtxEmitHeaders(headers))
 
 	val = ctx.Value()
-	test.AssertEqual(t, val, value)
+	require.Equal(t, val, value)
 }
 
 func TestContext_SetErrors(t *testing.T) {
@@ -451,27 +440,27 @@ func TestContext_SetErrors(t *testing.T) {
 	}
 
 	err := ctx.setValueForKey(key, nil, nil)
-	test.AssertNotNil(t, err)
-	test.AssertTrue(t, strings.Contains(err.Error(), "cannot set nil"))
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "cannot set nil"))
 
 	err = ctx.setValueForKey(key, 123, nil) // cannot encode 123 as string
-	test.AssertNotNil(t, err)
-	test.AssertTrue(t, strings.Contains(err.Error(), "error encoding"))
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "error encoding"))
 
 	st.EXPECT().Set(key, []byte(value)).Return(errors.New("some-error"))
 
 	err = ctx.setValueForKey(key, value, nil)
-	test.AssertNotNil(t, err)
-	test.AssertTrue(t, strings.Contains(err.Error(), "some-error"))
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "some-error"))
 
 	// TODO(jb): check if still valid
 	// finish with error
 	// ctx.emitter = newEmitterW(wg, fmt.Errorf("some-error"), func(err error) {
-	// 	test.AssertNotNil(t, err)
-	//	test.AssertTrue(t, strings.Contains(err.Error(), "some-error"))
+	// 	require.Error(t, err)
+	//	require.True(t, strings.Contains(err.Error(), "some-error"))
 	// })
 	// err = ctx.setValueForKey(key, value)
-	// test.AssertNil(t, err)
+	// require.NoError(t, err)
 }
 
 func TestContext_LoopbackNoLoop(t *testing.T) {
@@ -481,14 +470,12 @@ func TestContext_LoopbackNoLoop(t *testing.T) {
 		msg:        &message{},
 		syncFailer: func(err error) { panic(err) },
 	}
-	func() {
-		defer test.PanicAssertStringContains(t, "loop")
+	require.PanicsWithError(t, "no loop topic configured", func() {
 		ctx.Loopback("some-key", "whatever")
-	}()
+	})
 }
 
 func TestContext_Loopback(t *testing.T) {
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -506,16 +493,16 @@ func TestContext_Loopback(t *testing.T) {
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 		emitter: func(tp string, k string, v []byte, h Headers) *Promise {
 			cnt++
-			test.AssertEqual(t, tp, graph.LoopStream().Topic())
-			test.AssertEqual(t, string(k), key)
-			test.AssertEqual(t, string(v), value)
-			test.AssertEqual(t, h, headers)
+			require.Equal(t, tp, graph.LoopStream().Topic())
+			require.Equal(t, string(k), key)
+			require.Equal(t, string(v), value)
+			require.Equal(t, h, headers)
 			return NewPromise()
 		},
 	}
 
 	ctx.Loopback(key, value, WithCtxEmitHeaders(headers))
-	test.AssertTrue(t, cnt == 1)
+	require.True(t, cnt == 1)
 }
 
 func TestContext_Join(t *testing.T) {
@@ -547,24 +534,15 @@ func TestContext_Join(t *testing.T) {
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Join(table)
-	test.AssertEqual(t, v, value)
+	require.Equal(t, v, value)
 
-	func() {
-		defer test.PanicAssertStringContains(t, errSome.Error())
-		st.EXPECT().Get(key).Return(nil, errSome)
-		_ = ctx.Join(table)
-	}()
+	st.EXPECT().Get(key).Return(nil, errSome)
+	require.Panics(t, func() { ctx.Join(table) })
 
-	func() {
-		defer test.PanicAssertStringContains(t, "not subs")
-		_ = ctx.Join("other-table")
-	}()
+	require.Panics(t, func() { ctx.Join("other-table") })
 
 	ctx.pviews = nil
-	func() {
-		defer test.PanicAssertStringContains(t, "not subs")
-		_ = ctx.Join(table)
-	}()
+	require.Panics(t, func() { ctx.Join(table) })
 }
 
 func TestContext_Lookup(t *testing.T) {
@@ -605,28 +583,17 @@ func TestContext_Lookup(t *testing.T) {
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Lookup(table, key)
-	test.AssertEqual(t, v, value)
+	require.Equal(t, v, value)
 
-	func() {
-		defer test.PanicAssertStringContains(t, errSome.Error())
-		st.EXPECT().Get(key).Return(nil, errSome)
-		_ = ctx.Lookup(table, key)
-	}()
-
-	func() {
-		defer test.PanicAssertStringContains(t, "not subs")
-		_ = ctx.Lookup("other-table", key)
-	}()
+	st.EXPECT().Get(key).Return(nil, errSome)
+	require.Panics(t, func() { ctx.Lookup(table, key) })
+	require.Panics(t, func() { ctx.Lookup("other-table", key) })
 
 	ctx.views = nil
-	func() {
-		defer test.PanicAssertStringContains(t, "not subs")
-		_ = ctx.Lookup(table, key)
-	}()
+	require.Panics(t, func() { ctx.Lookup(table, key) })
 }
 
 func TestContext_Headers(t *testing.T) {
-
 	// context without headers will return empty map
 	ctx := &cbContext{
 		msg: &message{
@@ -634,8 +601,8 @@ func TestContext_Headers(t *testing.T) {
 		},
 	}
 	headers := ctx.Headers()
-	test.AssertNotNil(t, headers)
-	test.AssertEqual(t, len(headers), 0)
+	require.NotNil(t, headers)
+	require.Equal(t, len(headers), 0)
 
 	ctx = &cbContext{
 		msg: &message{
@@ -645,10 +612,11 @@ func TestContext_Headers(t *testing.T) {
 					Key:   []byte("key"),
 					Value: []byte("value"),
 				},
-			}},
+			},
+		},
 	}
 	headers = ctx.Headers()
-	test.AssertEqual(t, headers["key"], []byte("value"))
+	require.Equal(t, headers["key"], []byte("value"))
 }
 
 func TestContext_Fail(t *testing.T) {
@@ -658,14 +626,5 @@ func TestContext_Fail(t *testing.T) {
 		},
 	}
 
-	defer func() {
-		err := recover()
-		test.AssertNotNil(t, err)
-		test.AssertTrue(t, strings.Contains(fmt.Sprintf("%v", err), "blubb"))
-	}()
-
-	ctx.Fail(errors.New("blubb"))
-
-	// this must not be executed. ctx.Fail should stop execution
-	test.AssertTrue(t, false)
+	require.Panics(t, func() { ctx.Fail(errors.New("blubb")) })
 }

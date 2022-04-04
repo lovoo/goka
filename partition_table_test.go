@@ -3,6 +3,7 @@ package goka
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,8 +11,8 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/storage"
+	"github.com/stretchr/testify/require"
 )
 
 func defaultPT(
@@ -21,7 +22,6 @@ func defaultPT(
 	consumer sarama.Consumer,
 	updateCallback UpdateCallback,
 ) (*PartitionTable, *builderMock, *gomock.Controller) {
-
 	ctrl := gomock.NewController(t)
 	bm := newBuilderMock(ctrl)
 	return newPartitionTable(
@@ -67,10 +67,11 @@ func TestPT_createStorage(t *testing.T) {
 
 		bm.mst.EXPECT().Open().Return(nil)
 		sp, err := pt.createStorage(ctx)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, sp.Storage, equalSP.Storage)
-		test.AssertEqual(t, sp.partition, equalSP.partition)
-		test.AssertFuncEqual(t, sp.Update, equalSP.Update)
+		require.NoError(t, err)
+		require.Equal(t, sp.Storage, equalSP.Storage)
+		require.Equal(t, sp.partition, equalSP.partition)
+		// doing manual pointer equality test here, require.Same does not work for some reason
+		require.Equal(t, reflect.ValueOf(sp.Update).Pointer(), reflect.ValueOf(equalSP.Update).Pointer())
 	})
 	t.Run("fail_ctx_cancel", func(t *testing.T) {
 		pt, bm, ctrl := defaultPT(
@@ -89,8 +90,8 @@ func TestPT_createStorage(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(nil)
 
 		sp, err := pt.createStorage(ctx)
-		test.AssertNil(t, err)
-		test.AssertNil(t, sp)
+		require.NoError(t, err)
+		require.Nil(t, sp)
 	})
 	t.Run("fail_storage", func(t *testing.T) {
 		pt, _, ctrl := defaultPT(
@@ -106,8 +107,8 @@ func TestPT_createStorage(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
 		defer cancel()
 		sp, err := pt.createStorage(ctx)
-		test.AssertNotNil(t, err)
-		test.AssertNil(t, sp)
+		require.Error(t, err)
+		require.Nil(t, sp)
 	})
 }
 
@@ -126,7 +127,7 @@ func TestPT_setup(t *testing.T) {
 		defer cancel()
 		bm.mst.EXPECT().Open().Return(nil)
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
 		pt, _, ctrl := defaultPT(
@@ -142,7 +143,7 @@ func TestPT_setup(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -161,9 +162,9 @@ func TestPT_close(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.Close()
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("on_nil_storage", func(t *testing.T) {
 		pt, _, ctrl := defaultPT(
@@ -176,7 +177,7 @@ func TestPT_close(t *testing.T) {
 		defer ctrl.Finish()
 
 		err := pt.Close()
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -200,9 +201,9 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
 		actualOldest, actualNewest, err := pt.findOffsetToLoad(local)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, actualOldest, oldest)
-		test.AssertEqual(t, actualNewest, newest)
+		require.NoError(t, err)
+		require.Equal(t, actualOldest, oldest)
+		require.Equal(t, actualNewest, newest)
 	})
 	t.Run("new_local", func(t *testing.T) {
 		var (
@@ -222,9 +223,9 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
 		offsetToLoad, actualNewest, err := pt.findOffsetToLoad(local)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, offsetToLoad, local+1)
-		test.AssertEqual(t, actualNewest, newest)
+		require.NoError(t, err)
+		require.Equal(t, offsetToLoad, local+1)
+		require.Equal(t, actualNewest, newest)
 	})
 	t.Run("too_new_local", func(t *testing.T) {
 		var (
@@ -244,9 +245,9 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
 		offsetToLoad, actualNewest, err := pt.findOffsetToLoad(local)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, offsetToLoad, local+1)
-		test.AssertEqual(t, actualNewest, newest)
+		require.NoError(t, err)
+		require.Equal(t, offsetToLoad, local+1)
+		require.Equal(t, actualNewest, newest)
 	})
 	t.Run("sarama_oldest", func(t *testing.T) {
 		var (
@@ -265,14 +266,12 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 
 		actualOldest, actualNewest, err := pt.findOffsetToLoad(sarama.OffsetOldest)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, actualOldest, oldest)
-		test.AssertEqual(t, actualNewest, newest)
+		require.NoError(t, err)
+		require.Equal(t, actualOldest, oldest)
+		require.Equal(t, actualNewest, newest)
 	})
 	t.Run("fail_getoffset", func(t *testing.T) {
-		var (
-			expectedErr error = fmt.Errorf("some error")
-		)
+		var expectedErr error = fmt.Errorf("some error")
 		pt, bm, ctrl := defaultPT(
 			t,
 			"some-topic",
@@ -284,7 +283,7 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(int64(0), expectedErr)
 
 		_, _, err := pt.findOffsetToLoad(sarama.OffsetOldest)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 	t.Run("fail_getoffset2", func(t *testing.T) {
 		var (
@@ -303,7 +302,7 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(int64(0), expectedErr)
 
 		_, _, err := pt.findOffsetToLoad(sarama.OffsetOldest)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -332,10 +331,10 @@ func TestPT_load(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.load(ctx, stopAfterCatchup)
-		test.AssertNil(t, err)
-		test.AssertTrue(t, pt.state.IsState(State(PartitionRunning)))
+		require.NoError(t, err)
+		require.True(t, pt.state.IsState(State(PartitionRunning)))
 	})
 	t.Run("local_offset_too_high_stopAfterCatchup_no_error", func(t *testing.T) {
 		var (
@@ -361,9 +360,9 @@ func TestPT_load(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.load(ctx, stopAfterCatchup)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("consume", func(t *testing.T) {
 		var (
@@ -417,10 +416,10 @@ func TestPT_load(t *testing.T) {
 		}()
 
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.load(ctx, stopAfterCatchup)
-		test.AssertNil(t, err)
-		test.AssertTrue(t, atomic.LoadInt64(&count) == 10)
+		require.NoError(t, err)
+		require.True(t, atomic.LoadInt64(&count) == 10)
 	})
 }
 
@@ -467,11 +466,11 @@ func TestPT_loadMessages(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.loadMessages(ctx, partConsumer, partitionHwm, stopAfterCatchup)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, recKey, key)
-		test.AssertEqual(t, recVal, value)
+		require.NoError(t, err)
+		require.Equal(t, recKey, key)
+		require.Equal(t, recVal, value)
 	})
 	t.Run("consume_till_hwm_more_msgs", func(t *testing.T) {
 		var (
@@ -510,9 +509,9 @@ func TestPT_loadMessages(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.loadMessages(ctx, partConsumer, partitionHwm, stopAfterCatchup)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("consume_till_cancel", func(t *testing.T) {
 		var (
@@ -541,7 +540,7 @@ func TestPT_loadMessages(t *testing.T) {
 		defer cancel()
 		bm.mst.EXPECT().Open().Return(nil)
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		go func(ctx context.Context) {
 			for i := 0; i < 100; i++ {
 				bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
@@ -560,8 +559,8 @@ func TestPT_loadMessages(t *testing.T) {
 			cancel()
 		}(ctx)
 		err = pt.loadMessages(ctx, partConsumer, partitionHwm, stopAfterCatchup)
-		test.AssertNil(t, err)
-		test.AssertTrue(t, atomic.LoadInt64(&count) == 100)
+		require.NoError(t, err)
+		require.True(t, atomic.LoadInt64(&count) == 100)
 	})
 	t.Run("close_msg_chan", func(t *testing.T) {
 		var (
@@ -591,11 +590,11 @@ func TestPT_loadMessages(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		bm.mst.EXPECT().Open().Return(nil)
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		go func() {
 			defer cancel()
 			err = pt.loadMessages(ctx, partConsumer, partitionHwm, stopAfterCatchup)
-			test.AssertNil(t, err)
+			require.NoError(t, err)
 		}()
 		go func(ctx context.Context) {
 			var (
@@ -648,7 +647,7 @@ func TestPT_loadMessages(t *testing.T) {
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, localOffset)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		go func() {
 			defer cancel()
 			for {
@@ -663,7 +662,7 @@ func TestPT_loadMessages(t *testing.T) {
 			}
 		}()
 		err = pt.loadMessages(ctx, partConsumer, partitionHwm, stopAfterCatchup)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
@@ -698,9 +697,9 @@ func TestPT_loadMessages(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.loadMessages(ctx, partConsumer, partitionHwm, stopAfterCatchup)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -733,11 +732,11 @@ func TestPT_storeEvent(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.storeEvent(key, value, localOffset, nil)
-		test.AssertEqual(t, actualKey, key)
-		test.AssertEqual(t, actualValue, value)
-		test.AssertNil(t, err)
+		require.Equal(t, actualKey, key)
+		require.Equal(t, actualValue, value)
+		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
@@ -762,9 +761,9 @@ func TestPT_storeEvent(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.storeEvent(key, value, localOffset, nil)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -787,9 +786,9 @@ func TestPT_Close(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.Close()
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("succeed2", func(t *testing.T) {
 		var (
@@ -805,7 +804,7 @@ func TestPT_Close(t *testing.T) {
 		)
 		defer ctrl.Finish()
 		err := pt.Close()
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -828,11 +827,11 @@ func TestPT_markRecovered(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
-		test.AssertTrue(t, !pt.state.IsState(State(PartitionRunning)))
+		require.NoError(t, err)
+		require.True(t, !pt.state.IsState(State(PartitionRunning)))
 		err = pt.markRecovered(ctx)
-		test.AssertNil(t, err)
-		test.AssertTrue(t, pt.state.IsState(State(PartitionRunning)))
+		require.NoError(t, err)
+		require.True(t, pt.state.IsState(State(PartitionRunning)))
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
@@ -853,10 +852,10 @@ func TestPT_markRecovered(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		err := pt.setup(ctx)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		err = pt.markRecovered(ctx)
-		test.AssertNotNil(t, err)
-		test.AssertTrue(t, pt.state.IsState(State(PartitionPreparing)))
+		require.Error(t, err)
+		require.True(t, pt.state.IsState(State(PartitionPreparing)))
 	})
 }
 
@@ -882,7 +881,6 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 			nil,
 			updateCB,
 		)
-		Debug(true, false)
 		defer ctrl.Finish()
 		pt.consumer = consumer
 		bm.mst.EXPECT().Open().Return(nil)
@@ -903,8 +901,8 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 		defer cancel()
 
 		err := pt.SetupAndRecover(ctx, false)
-		test.AssertNil(t, err)
-		test.AssertTrue(t, atomic.LoadInt64(&count) == msgsToRecover)
+		require.NoError(t, err)
+		require.True(t, atomic.LoadInt64(&count) == msgsToRecover)
 	})
 	t.Run("fail", func(t *testing.T) {
 		var (
@@ -928,7 +926,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 		defer cancel()
 
 		err := pt.SetupAndRecover(ctx, false)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -981,7 +979,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 		}()
 
 		err := pt.SetupAndRecover(ctx, false)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		cancel()
 	})
 	t.Run("fail", func(t *testing.T) {
@@ -1006,7 +1004,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 		defer cancel()
 
 		err := pt.SetupAndRecover(ctx, false)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 		cancel()
 	})
 }

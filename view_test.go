@@ -13,8 +13,8 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/storage"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -86,7 +86,8 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 	}
 	opts.builders.backoff = DefaultBackoffBuilder
 
-	view := &View{topic: viewTestTopic,
+	view := &View{
+		topic: viewTestTopic,
 		opts:  opts,
 		log:   opts.log,
 		state: newViewSignal(),
@@ -102,8 +103,8 @@ func TestView_hash(t *testing.T) {
 		view.partitions = []*PartitionTable{{}}
 
 		h, err := view.hash("a")
-		test.AssertNil(t, err)
-		test.AssertTrue(t, h == 0)
+		require.NoError(t, err)
+		require.True(t, h == 0)
 	})
 	t.Run("fail_hash", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -117,14 +118,14 @@ func TestView_hash(t *testing.T) {
 		}
 
 		_, err := view.hash("a")
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 	t.Run("fail_no_partition", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
 		_, err := view.hash("a")
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -149,8 +150,8 @@ func TestView_find(t *testing.T) {
 		}
 
 		st, err := view.find(key)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, st, view.partitions[0])
+		require.NoError(t, err)
+		require.Equal(t, st, view.partitions[0])
 	})
 	t.Run("fail", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -164,7 +165,7 @@ func TestView_find(t *testing.T) {
 		}
 
 		_, err := view.find("a")
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -194,8 +195,8 @@ func TestView_Get(t *testing.T) {
 		bm.mst.EXPECT().Get(key).Return([]byte(strconv.FormatInt(value, 10)), nil)
 
 		ret, err := view.Get(key)
-		test.AssertNil(t, err)
-		test.AssertTrue(t, ret == value)
+		require.NoError(t, err)
+		require.True(t, ret == value)
 	})
 	t.Run("succeed_nil", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -220,8 +221,8 @@ func TestView_Get(t *testing.T) {
 		bm.mst.EXPECT().Get(key).Return(nil, nil)
 
 		ret, err := view.Get(key)
-		test.AssertNil(t, err)
-		test.AssertTrue(t, ret == nil)
+		require.NoError(t, err)
+		require.True(t, ret == nil)
 	})
 	t.Run("fail_get", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -247,7 +248,7 @@ func TestView_Get(t *testing.T) {
 		bm.mst.EXPECT().Get(key).Return(nil, errRet)
 
 		_, err := view.Get(key)
-		test.AssertNotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -277,8 +278,8 @@ func TestView_Has(t *testing.T) {
 		bm.mst.EXPECT().Has(key).Return(has, nil)
 
 		ret, err := view.Has(key)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, ret, has)
+		require.NoError(t, err)
+		require.Equal(t, ret, has)
 	})
 	t.Run("succeed_false", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -305,8 +306,8 @@ func TestView_Has(t *testing.T) {
 		bm.mst.EXPECT().Has(key).Return(has, nil)
 
 		ret, err := view.Has(key)
-		test.AssertNil(t, err)
-		test.AssertEqual(t, ret, has)
+		require.NoError(t, err)
+		require.Equal(t, ret, has)
 	})
 	t.Run("fail_err", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -324,8 +325,8 @@ func TestView_Has(t *testing.T) {
 		}
 
 		ret, err := view.Has(key)
-		test.AssertNotNil(t, err)
-		test.AssertTrue(t, ret == has)
+		require.Error(t, err)
+		require.True(t, ret == has)
 	})
 }
 
@@ -350,7 +351,7 @@ func TestView_Evict(t *testing.T) {
 		bm.mst.EXPECT().Delete(key).Return(nil)
 
 		err := view.Evict(key)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -359,28 +360,24 @@ func TestView_Recovered(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
-		var (
-			hasRecovered = true
-		)
+		hasRecovered := true
 		view.partitions = []*PartitionTable{
 			{state: NewSignal(State(PartitionRunning)).SetState(State(PartitionRunning))},
 		}
 		ret := view.Recovered()
-		test.AssertTrue(t, ret == hasRecovered)
+		require.True(t, ret == hasRecovered)
 	})
 	t.Run("true", func(t *testing.T) {
 		view, _, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
-		var (
-			hasRecovered = false
-		)
+		hasRecovered := false
 		view.partitions = []*PartitionTable{
 			{state: NewSignal(State(PartitionRunning), State(PartitionRecovering)).SetState(State(PartitionRecovering))},
 			{state: NewSignal(State(PartitionRunning)).SetState(State(PartitionRunning))},
 		}
 		ret := view.Recovered()
-		test.AssertTrue(t, ret == hasRecovered)
+		require.True(t, ret == hasRecovered)
 	})
 }
 
@@ -390,7 +387,7 @@ func TestView_Topic(t *testing.T) {
 		defer ctrl.Finish()
 
 		ret := view.Topic()
-		test.AssertTrue(t, ret == viewTestTopic)
+		require.True(t, ret == viewTestTopic)
 	})
 }
 
@@ -399,11 +396,9 @@ func TestView_close(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
-		var (
-			proxy = &storageProxy{
-				Storage: bm.mst,
-			}
-		)
+		proxy := &storageProxy{
+			Storage: bm.mst,
+		}
 		view.partitions = []*PartitionTable{
 			{st: proxy},
 			{st: proxy},
@@ -412,8 +407,8 @@ func TestView_close(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
 		err := view.close()
-		test.AssertNil(t, err)
-		test.AssertTrue(t, len(view.partitions) == 0)
+		require.NoError(t, err)
+		require.True(t, len(view.partitions) == 0)
 	})
 	t.Run("fail", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -433,8 +428,8 @@ func TestView_close(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
 
 		err := view.close()
-		test.AssertNotNil(t, err)
-		test.AssertTrue(t, len(view.partitions) == 0)
+		require.Error(t, err)
+		require.True(t, len(view.partitions) == 0)
 	})
 }
 
@@ -458,8 +453,8 @@ func TestView_Terminate(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
 		ret := view.close()
-		test.AssertNil(t, ret)
-		test.AssertTrue(t, len(view.partitions) == 0)
+		require.NoError(t, ret)
+		require.True(t, len(view.partitions) == 0)
 	})
 
 	t.Run("succeed_twice", func(t *testing.T) {
@@ -481,11 +476,11 @@ func TestView_Terminate(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(nil).AnyTimes()
 
 		ret := view.close()
-		test.AssertNil(t, ret)
-		test.AssertTrue(t, len(view.partitions) == 0)
+		require.NoError(t, ret)
+		require.True(t, len(view.partitions) == 0)
 		ret = view.close()
-		test.AssertNil(t, ret)
-		test.AssertTrue(t, len(view.partitions) == 0)
+		require.NoError(t, ret)
+		require.True(t, len(view.partitions) == 0)
 	})
 
 	t.Run("fail", func(t *testing.T) {
@@ -508,8 +503,8 @@ func TestView_Terminate(t *testing.T) {
 		bm.mst.EXPECT().Close().Return(retErr).AnyTimes()
 
 		ret := view.close()
-		test.AssertNotNil(t, ret)
-		test.AssertTrue(t, len(view.partitions) == 0)
+		require.Error(t, ret)
+		require.True(t, len(view.partitions) == 0)
 	})
 }
 
@@ -573,7 +568,7 @@ func TestView_Run(t *testing.T) {
 		}()
 
 		ret := view.Run(ctx)
-		test.AssertNil(t, ret)
+		require.NoError(t, ret)
 	})
 	t.Run("fail", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -611,7 +606,7 @@ func TestView_Run(t *testing.T) {
 		defer cancel()
 
 		ret := view.Run(ctx)
-		test.AssertNotNil(t, ret)
+		require.Error(t, ret)
 	})
 }
 
@@ -620,29 +615,25 @@ func TestView_createPartitions(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
-		var (
-			partition int32
-		)
+		var partition int32
 		bm.tmgr.EXPECT().Partitions(viewTestTopic).Return([]int32{partition}, nil)
 		bm.tmgr.EXPECT().Close()
 
 		ret := view.createPartitions([]string{""})
-		test.AssertNil(t, ret)
-		test.AssertTrue(t, len(view.partitions) == 1)
+		require.NoError(t, ret)
+		require.True(t, len(view.partitions) == 1)
 	})
 	t.Run("fail_tmgr", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
 
-		var (
-			retErr error = fmt.Errorf("tmgr-partition-error")
-		)
+		var retErr error = fmt.Errorf("tmgr-partition-error")
 		bm.tmgr.EXPECT().Partitions(viewTestTopic).Return(nil, retErr)
 		bm.tmgr.EXPECT().Close()
 
 		ret := view.createPartitions([]string{""})
-		test.AssertNotNil(t, ret)
-		test.AssertTrue(t, len(view.partitions) == 0)
+		require.Error(t, ret)
+		require.True(t, len(view.partitions) == 0)
 	})
 }
 
@@ -660,7 +651,7 @@ func TestView_WaitRunning(t *testing.T) {
 		case <-time.After(time.Second):
 		}
 
-		test.AssertTrue(t, isRunning == true)
+		require.True(t, isRunning == true)
 	})
 }
 
@@ -670,9 +661,7 @@ func TestView_NewView(t *testing.T) {
 		defer ctrl.Finish()
 		bm := newBuilderMock(ctrl)
 
-		var (
-			partition int32
-		)
+		var partition int32
 		bm.tmgr.EXPECT().Partitions(viewTestTopic).Return([]int32{partition}, nil).AnyTimes()
 		bm.tmgr.EXPECT().Close().AnyTimes()
 
@@ -682,17 +671,15 @@ func TestView_NewView(t *testing.T) {
 				return NewMockAutoConsumer(t, DefaultConfig()), nil
 			}),
 		}...)
-		test.AssertNil(t, err)
-		test.AssertNotNil(t, view)
+		require.NoError(t, err)
+		require.NotNil(t, view)
 	})
 	t.Run("succeed", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		bm := newBuilderMock(ctrl)
 
-		var (
-			retErr error = fmt.Errorf("tmgr-error")
-		)
+		var retErr error = fmt.Errorf("tmgr-error")
 		bm.tmgr.EXPECT().Partitions(viewTestTopic).Return(nil, retErr).AnyTimes()
 		bm.tmgr.EXPECT().Close().AnyTimes()
 
@@ -702,8 +689,8 @@ func TestView_NewView(t *testing.T) {
 				return NewMockAutoConsumer(t, DefaultConfig()), nil
 			}),
 		}...)
-		test.AssertNotNil(t, err)
-		test.AssertNil(t, view)
+		require.Error(t, err)
+		require.Nil(t, view)
 	})
 }
 
@@ -714,7 +701,6 @@ func ExampleView() {
 	view, err := NewView([]string{"localhost:9092"},
 		"input-topic",
 		new(codec.String))
-
 	if err != nil {
 		log.Fatalf("error creating view: %v", err)
 	}
@@ -789,7 +775,6 @@ func ExampleView_autoreconnect() {
 		// This time range can be modified using
 		// WithViewBackoffResetTimeout(3*time.Second),
 	)
-
 	if err != nil {
 		log.Fatalf("error creating view: %v", err)
 	}

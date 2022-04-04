@@ -10,15 +10,14 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/multierr"
+	"github.com/stretchr/testify/require"
 )
 
 // Tests a processor with multiple input topics. Random values are emitted to random topics, the values are accumulated
 // for a single key and checked for correctness after emitting a couple of messages.
 // This is a regression/showcase test for https://github.com/lovoo/goka/issues/332
 func TestMultiTopics(t *testing.T) {
-
 	brokers := initSystemTest(t)
 	var (
 		group        goka.Group = goka.Group(fmt.Sprintf("%s-%d", "goka-systemtest-multitopic", time.Now().Unix()))
@@ -35,11 +34,11 @@ func TestMultiTopics(t *testing.T) {
 	tmc.Stream.Replication = 1
 	cfg := goka.DefaultConfig()
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	for _, inStream := range inputStreams {
 		err = tm.EnsureStreamExists(string(inStream), 1)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 	}
 	// let the cluster create it
 	time.Sleep(5 * time.Second)
@@ -61,16 +60,16 @@ func TestMultiTopics(t *testing.T) {
 		),
 		goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
 	)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	view, err := goka.NewView(brokers, table, new(codec.Int64))
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	var emitters []*goka.Emitter
 
 	for _, input := range inputStreams {
 		emitter, err := goka.NewEmitter(brokers, input, new(codec.Int64))
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		emitters = append(emitters, emitter)
 	}
 
@@ -94,12 +93,12 @@ func TestMultiTopics(t *testing.T) {
 		value := rand.Int63n(100)
 		// emit to random emitters in sync
 		err := emitters[rand.Intn(len(emitters))].EmitSync("key", value)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		// ... and batched
 		prom, err := emitters[rand.Intn(len(emitters))].Emit("key", value)
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		prom.Then(func(err error) {
-			test.AssertNil(t, err)
+			require.NoError(t, err)
 		})
 
 		// accumulate what we have sent so far
@@ -107,24 +106,24 @@ func TestMultiTopics(t *testing.T) {
 	}
 
 	for _, emitter := range emitters {
-		test.AssertNil(t, emitter.Finish())
+		require.NoError(t, emitter.Finish())
 	}
 
 	// poll the view and the processor until we're sure that we have
 	pollTimed(t, "all messages have been transferred", 10.0,
 		func() bool {
 			value, err := view.Get("key")
-			test.AssertNil(t, err)
+			require.NoError(t, err)
 			return value != nil && value.(int64) == sum
 		},
 		func() bool {
 			value, err := proc.Get("key")
-			test.AssertNil(t, err)
+			require.NoError(t, err)
 			return value != nil && value.(int64) == sum
 		},
 	)
 
 	// stop everything and wait until it's shut down
 	cancel()
-	test.AssertNil(t, errg.Wait().ErrorOrNil())
+	require.NoError(t, errg.Wait().ErrorOrNil())
 }

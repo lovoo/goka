@@ -8,6 +8,7 @@ require (
 	github.com/golang/mock v1.4.3
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/go-multierror v1.1.1
+	github.com/stretchr/testify v1.7.1
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	gopkg.in/redis.v5 v5.2.9

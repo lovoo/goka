@@ -12,18 +12,16 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEmitter_KafkaDisconnect(t *testing.T) {
 	brokers := initSystemTest(t)
-	var (
-		topic = goka.Stream(fmt.Sprintf("goka_systemtest_emitter_disconnect-%d", time.Now().Unix()))
-	)
+	topic := goka.Stream(fmt.Sprintf("goka_systemtest_emitter_disconnect-%d", time.Now().Unix()))
 
 	tmgr, err := goka.DefaultTopicManagerBuilder(brokers)
-	test.AssertNil(t, err)
-	test.AssertNil(t, tmgr.EnsureStreamExists(string(topic), 10))
+	require.NoError(t, err)
+	require.NoError(t, tmgr.EnsureStreamExists(string(topic), 10))
 
 	cfg := goka.DefaultConfig()
 
@@ -38,7 +36,7 @@ func TestEmitter_KafkaDisconnect(t *testing.T) {
 	em, err := goka.NewEmitter(brokers, topic, new(codec.Int64),
 		goka.WithEmitterProducerBuilder(goka.ProducerBuilderWithConfig(cfg)),
 	)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 	var (
 		i       int64
 		success int64
@@ -74,12 +72,10 @@ func TestEmitter_KafkaDisconnect(t *testing.T) {
 				if err == nil {
 					atomic.AddInt64(&success, 1)
 				}
-
 			})
 			time.Sleep(10 * time.Millisecond)
 			i++
 		}
-
 	}()
 
 	pollTimed(t, "emitter emitted something successfully", 10, func() bool {
@@ -88,5 +84,5 @@ func TestEmitter_KafkaDisconnect(t *testing.T) {
 
 	fi.SetWriteError(syscall.EPIPE)
 	<-done
-	test.AssertNil(t, em.Finish())
+	require.NoError(t, em.Finish())
 }

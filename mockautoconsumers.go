@@ -137,7 +137,7 @@ func (c *MockAutoConsumer) Close() error {
 
 	for _, partitions := range c.partitionConsumers {
 		for _, partitionConsumer := range partitions {
-			_ = partitionConsumer.Close()
+			partitionConsumer.Close()
 		}
 	}
 
@@ -233,50 +233,55 @@ func (pc *MockAutoPartitionConsumer) AsyncClose() {
 // Close implements the Close method from the sarama.PartitionConsumer interface. It will
 // verify whether the partition consumer was actually started.
 func (pc *MockAutoPartitionConsumer) Close() error {
-	if !pc.consumed {
-		pc.t.Errorf("Expectations set on %s/%d, but no partition consumer was started.", pc.topic, pc.partition)
-		return errPartitionConsumerNotStarted
-	}
-
-	if pc.errorsShouldBeDrained && len(pc.errors) > 0 {
-		pc.t.Errorf("Expected the errors channel for %s/%d to be drained on close, but found %d errors.", pc.topic, pc.partition, len(pc.errors))
-	}
-
-	if pc.messagesShouldBeDrained && len(pc.messages) > 0 {
-		pc.t.Errorf("Expected the messages channel for %s/%d to be drained on close, but found %d messages.", pc.topic, pc.partition, len(pc.messages))
-	}
-
-	pc.AsyncClose()
-
-	var (
-		closeErr error
-		wg       sync.WaitGroup
-	)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		var errs = make(sarama.ConsumerErrors, 0)
-		for err := range pc.errors {
-			errs = append(errs, err)
+	var err error
+	pc.singleClose.Do(func() {
+		if !pc.consumed {
+			pc.t.Errorf("Expectations set on %s/%d, but no partition consumer was started.", pc.topic, pc.partition)
+			err = errPartitionConsumerNotStarted
+			return
 		}
 
-		if len(errs) > 0 {
-			closeErr = errs
+		if pc.errorsShouldBeDrained && len(pc.errors) > 0 {
+			pc.t.Errorf("Expected the errors channel for %s/%d to be drained on close, but found %d errors.", pc.topic, pc.partition, len(pc.errors))
 		}
-	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for range pc.messages {
-			// drain
+		if pc.messagesShouldBeDrained && len(pc.messages) > 0 {
+			pc.t.Errorf("Expected the messages channel for %s/%d to be drained on close, but found %d messages.", pc.topic, pc.partition, len(pc.messages))
 		}
-	}()
 
-	wg.Wait()
-	return closeErr
+		pc.AsyncClose()
+
+		var (
+			closeErr error
+			wg       sync.WaitGroup
+		)
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			errs := make(sarama.ConsumerErrors, 0)
+			for err := range pc.errors {
+				errs = append(errs, err)
+			}
+
+			if len(errs) > 0 {
+				closeErr = errs
+			}
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range pc.messages {
+				// drain
+			}
+		}()
+
+		wg.Wait()
+		err = closeErr
+	})
+	return err
 }
 
 // Errors implements the Errors method from the sarama.PartitionConsumer interface.

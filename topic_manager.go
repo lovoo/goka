@@ -370,8 +370,8 @@ func (tmc *TopicManagerConfig) streamCleanupPolicy() string {
 	}
 	return "delete"
 }
-func (tmc *TopicManagerConfig) tableCleanupPolicy() string {
 
+func (tmc *TopicManagerConfig) tableCleanupPolicy() string {
 	if tmc.Table.CleanupPolicy != "" {
 		return tmc.Table.CleanupPolicy
 	}

@@ -9,8 +9,8 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/multierr"
+	"github.com/stretchr/testify/require"
 )
 
 // Tests the following scenario:
@@ -18,7 +18,7 @@ import (
 // Therefore we start a view on a topic fed by an emitter, the view proxies through the FIProxy and loses connection
 // after recovering. The values are still be served/returned
 func TestView_Reconnect(t *testing.T) {
-	var topic = fmt.Sprintf("goka_systemtest_view_reconnect_test-%d", time.Now().Unix())
+	topic := fmt.Sprintf("goka_systemtest_view_reconnect_test-%d", time.Now().Unix())
 	brokers := initSystemTest(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -27,8 +27,8 @@ func TestView_Reconnect(t *testing.T) {
 	errg, ctx := multierr.NewErrGroup(ctx)
 
 	tmgr, err := goka.DefaultTopicManagerBuilder(brokers)
-	test.AssertNil(t, err)
-	test.AssertNil(t, tmgr.EnsureStreamExists(topic, 10))
+	require.NoError(t, err)
+	require.NoError(t, tmgr.EnsureStreamExists(topic, 10))
 
 	errg.Go(func() error {
 		em, err := goka.NewEmitter(brokers, goka.Stream(topic), new(codec.Int64))
@@ -44,7 +44,7 @@ func TestView_Reconnect(t *testing.T) {
 			default:
 			}
 
-			test.AssertNil(t, em.EmitSync("key", i))
+			require.NoError(t, em.EmitSync("key", i))
 			time.Sleep(10 * time.Millisecond)
 			i++
 		}
@@ -62,7 +62,7 @@ func TestView_Reconnect(t *testing.T) {
 		goka.WithViewConsumerSaramaBuilder(goka.SaramaConsumerBuilderWithConfig(cfg)),
 		goka.WithViewTopicManagerBuilder(goka.TopicManagerBuilderWithConfig(cfg, goka.NewTopicManagerConfig())),
 	)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	// Start view and wait for it to be recovered
 	errg.Go(func() error {
@@ -72,7 +72,7 @@ func TestView_Reconnect(t *testing.T) {
 
 	val := func() int64 {
 		val, err := view.Get("key")
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		if val == nil {
 			return 0
 		}
@@ -94,11 +94,11 @@ func TestView_Reconnect(t *testing.T) {
 
 	// the view still should have gotten the update before the EOF
 	secondVal := val()
-	test.AssertTrue(t, secondVal > firstVal)
+	require.True(t, secondVal > firstVal)
 
 	// let some time pass -> the value should not have updated
 	time.Sleep(500 * time.Millisecond)
-	test.AssertTrue(t, val() == secondVal)
+	require.True(t, val() == secondVal)
 
 	// connect kafka again, wait until it's running -> the value should have changed
 	fi.ResetErrors()
@@ -111,5 +111,5 @@ func TestView_Reconnect(t *testing.T) {
 
 	// shut everything down
 	cancel()
-	test.AssertNil(t, errg.Wait().ErrorOrNil())
+	require.NoError(t, errg.Wait().ErrorOrNil())
 }

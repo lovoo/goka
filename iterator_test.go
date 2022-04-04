@@ -5,20 +5,20 @@ import (
 	"testing"
 
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/storage"
+	"github.com/stretchr/testify/require"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
 func TestIterator(t *testing.T) {
 	tmpdir, err := ioutil.TempDir("", "goka_storage_TestIterator")
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	db, err := leveldb.OpenFile(tmpdir, nil)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	st, err := storage.New(db)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	kv := map[string]string{
 		"key-1": "val-1",
@@ -27,13 +27,13 @@ func TestIterator(t *testing.T) {
 	}
 
 	for k, v := range kv {
-		test.AssertNil(t, st.Set(k, []byte(v)))
+		require.NoError(t, st.Set(k, []byte(v)))
 	}
 
-	test.AssertNil(t, st.SetOffset(777))
+	require.NoError(t, st.SetOffset(777))
 
 	iter, err := st.Iterator()
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	it := &iterator{
 		iter:  storage.NewMultiIterator([]storage.Iterator{iter}),
@@ -44,8 +44,8 @@ func TestIterator(t *testing.T) {
 
 	// accessing iterator before Next should only return nils
 	val, err := it.Value()
-	test.AssertTrue(t, val == nil)
-	test.AssertNil(t, err)
+	require.True(t, val == nil)
+	require.NoError(t, err)
 
 	for it.Next() {
 		count++
@@ -56,13 +56,13 @@ func TestIterator(t *testing.T) {
 		}
 
 		val, err := it.Value()
-		test.AssertNil(t, err)
-		test.AssertEqual(t, expected, val.(string))
+		require.NoError(t, err)
+		require.Equal(t, expected, val.(string))
 	}
 
 	if err := it.Err(); err != nil {
 		t.Fatalf("unexpected iteration error: %v", err)
 	}
 
-	test.AssertEqual(t, count, len(kv))
+	require.Equal(t, count, len(kv))
 }

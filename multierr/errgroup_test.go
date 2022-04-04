@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
 func TestErrGroup_Go(t *testing.T) {
@@ -17,19 +17,19 @@ func TestErrGroup_Go(t *testing.T) {
 	g.Go(func() error { return nil })
 	errs := g.Wait()
 	err := errs.ErrorOrNil()
-	test.AssertNil(t, err)
-	test.AssertNotNil(t, ctx.Err())
-	test.AssertStringContains(t, ctx.Err().Error(), "context canceled")
+	require.NoError(t, err)
+	require.Error(t, ctx.Err())
+	require.Contains(t, ctx.Err().Error(), "context canceled")
 
 	// with one error
 	g, ctx = NewErrGroup(bctx)
 	g.Go(func() error { return fmt.Errorf("some error") })
 	errs = g.Wait()
 	err = errs.ErrorOrNil()
-	test.AssertNotNil(t, err)
-	test.AssertStringContains(t, err.Error(), "some error")
-	test.AssertNotNil(t, ctx.Err())
-	test.AssertStringContains(t, ctx.Err().Error(), "context canceled")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "some error")
+	require.Error(t, ctx.Err())
+	require.Contains(t, ctx.Err().Error(), "context canceled")
 
 	// with one error
 	g, ctx = NewErrGroup(bctx)
@@ -37,11 +37,11 @@ func TestErrGroup_Go(t *testing.T) {
 	g.Go(func() error { return fmt.Errorf("some error2") })
 	errs = g.Wait()
 	err = errs.ErrorOrNil()
-	test.AssertNotNil(t, err)
-	test.AssertStringContains(t, err.Error(), "some error")
-	test.AssertStringContains(t, err.Error(), "some error2")
-	test.AssertNotNil(t, ctx.Err())
-	test.AssertStringContains(t, ctx.Err().Error(), "context canceled")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "some error")
+	require.Contains(t, err.Error(), "some error2")
+	require.Error(t, ctx.Err())
+	require.Contains(t, ctx.Err().Error(), "context canceled")
 }
 
 func TestErrGroup_Empty(t *testing.T) {
@@ -49,7 +49,7 @@ func TestErrGroup_Empty(t *testing.T) {
 	defer cancel()
 	errg, errgCtx := NewErrGroup(ctx)
 
-	test.AssertNil(t, errg.Wait().ErrorOrNil())
+	require.NoError(t, errg.Wait().ErrorOrNil())
 	select {
 	case <-errgCtx.Done():
 	default:

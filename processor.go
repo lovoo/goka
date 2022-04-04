@@ -268,6 +268,13 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 		return fmt.Errorf("Error creating consumer for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
 	}
 
+	// close sarama consume after we're done
+	defer func() {
+		if err := g.saramaConsumer.Close(); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("error closing sarama consumer: %w", err))
+		}
+	}()
+
 	g.tmgr, err = g.opts.builders.topicmgr(g.brokers)
 	if err != nil {
 		return fmt.Errorf("Error creating topic manager for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
@@ -341,10 +348,10 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 
 		closeErr := consumerGroup.Close()
 		if closeErr != nil {
-			g.log.Printf("Error closing consumer group: %v", err)
+			g.log.Printf("Error closing consumer group: %v", closeErr)
 			errs = multierror.Append(
 				errs,
-				fmt.Errorf("Error closing consumer group: %w", err),
+				fmt.Errorf("Error closing consumer group: %w", closeErr),
 			)
 		}
 

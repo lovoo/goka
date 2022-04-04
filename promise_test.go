@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lovoo/goka/internal/test"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPromise_thenBeforeFinish(t *testing.T) {
@@ -17,12 +17,12 @@ func TestPromise_thenBeforeFinish(t *testing.T) {
 
 	p.finish(nil, errors.New("test"))
 
-	test.AssertEqual(t, promiseErr.Error(), "test")
+	require.Equal(t, promiseErr.Error(), "test")
 
 	// repeating finish won't change result
 	p.finish(nil, errors.New("test-whatever"))
 
-	test.AssertEqual(t, promiseErr.Error(), "test")
+	require.Equal(t, promiseErr.Error(), "test")
 }
 
 func TestPromise_thenAfterFinish(t *testing.T) {
@@ -34,5 +34,5 @@ func TestPromise_thenAfterFinish(t *testing.T) {
 		promiseErr = err
 	})
 
-	test.AssertEqual(t, promiseErr.Error(), "test")
+	require.Equal(t, promiseErr.Error(), "test")
 }

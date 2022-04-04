@@ -10,8 +10,8 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
-	"github.com/lovoo/goka/internal/test"
 	"github.com/lovoo/goka/multierr"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
@@ -27,13 +27,13 @@ func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
 	errg, ctx := multierr.NewErrGroup(ctx)
 
 	tmgr, err := goka.DefaultTopicManagerBuilder(brokers)
-	test.AssertNil(t, err)
-	test.AssertNil(t, tmgr.EnsureStreamExists(string(topic), 10))
+	require.NoError(t, err)
+	require.NoError(t, tmgr.EnsureStreamExists(string(topic), 10))
 
 	// emit values
 	errg.Go(func() error {
 		em, err := goka.NewEmitter(brokers, topic, new(codec.Int64))
-		test.AssertNil(t, err)
+		require.NoError(t, err)
 		defer em.Finish()
 		var i int64
 		for {
@@ -44,9 +44,9 @@ func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
 			}
 
 			prom, err := em.Emit(fmt.Sprintf("key-%d", i%20), i)
-			test.AssertNil(t, err)
+			require.NoError(t, err)
 			prom.Then(func(err error) {
-				test.AssertNil(t, err)
+				require.NoError(t, err)
 			})
 			time.Sleep(100 * time.Millisecond)
 			i++
@@ -75,7 +75,7 @@ func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
 		goka.WithProducerBuilder(goka.ProducerBuilderWithConfig(cfg)),
 		goka.WithConsumerSaramaBuilder(goka.SaramaConsumerBuilderWithConfig(cfg)),
 	)
-	test.AssertNil(t, err)
+	require.NoError(t, err)
 
 	errg.Go(func() error {
 		return proc.Run(ctx)
@@ -92,5 +92,5 @@ func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
 	fi.SetWriteError(io.ErrClosedPipe)
 	err = errg.Wait().ErrorOrNil()
 
-	test.AssertNotNil(t, err)
+	require.Error(t, err)
 }

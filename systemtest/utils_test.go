@@ -14,7 +14,7 @@ import (
 // polls all pollers until all return true or fails the test when secTimeout has passed.
 func pollTimed(t *testing.T, what string, secTimeout float64, pollers ...func() bool) {
 	for i := 0; i < int(secTimeout/0.02); i++ {
-		var ok = true
+		ok := true
 		for _, poller := range pollers {
 			if !poller() {
 				ok = false
@@ -27,6 +27,53 @@ func pollTimed(t *testing.T, what string, secTimeout float64, pollers ...func() 
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("waiting for %s timed out", what)
+}
+
+// DelayedCtxCloser creates a new context based on passed context, that closes after passed delay, when the parent context is closed.
+func DelayedCtxCloser(ctx context.Context, delay time.Duration) context.Context {
+	delayedCtx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		<-ctx.Done()
+		time.Sleep(delay)
+		cancel()
+	}()
+
+	return delayedCtx
+}
+
+func TestDelayedCtxCloser(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dCtx := DelayedCtxCloser(ctx, time.Second)
+
+	// check none of the contexts are closed
+	select {
+	case <-dCtx.Done():
+		t.Errorf("context is closed but shouldn't")
+	case <-ctx.Done():
+		t.Errorf("context is closed but shouldn't")
+	default:
+	}
+
+	// cancel parent
+	cancel()
+
+	// dCtx should still be open
+	select {
+	case <-dCtx.Done():
+		t.Errorf("context is closed but shouldn't")
+	default:
+	}
+
+	// dCtx should still be open
+	select {
+	case <-dCtx.Done():
+		// delayed context closed, succeeded
+	case <-time.After(2 * time.Second):
+		t.Errorf("delayed context didn't close")
+	}
 }
 
 // runWithContext runs a context-aware function in another go-routine and returns a function to
