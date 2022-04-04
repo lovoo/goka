@@ -17,7 +17,7 @@ func TestMemStorageDelete(t *testing.T) {
 	has, err := storage.Has("key-1")
 	require.NoError(t, err)
 	require.False(t, has)
-	require.Equal(t, len(storage.(*memory).keys), 0)
+	require.Equal(t, 0, len(storage.(*memory).keys))
 
 	err = storage.Set("key-1", []byte("content-1"))
 	require.NoError(t, err)
@@ -25,7 +25,7 @@ func TestMemStorageDelete(t *testing.T) {
 	has, err = storage.Has("key-1")
 	require.NoError(t, err)
 	require.True(t, has)
-	require.Equal(t, len(storage.(*memory).keys), 1)
+	require.Equal(t, 1, len(storage.(*memory).keys))
 
 	err = storage.Delete("key-1")
 	require.NoError(t, err)
@@ -33,7 +33,7 @@ func TestMemStorageDelete(t *testing.T) {
 	has, err = storage.Has("key-1")
 	require.NoError(t, err)
 	require.False(t, has)
-	require.Equal(t, len(storage.(*memory).keys), 0)
+	require.Equal(t, 0, len(storage.(*memory).keys))
 }
 
 func TestMemIter(t *testing.T) {
@@ -67,8 +67,8 @@ func TestMemIter(t *testing.T) {
 		key := string(iter.Key())
 		val := string(raw)
 
-		require.Equal(t, key, fmt.Sprintf("key-%d", i))
-		require.Equal(t, val, fmt.Sprintf("val-%d", i))
+		require.Equal(t, fmt.Sprintf("key-%d", i), key)
+		require.Equal(t, fmt.Sprintf("val-%d", i), val)
 		i++
 	}
 
@@ -83,16 +83,16 @@ func TestMemIter(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, iter.Next())
-	require.Equal(t, iter.Key(), k)
+	require.Equal(t, k, iter.Key())
 
 	iter, err = storage.Iterator()
 	require.NoError(t, err)
 	ok := iter.Seek([]byte("key-2"))
 	require.True(t, ok)
-	require.Equal(t, iter.Key(), []byte("key-2"))
+	require.Equal(t, []byte("key-2"), iter.Key())
 	val, err = iter.Value()
 	require.NoError(t, err)
-	require.Equal(t, val, []byte("val-2"))
+	require.Equal(t, []byte("val-2"), val)
 
 	ok = iter.Seek([]byte("key-4"))
 	require.False(t, ok)
@@ -124,7 +124,7 @@ func TestGetHas(t *testing.T) {
 
 	value, err = storage.Get("test-key")
 	require.NoError(t, err)
-	require.Equal(t, value, []byte("test"))
+	require.Equal(t, []byte("test"), value)
 
 	hasKey, err = storage.Has("nil-value")
 	require.NoError(t, err)
@@ -187,11 +187,11 @@ func TestSetGet(t *testing.T) {
 		messages[key] = string(val)
 	}
 	require.True(t, len(messages) == 2)
-	require.Equal(t, messages["key1"], "value1")
-	require.Equal(t, messages["key2"], "value2")
+	require.Equal(t, "value1", messages["key1"])
+	require.Equal(t, "value2", messages["key2"])
 
 	recoveredValue := string(value)
-	require.Equal(t, recoveredValue, "example-message")
+	require.Equal(t, "example-message", recoveredValue)
 }
 
 func TestLeveldbStorage(t *testing.T) {
@@ -217,12 +217,12 @@ func TestLeveldbStorage(t *testing.T) {
 		st.Open()
 		time.Sleep(1 * time.Second)
 		offset, err := st.GetOffset(0)
-		require.Equal(t, offset, int64(0))
+		require.Equal(t, int64(0), offset)
 		require.NoError(t, err)
 
 		require.NoError(t, st.SetOffset(100))
 		offset, err = st.GetOffset(0)
-		require.Equal(t, offset, int64(100))
+		require.Equal(t, int64(100), offset)
 		require.NoError(t, err)
 	})
 
@@ -232,7 +232,7 @@ func TestLeveldbStorage(t *testing.T) {
 		st.Open()
 		time.Sleep(1 * time.Second)
 		offset, err := st.GetOffset(0)
-		require.Equal(t, offset, int64(0))
+		require.Equal(t, int64(0), offset)
 		require.NoError(t, err)
 
 		require.NoError(t, st.SetOffset(100))
@@ -240,7 +240,7 @@ func TestLeveldbStorage(t *testing.T) {
 
 		st = newStorage(false, t)
 		offset, err = st.GetOffset(0)
-		require.Equal(t, offset, int64(100))
+		require.Equal(t, int64(100), offset)
 		require.NoError(t, err)
 	})
 
@@ -250,7 +250,7 @@ func TestLeveldbStorage(t *testing.T) {
 		st.Open()
 		time.Sleep(1 * time.Second)
 		offset, err := st.GetOffset(0)
-		require.Equal(t, offset, int64(0))
+		require.Equal(t, int64(0), offset)
 		require.NoError(t, err)
 
 		require.NoError(t, st.SetOffset(100))
@@ -262,7 +262,7 @@ func TestLeveldbStorage(t *testing.T) {
 		require.NoError(t, st.Close())
 		st = newStorage(false, t)
 		offset, err = st.GetOffset(0)
-		require.Equal(t, offset, int64(101))
+		require.Equal(t, int64(101), offset)
 		require.NoError(t, err)
 	})
 }

@@ -30,12 +30,12 @@ func TestActionStart(t *testing.T) {
 			actor: actor,
 		}
 
-		require.Equal(t, a.Name(), "test")
-		require.Equal(t, a.Description(), "sleep")
+		require.Equal(t, "test", a.Name())
+		require.Equal(t, "sleep", a.Description())
 		require.True(t, a.Error() == nil)
 		require.False(t, a.IsRunning())
-		require.Equal(t, a.StartTime(), "not started")
-		require.Equal(t, a.FinishedTime(), "not finished")
+		require.Equal(t, "not started", a.StartTime())
+		require.Equal(t, "not finished", a.FinishedTime())
 	})
 
 	t.Run("stop-only", func(t *testing.T) {
@@ -58,7 +58,7 @@ func TestActionStart(t *testing.T) {
 		a.Start("")
 		require.True(t, a.IsRunning())
 		require.NotEqual(t, a.StartTime(), "not started")
-		require.Equal(t, a.FinishedTime(), "not finished")
+		require.Equal(t, "not finished", a.FinishedTime())
 
 		a.Stop()
 		require.False(t, a.IsRunning())
@@ -66,8 +66,8 @@ func TestActionStart(t *testing.T) {
 		// it's finished
 		require.NotEqual(t, a.FinishedTime(), "not finished")
 		require.True(t, a.Error() != nil)
-		require.Equal(t, a.Error().Error(), context.Canceled.Error())
-		require.Equal(t, run, int64(0))
+		require.Equal(t, context.Canceled.Error(), a.Error().Error())
+		require.Equal(t, int64(0), run)
 	})
 
 	t.Run("start-finish", func(t *testing.T) {
@@ -84,7 +84,7 @@ func TestActionStart(t *testing.T) {
 		require.NotEqual(t, a.StartTime(), "not started")
 		require.NotEqual(t, a.FinishedTime(), "not finished")
 		require.True(t, a.Error() == nil)
-		require.Equal(t, run, int64(1))
+		require.Equal(t, int64(1), run)
 	})
 
 	t.Run("start-restart-finish", func(t *testing.T) {
@@ -108,6 +108,6 @@ func TestActionStart(t *testing.T) {
 		require.NotEqual(t, a.StartTime(), "not started")
 		require.NotEqual(t, a.FinishedTime(), "not finished")
 		require.True(t, a.Error() == nil)
-		require.Equal(t, run, int64(2))
+		require.Equal(t, int64(2), run)
 	})
 }

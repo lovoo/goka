@@ -78,10 +78,10 @@ func TestGroupGraph_Validate(t *testing.T) {
 }
 
 func TestGroupGraph_chainEdges(t *testing.T) {
-	require.Equal(t, len(chainEdges()), 0)
-	require.Equal(t, len(chainEdges(Edges{}, Edges{})), 0)
-	require.Equal(t, chainEdges(Edges{Join("a", nil)}, Edges{}), Edges{Join("a", nil)})
-	require.Equal(t, chainEdges(Edges{Join("a", nil)}, Edges{Join("a", nil), Join("b", nil)}), Edges{Join("a", nil), Join("a", nil), Join("b", nil)})
+	require.Empty(t, chainEdges())
+	require.Empty(t, chainEdges(Edges{}, Edges{}))
+	require.Equal(t, Edges{Join("a", nil)}, chainEdges(Edges{Join("a", nil)}, Edges{}))
+	require.Equal(t, Edges{Join("a", nil), Join("a", nil), Join("b", nil)}, chainEdges(Edges{Join("a", nil)}, Edges{Join("a", nil), Join("b", nil)}))
 }
 
 func TestGroupGraph_codec(t *testing.T) {
@@ -92,7 +92,7 @@ func TestGroupGraph_codec(t *testing.T) {
 
 	for _, topic := range []string{"input-topic", "input-topic2", "input-topic3"} {
 		codec := g.codec(topic)
-		require.Equal(t, codec, c)
+		require.Equal(t, c, codec)
 	}
 }
 
@@ -133,7 +133,7 @@ func TestGroupGraph_getters(t *testing.T) {
 	require.True(t, len(g.InputStreams()) == 2)
 	require.True(t, len(g.OutputStreams()) == 3)
 	require.True(t, g.GroupTable() == nil)
-	require.Equal(t, g.LoopStream().Topic(), loopName("group"))
+	require.Equal(t, loopName("group"), g.LoopStream().Topic())
 
 	g = DefineGroup("group",
 		Input("t1", c, cb),
@@ -154,12 +154,12 @@ func TestGroupGraph_getters(t *testing.T) {
 	require.True(t, len(g.OutputStreams()) == 3)
 	require.True(t, len(g.JointTables()) == 4)
 	require.True(t, len(g.LookupTables()) == 2)
-	require.Equal(t, g.GroupTable().Topic(), tableName("group"))
+	require.Equal(t, tableName("group"), g.GroupTable().Topic())
 }
 
 func TestGroupGraph_Inputs(t *testing.T) {
 	topics := Inputs(Streams{"a", "b", "c"}, c, cb)
-	require.Equal(t, topics.Topic(), "a,b,c")
+	require.Equal(t, "a,b,c", topics.Topic())
 	require.True(t, strings.Contains(topics.String(), "a,b,c/*codec.String"))
 }
 
@@ -173,13 +173,13 @@ func TestGroupGraph_UpdateSuffixes(t *testing.T) {
 		Persist(c),
 	)
 
-	require.Equal(t, tableName(g.Group()), "group-table1")
-	require.Equal(t, loopName(g.Group()), "group-loop1")
+	require.Equal(t, "group-table1", tableName(g.Group()))
+	require.Equal(t, "group-loop1", loopName(g.Group()))
 
 	ResetSuffixes()
 
-	require.Equal(t, tableName(g.Group()), fmt.Sprintf("group%s", defaultTableSuffix))
-	require.Equal(t, loopName(g.Group()), fmt.Sprintf("group%s", defaultLoopSuffix))
+	require.Equal(t, fmt.Sprintf("group%s", defaultTableSuffix), tableName(g.Group()))
+	require.Equal(t, fmt.Sprintf("group%s", defaultLoopSuffix), loopName(g.Group()))
 }
 
 func TestStringsToStreams(t *testing.T) {
@@ -189,8 +189,8 @@ func TestStringsToStreams(t *testing.T) {
 	}
 
 	streams := StringsToStreams(inputTopics...)
-	require.Equal(t, streams[0], Stream("input1"))
-	require.Equal(t, streams[1], Stream("input2"))
+	require.Equal(t, Stream("input1"), streams[0])
+	require.Equal(t, Stream("input2"), streams[1])
 }
 
 func ExampleStringsToStreams() {

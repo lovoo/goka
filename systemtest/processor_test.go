@@ -90,8 +90,8 @@ func TestHotStandby(t *testing.T) {
 	// check the storages that were initalized by the processors:
 	// proc1 is without hotstandby -> only two storages: (1 for the table, 1 for the join)
 	// proc2 uses hotstandby --> 4 storages (2 for table, 2 for join)
-	require.Equal(t, len(proc1Storages.storages), 2)
-	require.Equal(t, len(proc2Storages.storages), 4)
+	require.Equal(t, 2, len(proc1Storages.storages))
+	require.Equal(t, 4, len(proc2Storages.storages))
 
 	inputEmitter, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.String))
 	require.NoError(t, err)
@@ -142,14 +142,14 @@ func TestHotStandby(t *testing.T) {
 	// check the table-values
 	val1, _ := tableStorage1.Get("key1")
 	val2, _ := tableStorage2.Get("key2")
-	require.Equal(t, string(val1), "message1")
-	require.Equal(t, string(val2), "message2")
+	require.Equal(t, "message1", string(val1))
+	require.Equal(t, "message2", string(val2))
 
 	// check the join-values
 	joinval1, _ := joinStorage1.Get("key1")
 	joinval2, _ := joinStorage2.Get("key2")
-	require.Equal(t, string(joinval1), "joinval1")
-	require.Equal(t, string(joinval2), "joinval2")
+	require.Equal(t, "joinval1", string(joinval1))
+	require.Equal(t, "joinval2", string(joinval2))
 
 	// stop everything and wait until it's shut down
 	cancel()
@@ -247,8 +247,8 @@ func TestRecoverAhead(t *testing.T) {
 
 	// check the storages that were initalized by the processors:
 	// both have each 2 storages, because all tables only have 1 partition
-	require.Equal(t, len(proc1Storages.storages), 2)
-	require.Equal(t, len(proc2Storages.storages), 2)
+	require.Equal(t, 2, len(proc1Storages.storages))
+	require.Equal(t, 2, len(proc2Storages.storages))
 
 	// get the corresponding storages for both table and join-partitions
 	tableStorage1 := proc1Storages.storages[proc1Storages.key(string(table), 0)]
@@ -283,14 +283,14 @@ func TestRecoverAhead(t *testing.T) {
 	// check the table-values
 	val1, _ := tableStorage1.Get("key1")
 	val2, _ := tableStorage2.Get("key1")
-	require.Equal(t, string(val1), "tableval1")
-	require.Equal(t, string(val2), "tableval1")
+	require.Equal(t, "tableval1", string(val1))
+	require.Equal(t, "tableval1", string(val2))
 
 	// check the join-values
 	joinval1, _ := joinStorage1.Get("key1")
 	joinval2, _ := joinStorage2.Get("key1")
-	require.Equal(t, string(joinval1), "joinval1")
-	require.Equal(t, string(joinval2), "joinval1")
+	require.Equal(t, "joinval1", string(joinval1))
+	require.Equal(t, "joinval1", string(joinval2))
 
 	// stop everything and wait until it's shut down
 	cancel()
@@ -443,8 +443,8 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	// p1 has all active partitions
 	p1Stats := p1.Stats()
 	p1Active, p1Passive := activePassivePartitions(p1Stats)
-	require.Equal(t, p1Active, numPartitions)
-	require.Equal(t, p1Passive, 0)
+	require.Equal(t, numPartitions, p1Active)
+	require.Equal(t, 0, p1Passive)
 
 	p2, cancelP2, p2Done := runProc(createProc())
 	pollTimed(t, "p2 started", 10, p2.Recovered)
@@ -453,12 +453,12 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	// now p1 and p2 share the partitions
 	p2Stats := p2.Stats()
 	p2Active, p2Passive := activePassivePartitions(p2Stats)
-	require.Equal(t, p2Active, numPartitions/2)
-	require.Equal(t, p2Passive, numPartitions/2)
+	require.Equal(t, numPartitions/2, p2Active)
+	require.Equal(t, numPartitions/2, p2Passive)
 	p1Stats = p1.Stats()
 	p1Active, p1Passive = activePassivePartitions(p1Stats)
-	require.Equal(t, p1Active, numPartitions/2)
-	require.Equal(t, p1Passive, numPartitions/2)
+	require.Equal(t, numPartitions/2, p1Active)
+	require.Equal(t, numPartitions/2, p1Passive)
 
 	// p1 is down
 	cancelP1()
@@ -682,7 +682,7 @@ func TestMessageCommit(t *testing.T) {
 		val, err := proc.Get("1")
 		require.NoError(t, err)
 		require.True(t, val != nil)
-		require.Equal(t, val.(int64), int64(numMessages))
+		require.Equal(t, int64(numMessages), val.(int64))
 
 		cancel()
 		<-done

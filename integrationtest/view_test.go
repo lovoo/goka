@@ -46,18 +46,18 @@ func TestView(t *testing.T) {
 		// get the value we set earlier
 		val, err = view.Get("key")
 		require.NoError(t, err)
-		require.Equal(t, val.(string), "value")
+		require.Equal(t, "value", val.(string))
 		require.NoError(t, nil)
 
 		// get all the keys from table "test"
 		keys := gkt.GetTableKeys("test")
 		// at the moment we only have one key "key"
-		require.Equal(t, keys, []string{"key"})
+		require.Equal(t, []string{"key"}, keys)
 
 		// set a second key
 		gkt.SetTableValue("test", "key2", "value")
 		keys = gkt.GetTableKeys("test")
-		require.Equal(t, keys, []string{"key", "key2"})
+		require.Equal(t, []string{"key", "key2"}, keys)
 
 		// stop the view and wait for it to finish up
 		cancel()

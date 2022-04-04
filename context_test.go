@@ -66,8 +66,8 @@ func TestContext_Emit(t *testing.T) {
 	ctx.wg.Wait()
 
 	// check everything is done
-	require.Equal(t, emitted, 1)
-	require.Equal(t, ack, 1)
+	require.Equal(t, 1, emitted)
+	require.Equal(t, 1, ack)
 }
 
 func TestContext_DeferCommit(t *testing.T) {
@@ -88,9 +88,9 @@ func TestContext_DeferCommit(t *testing.T) {
 	ctx.finish(nil)
 
 	// ack is not done
-	require.Equal(t, ack, 0)
+	require.Equal(t, 0, ack)
 	doneFunc(nil)
-	require.Equal(t, ack, 1)
+	require.Equal(t, 1, ack)
 }
 
 func TestContext_DeferCommit_witherror(t *testing.T) {
@@ -117,10 +117,10 @@ func TestContext_DeferCommit_witherror(t *testing.T) {
 	ctx.finish(nil)
 
 	// ack is not done
-	require.Equal(t, ack, 0)
+	require.Equal(t, 0, ack)
 	doneFunc(fmt.Errorf("async error"))
 	// no commit, no ack, so we'll get the message again.
-	require.Equal(t, ack, 0)
+	require.Equal(t, 0, ack)
 	require.Contains(t, ctx.errors.ErrorOrNil().Error(), "async error")
 }
 
@@ -133,7 +133,7 @@ func TestContext_Timestamp(t *testing.T) {
 		},
 	}
 
-	require.Equal(t, ctx.Timestamp(), ts)
+	require.Equal(t, ts, ctx.Timestamp())
 }
 
 func TestContext_EmitError(t *testing.T) {
@@ -159,7 +159,7 @@ func TestContext_EmitError(t *testing.T) {
 	ctx.emitter = newEmitter(errToEmit, func(err error) {
 		emitted++
 		require.Error(t, err)
-		require.Equal(t, err, errToEmit)
+		require.Equal(t, errToEmit, err)
 	})
 
 	ctx.start()
@@ -171,10 +171,10 @@ func TestContext_EmitError(t *testing.T) {
 	ctx.wg.Wait()
 
 	// check everything is done
-	require.Equal(t, emitted, 1)
+	require.Equal(t, 1, emitted)
 
 	// nothing should be committed here
-	require.Equal(t, ack, 0)
+	require.Equal(t, 0, ack)
 }
 
 func TestContext_EmitToStateTopic(t *testing.T) {
@@ -350,7 +350,7 @@ func TestContext_Set(t *testing.T) {
 		dones  int
 		stores int
 	}{1, 1, 1})
-	require.Equal(t, ack, 1)
+	require.Equal(t, 1, ack)
 }
 
 func TestContext_GetSetStateful(t *testing.T) {
@@ -388,10 +388,10 @@ func TestContext_GetSetStateful(t *testing.T) {
 		msg:              &message{key: key, offset: offset},
 		emitter: func(tp string, k string, v []byte, h Headers) *Promise {
 			wg.Add(1)
-			require.Equal(t, tp, graph.GroupTable().Topic())
-			require.Equal(t, string(k), key)
-			require.Equal(t, string(v), value)
-			require.Equal(t, h, headers)
+			require.Equal(t, graph.GroupTable().Topic(), tp)
+			require.Equal(t, key, string(k))
+			require.Equal(t, value, string(v))
+			require.Equal(t, headers, h)
 			return NewPromise().finish(nil, nil)
 		},
 		ctx: context.Background(),
@@ -403,7 +403,7 @@ func TestContext_GetSetStateful(t *testing.T) {
 	ctx.SetValue(value, WithCtxEmitHeaders(headers))
 
 	val = ctx.Value()
-	require.Equal(t, val, value)
+	require.Equal(t, value, val)
 }
 
 func TestContext_SetErrors(t *testing.T) {
@@ -493,10 +493,10 @@ func TestContext_Loopback(t *testing.T) {
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 		emitter: func(tp string, k string, v []byte, h Headers) *Promise {
 			cnt++
-			require.Equal(t, tp, graph.LoopStream().Topic())
-			require.Equal(t, string(k), key)
-			require.Equal(t, string(v), value)
-			require.Equal(t, h, headers)
+			require.Equal(t, graph.LoopStream().Topic(), tp)
+			require.Equal(t, key, string(k))
+			require.Equal(t, value, string(v))
+			require.Equal(t, headers, h)
 			return NewPromise()
 		},
 	}
@@ -534,7 +534,7 @@ func TestContext_Join(t *testing.T) {
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Join(table)
-	require.Equal(t, v, value)
+	require.Equal(t, value, v)
 
 	st.EXPECT().Get(key).Return(nil, errSome)
 	require.Panics(t, func() { ctx.Join(table) })
@@ -583,7 +583,7 @@ func TestContext_Lookup(t *testing.T) {
 
 	st.EXPECT().Get(key).Return([]byte(value), nil)
 	v := ctx.Lookup(table, key)
-	require.Equal(t, v, value)
+	require.Equal(t, value, v)
 
 	st.EXPECT().Get(key).Return(nil, errSome)
 	require.Panics(t, func() { ctx.Lookup(table, key) })
@@ -602,7 +602,7 @@ func TestContext_Headers(t *testing.T) {
 	}
 	headers := ctx.Headers()
 	require.NotNil(t, headers)
-	require.Equal(t, len(headers), 0)
+	require.Equal(t, 0, len(headers))
 
 	ctx = &cbContext{
 		msg: &message{
@@ -616,7 +616,7 @@ func TestContext_Headers(t *testing.T) {
 		},
 	}
 	headers = ctx.Headers()
-	require.Equal(t, headers["key"], []byte("value"))
+	require.Equal(t, []byte("value"), headers["key"])
 }
 
 func TestContext_Fail(t *testing.T) {

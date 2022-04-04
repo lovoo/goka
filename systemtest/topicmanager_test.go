@@ -69,13 +69,13 @@ func TestTopicManager_v11(t *testing.T) {
 		_, err = tm.Partitions(topic)
 		require.Error(t, err)
 		require.True(t, strings.Contains(err.Error(), "requested topic was not found"))
-		require.Equal(t, len(partitions), 0)
+		require.Equal(t, 0, len(partitions))
 
 		tm.EnsureTableExists(topic, 123)
 		time.Sleep(1 * time.Second)
 		partitions, err = tm.Partitions(topic)
 		require.NoError(t, err)
-		require.Equal(t, len(partitions), 123)
+		require.Equal(t, 123, len(partitions))
 	})
 
 	t.Run("non-existent", func(t *testing.T) {

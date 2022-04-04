@@ -29,7 +29,7 @@ func TestConfig_ReplaceGlobalConfig(t *testing.T) {
 		custom := DefaultConfig()
 		custom.Version = sarama.V0_8_2_0
 		ReplaceGlobalConfig(custom)
-		require.Equal(t, globalConfig.Version, custom.Version)
+		require.Equal(t, custom.Version, globalConfig.Version)
 	})
 	t.Run("panic", func(t *testing.T) {
 		defer func() {

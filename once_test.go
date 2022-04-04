@@ -15,5 +15,5 @@ func TestOnce_Do(t *testing.T) {
 
 	err2 := o.Do(func() error { return nil })
 	require.Error(t, err2)
-	require.Equal(t, err, err2)
+	require.Equal(t, err2, err)
 }

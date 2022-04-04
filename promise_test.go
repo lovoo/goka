@@ -17,12 +17,12 @@ func TestPromise_thenBeforeFinish(t *testing.T) {
 
 	p.finish(nil, errors.New("test"))
 
-	require.Equal(t, promiseErr.Error(), "test")
+	require.Equal(t, "test", promiseErr.Error())
 
 	// repeating finish won't change result
 	p.finish(nil, errors.New("test-whatever"))
 
-	require.Equal(t, promiseErr.Error(), "test")
+	require.Equal(t, "test", promiseErr.Error())
 }
 
 func TestPromise_thenAfterFinish(t *testing.T) {
@@ -34,5 +34,5 @@ func TestPromise_thenAfterFinish(t *testing.T) {
 		promiseErr = err
 	})
 
-	require.Equal(t, promiseErr.Error(), "test")
+	require.Equal(t, "test", promiseErr.Error())
 }

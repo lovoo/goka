@@ -57,12 +57,12 @@ func TestIterator(t *testing.T) {
 
 		val, err := it.Value()
 		require.NoError(t, err)
-		require.Equal(t, expected, val.(string))
+		require.Equal(t, val.(string), expected)
 	}
 
 	if err := it.Err(); err != nil {
 		t.Fatalf("unexpected iteration error: %v", err)
 	}
 
-	require.Equal(t, count, len(kv))
+	require.Equal(t, len(kv), count)
 }

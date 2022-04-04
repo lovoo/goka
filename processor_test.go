@@ -146,11 +146,11 @@ func TestProcessor_Run(t *testing.T) {
 
 		val, err := newProc.Get("test-key-1")
 		require.NoError(t, err)
-		require.Equal(t, val.(int64), int64(3))
+		require.Equal(t, int64(3), val.(int64))
 
 		val, err = newProc.Get("test-key-2")
 		require.NoError(t, err)
-		require.Equal(t, val.(int64), int64(3))
+		require.Equal(t, int64(3), val.(int64))
 
 		// shutdown
 		newProc.Stop()
@@ -322,5 +322,5 @@ func TestProcessor_StateReader(t *testing.T) {
 	state.SetState(ProcStateRunning)
 	p := Processor{state: state}
 
-	require.Equal(t, p.StateReader().State(), ProcStateRunning)
+	require.Equal(t, ProcStateRunning, p.StateReader().State())
 }

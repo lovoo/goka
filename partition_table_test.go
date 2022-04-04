@@ -71,7 +71,7 @@ func TestPT_createStorage(t *testing.T) {
 		require.Equal(t, sp.Storage, equalSP.Storage)
 		require.Equal(t, sp.partition, equalSP.partition)
 		// doing manual pointer equality test here, require.Same does not work for some reason
-		require.Equal(t, reflect.ValueOf(sp.Update).Pointer(), reflect.ValueOf(equalSP.Update).Pointer())
+		require.Equal(t, reflect.ValueOf(equalSP.Update).Pointer(), reflect.ValueOf(sp.Update).Pointer())
 	})
 	t.Run("fail_ctx_cancel", func(t *testing.T) {
 		pt, bm, ctrl := defaultPT(

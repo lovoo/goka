@@ -171,25 +171,25 @@ func TestProcessorVisit(t *testing.T) {
 		visitCancel()
 
 		<-visitDone
-		require.Equal(t, visited, int64(1))
+		require.Equal(t, int64(1), visited)
 		require.True(t, errors.Is(err, context.Canceled), err)
 
 		val1, _ := proc.Get("0")
 		val2, _ := proc.Get("02")
 
 		// val1 was visited, the other was cancelled
-		require.Equal(t, val1.(int64), int64(42))
-		require.Equal(t, val2.(int64), int64(1))
+		require.Equal(t, int64(42), val1.(int64))
+		require.Equal(t, int64(1), val2.(int64))
 
 		// let's revisit everything again.
 		visited, err = proc.VisitAllWithStats(context.Background(), "visitor", int64(43))
 		require.NoError(t, err)
-		require.Equal(t, visited, int64(2))
+		require.Equal(t, int64(2), visited)
 		val1, _ = proc.Get("0")
 		val2, _ = proc.Get("02")
 		// both were visited
-		require.Equal(t, val1.(int64), int64(43))
-		require.Equal(t, val2.(int64), int64(43))
+		require.Equal(t, int64(43), val1.(int64))
+		require.Equal(t, int64(43), val2.(int64))
 
 		// shutdown processor without error
 		cancel()

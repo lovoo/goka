@@ -43,7 +43,7 @@ func Test_1Input(t *testing.T) {
 	tt.Consume("input", "key", "some message")
 
 	// ensure the message was received
-	require.Equal(t, receivedMessage, "some message")
+	require.Equal(t, "some message", receivedMessage)
 
 	// stop the processor and wait to finish
 	proc.Stop()
@@ -78,8 +78,8 @@ func Test_2InputOutput(t *testing.T) {
 	// make sure received the message in the output
 	key, value, valid := mt.Next()
 	require.True(t, valid)
-	require.Equal(t, key, "key")
-	require.Equal(t, value, "forwarded: some-message")
+	require.Equal(t, "key", key)
+	require.Equal(t, "forwarded: some-message", value)
 }
 
 func Test_SetTableValue(t *testing.T) {
@@ -103,7 +103,7 @@ func Test_SetTableValue(t *testing.T) {
 
 	// make sure it's correctly persisted in the state
 	value := gkt.TableValue("group-table", "value")
-	require.Equal(t, value, int64(12))
+	require.Equal(t, int64(12), value)
 }
 
 func Test_JoinOutput(t *testing.T) {
@@ -146,7 +146,7 @@ func Test_3Persist(t *testing.T) {
 
 	// make sure it's correctly persisted in the state
 	value := gkt.TableValue("group-table", "key")
-	require.Equal(t, value, "state: some-message")
+	require.Equal(t, "state: some-message", value)
 }
 
 // Scenario (4)
@@ -181,12 +181,12 @@ func Test_Subtest(t *testing.T) {
 		// check it was emitted
 		key, value, ok := mt.Next()
 		require.True(t, ok)
-		require.Equal(t, key, "output-key")
-		require.Equal(t, value, "forwarded: hello")
+		require.Equal(t, "output-key", key)
+		require.Equal(t, "forwarded: hello", value)
 
 		// we should be at the end
-		require.Equal(t, mt.Hwm(), int64(1))
-		require.Equal(t, mt.NextOffset(), int64(1))
+		require.Equal(t, int64(1), mt.Hwm())
+		require.Equal(t, int64(1), mt.NextOffset())
 
 		// this is equivalent
 		_, _, ok = mt.Next()
@@ -201,7 +201,7 @@ func Test_Subtest(t *testing.T) {
 
 		// do some state checks
 		value := gkt.TableValue("group-table", "bob")
-		require.Equal(t, value, "state: hello")
+		require.Equal(t, "state: hello", value)
 	})
 }
 
@@ -247,7 +247,7 @@ func Test_Chain(t *testing.T) {
 	// the value should be persisted in the second processor's table
 	value := gkt.TableValue("proc2-table", "bob")
 
-	require.Equal(t, value, "persist: proc1-out: loop: hello world")
+	require.Equal(t, "persist: proc1-out: loop: hello world", value)
 }
 
 // Scenario (6)

@@ -202,7 +202,7 @@ func TestProcessorVisit(t *testing.T) {
 	}()
 
 	gkt.Consume("input-topic", "a", int64(123))
-	require.Equal(t, gkt.TableValue("test-table", "a"), int64(123))
+	require.Equal(t, int64(123), gkt.TableValue("test-table", "a"))
 
 	// no output yet
 	_, _, ok := outputTracker.Next()
@@ -210,13 +210,13 @@ func TestProcessorVisit(t *testing.T) {
 
 	visited, err := proc.VisitAllWithStats(ctx, "reset", int64(15))
 	require.NoError(t, err)
-	require.Equal(t, visited, int64(1))
+	require.Equal(t, int64(1), visited)
 
 	k, v, ok := outputTracker.Next()
 	require.True(t, ok)
-	require.Equal(t, k, "a")
-	require.Equal(t, v, int64(15))
-	require.Equal(t, gkt.TableValue("test-table", "a"), int64(15))
+	require.Equal(t, "a", k)
+	require.Equal(t, int64(15), v)
+	require.Equal(t, int64(15), gkt.TableValue("test-table", "a"))
 
 	cancel()
 	<-done

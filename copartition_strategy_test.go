@@ -10,7 +10,7 @@ import (
 
 func TestCopartitioningStrategy(t *testing.T) {
 	t.Run("name", func(t *testing.T) {
-		require.Equal(t, CopartitioningStrategy.Name(), "copartition")
+		require.Equal(t, "copartition", CopartitioningStrategy.Name())
 	})
 
 	for _, ttest := range []struct {
@@ -153,7 +153,7 @@ func TestCopartitioningStrategy(t *testing.T) {
 			}
 
 			plan, err := strategy.Plan(ttest.members, ttest.topics)
-			require.Equal(t, err != nil, ttest.hasError)
+			require.Equal(t, ttest.hasError, err != nil)
 			if err == nil {
 				require.True(t, reflect.DeepEqual(ttest.expected, plan), "expected", ttest.expected, "actual", plan)
 			}
