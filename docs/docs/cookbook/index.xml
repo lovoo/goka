@@ -15,6 +15,26 @@
     
     
     <item>
+      <title>Docs: </title>
+      <link>https://lovoo.github.io/goka/docs/cookbook/example_wordcount/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://lovoo.github.io/goka/docs/cookbook/example_wordcount/</guid>
+      <description>
+        
+        
+        &lt;p&gt;provide a streams-like example for doing word-count maybe?
+KStream&amp;lt;String, String&amp;gt; textLines = builder.stream(&amp;ldquo;quickstart-events&amp;rdquo;);&lt;/p&gt;
+&lt;p&gt;KTable&amp;lt;String, Long&amp;gt; wordCounts = textLines
+.flatMapValues(line -&amp;gt; Arrays.asList(line.toLowerCase().split(&amp;quot; &amp;ldquo;)))
+.groupBy((keyIgnored, word) -&amp;gt; word)
+.count();&lt;/p&gt;
+&lt;p&gt;wordCounts.toStream().to(&amp;ldquo;output-topic&amp;rdquo;, Produced.with(Serdes.String(), Serdes.Long()));&lt;/p&gt;
+
+      </description>
+    </item>
+    
+    <item>
       <title>Docs: Custom Datastructures</title>
       <link>https://lovoo.github.io/goka/docs/cookbook/custom_datastructures/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
@@ -77,6 +97,37 @@
         
         
         &lt;p&gt;How to get high availability with reconnecting views&lt;/p&gt;
+
+      </description>
+    </item>
+    
+    <item>
+      <title>Docs: Reducing Boilerplate</title>
+      <link>https://lovoo.github.io/goka/docs/cookbook/boilerplate/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://lovoo.github.io/goka/docs/cookbook/boilerplate/</guid>
+      <description>
+        
+        
+        &lt;h2 id=&#34;a-generic-processor-builder&#34;&gt;A generic processor-builder&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;add default options&lt;/li&gt;
+&lt;li&gt;modifying the group graph&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Some more things the builders could do:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;global processor/view registry&lt;/li&gt;
+&lt;li&gt;set up monitoring/metrics&lt;/li&gt;
+&lt;li&gt;set global goka config&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;composing-views-and-processors&#34;&gt;Composing Views and Processors&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;using error-groups&lt;/li&gt;
+&lt;li&gt;waiting for views&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;livenessreadiness&#34;&gt;Liveness/Readiness&lt;/h2&gt;
+&lt;p&gt;How to get liveness/readiness for kubernetes healtz checks&lt;/p&gt;
 
       </description>
     </item>

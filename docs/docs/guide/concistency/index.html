@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<meta name="generator" content="Hugo 0.89.4" />
+<meta name="generator" content="Hugo 0.96.0" />
 <meta name="robots" content="index, follow">
 
 
@@ -19,36 +19,22 @@
 <link rel="icon" type="image/png" href="/goka/favicons/android-192x192.png" sizes="192x192">
 
 <title>Delivery Semantics | Goka</title>
-<meta name="description" content="What happens if my processor crashes?
-Is the message lost? Is the message resent? What happens to any side-effects?
-Short answer
-like Kafka, goka …">
+<meta name="description" content="Marking vs committing message offsets
+Sometimes there is confusion around marking and comitting messages. Marking is done by the processor callback, …">
 <meta property="og:title" content="Delivery Semantics" />
-<meta property="og:description" content="What happens if my processor crashes?
-Is the message lost? Is the message resent? What happens to any side-effects?
-Short answer like Kafka, goka provides at-least-once-semantics for processors, so a message might be received multiple times on unclean processor shutdown.
-Long answer Goka processes messages in parallel across partitions, but sequentially within one partition. Between partitions there are no guarantees, so let&rsquo;s consider a single partition.
-Assume there are two messages in a partition with offsets 42 and 43." />
+<meta property="og:description" content="Marking vs committing message offsets Sometimes there is confusion around marking and comitting messages. Marking is done by the processor callback, after a message has been processed and all subsequent operations - like SetValue or Emit - succeeded. The marked offset is stored and frequently committed back to the brokers. On graceful processor shutdown, the offsets are committed one last time. Both operations are necessary, otherwise messages are reconsumed after processor restart." />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://lovoo.github.io/goka/docs/guide/concistency/" /><meta property="article:section" content="docs" />
 
-<meta property="article:modified_time" content="2021-12-26T15:02:15+01:00" />
+<meta property="article:modified_time" content="2022-01-19T20:32:15+01:00" />
 
 <meta itemprop="name" content="Delivery Semantics">
-<meta itemprop="description" content="What happens if my processor crashes?
-Is the message lost? Is the message resent? What happens to any side-effects?
-Short answer like Kafka, goka provides at-least-once-semantics for processors, so a message might be received multiple times on unclean processor shutdown.
-Long answer Goka processes messages in parallel across partitions, but sequentially within one partition. Between partitions there are no guarantees, so let&rsquo;s consider a single partition.
-Assume there are two messages in a partition with offsets 42 and 43.">
-<meta itemprop="dateModified" content="2021-12-26T15:02:15+01:00" />
-<meta itemprop="wordCount" content="223">
+<meta itemprop="description" content="Marking vs committing message offsets Sometimes there is confusion around marking and comitting messages. Marking is done by the processor callback, after a message has been processed and all subsequent operations - like SetValue or Emit - succeeded. The marked offset is stored and frequently committed back to the brokers. On graceful processor shutdown, the offsets are committed one last time. Both operations are necessary, otherwise messages are reconsumed after processor restart.">
+<meta itemprop="dateModified" content="2022-01-19T20:32:15+01:00" />
+<meta itemprop="wordCount" content="312">
 <meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
 <meta name="twitter:title" content="Delivery Semantics"/>
-<meta name="twitter:description" content="What happens if my processor crashes?
-Is the message lost? Is the message resent? What happens to any side-effects?
-Short answer like Kafka, goka provides at-least-once-semantics for processors, so a message might be received multiple times on unclean processor shutdown.
-Long answer Goka processes messages in parallel across partitions, but sequentially within one partition. Between partitions there are no guarantees, so let&rsquo;s consider a single partition.
-Assume there are two messages in a partition with offsets 42 and 43."/>
+<meta name="twitter:description" content="Marking vs committing message offsets Sometimes there is confusion around marking and comitting messages. Marking is done by the processor callback, after a message has been processed and all subsequent operations - like SetValue or Emit - succeeded. The marked offset is stored and frequently committed back to the brokers. On graceful processor shutdown, the offsets are committed one last time. Both operations are necessary, otherwise messages are reconsumed after processor restart."/>
 
 
 
@@ -144,8 +130,18 @@ if (!doNotTrack) {
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child active-path" id="m-gokadocsguide-li">
   <a href="/goka/docs/guide/" class="align-left pl-0 td-sidebar-link td-sidebar-link__section" id="m-gokadocsguide"><span class="">Guide</span></a>
   <ul class="ul-2 foldable">
-    <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguideprocessor-li">
+    <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguide01_principles-li">
+  <a href="/goka/docs/guide/01_principles/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguide01_principles"><span class="">Principles</span></a>
+</li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguide02_overview-li">
+  <a href="/goka/docs/guide/02_overview/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguide02_overview"><span class="">Overview</span></a>
+</li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguidecallback-li">
+  <a href="/goka/docs/guide/callback/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguidecallback"><span class="">Using Callbacks</span></a>
+</li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguideprocessor-li">
   <a href="/goka/docs/guide/processor/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguideprocessor"><span class="">Using Processors</span></a>
+</li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguideconfiguration-li">
+  <a href="/goka/docs/guide/configuration/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguideconfiguration"><span class="">Configuration</span></a>
+</li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguide04_emitters-li">
+  <a href="/goka/docs/guide/04_emitters/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguide04_emitters"><span class="">Emitters</span></a>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguidepartitions-li">
   <a href="/goka/docs/guide/partitions/" title="Partitions and Partitioning" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguidepartitions"><span class="">partitions</span></a>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguidecodecs-li">
@@ -154,8 +150,6 @@ if (!doNotTrack) {
   <a href="/goka/docs/guide/deployment/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguidedeployment"><span class=""></span></a>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguideview-li">
   <a href="/goka/docs/guide/view/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguideview"><span class=""></span></a>
-</li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguidebuilding_blocks-li">
-  <a href="/goka/docs/guide/building_blocks/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocsguidebuilding_blocks"><span class="">Building Blocks</span></a>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child active-path" id="m-gokadocsguideconcistency-li">
   <a href="/goka/docs/guide/concistency/" class="align-left pl-0 active td-sidebar-link td-sidebar-link__page" id="m-gokadocsguideconcistency"><span class="td-sidebar-nav-active-item">Delivery Semantics</span></a>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocsguidelocal_storage-li">
@@ -169,7 +163,9 @@ if (!doNotTrack) {
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child" id="m-gokadocscookbook-li">
   <a href="/goka/docs/cookbook/" class="align-left pl-0 td-sidebar-link td-sidebar-link__section" id="m-gokadocscookbook"><span class="">Cookbook</span></a>
   <ul class="ul-2 foldable">
-    <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocscookbookcustom_datastructures-li">
+    <li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocscookbookexample_wordcount-li">
+  <a href="/goka/docs/cookbook/example_wordcount/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocscookbookexample_wordcount"><span class=""></span></a>
+</li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocscookbookcustom_datastructures-li">
   <a href="/goka/docs/cookbook/custom_datastructures/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocscookbookcustom_datastructures"><span class="">Custom Datastructures</span></a>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocscookbookhot_failover-li">
   <a href="/goka/docs/cookbook/hot_failover/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocscookbookhot_failover"><span class="">Hot Failover</span></a>
@@ -179,6 +175,8 @@ if (!doNotTrack) {
   <a href="/goka/docs/cookbook/partitioning_hashing/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocscookbookpartitioning_hashing"><span class="">Partitioning and Hashing</span></a>
 </li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocscookbookreconnecting_views-li">
   <a href="/goka/docs/cookbook/reconnecting_views/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocscookbookreconnecting_views"><span class="">Reconnecting Views</span></a>
+</li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id="m-gokadocscookbookboilerplate-li">
+  <a href="/goka/docs/cookbook/boilerplate/" class="align-left pl-0 td-sidebar-link td-sidebar-link__page" id="m-gokadocscookbookboilerplate"><span class="">Reducing Boilerplate</span></a>
 </li>
   </ul>
 </li>
@@ -205,7 +203,8 @@ if (!doNotTrack) {
 
 <div class="td-toc"><nav id="TableOfContents">
   <ul>
-    <li>
+    <li><a href="#marking-vs-committing-message-offsets">Marking vs committing message offsets</a></li>
+    <li><a href="#what-happens-if-my-processor-crashes">What happens if my processor crashes?</a>
       <ul>
         <li><a href="#short-answer">Short answer</a></li>
         <li><a href="#long-answer">Long answer</a></li>
@@ -279,7 +278,10 @@ if (!doNotTrack) {
 		
 		
 	</header>    
-	<p>What happens if my processor crashes?</p>
+	<h2 id="marking-vs-committing-message-offsets">Marking vs committing message offsets</h2>
+<p>Sometimes there is confusion around <em>marking</em> and <em>comitting</em> messages. <em>Marking</em> is done by the processor callback, after a message has been processed and all subsequent operations - like <code>SetValue</code> or <code>Emit</code> - succeeded. The marked offset is stored and frequently <em>committed</em> back to the brokers. On graceful processor shutdown, the offsets are committed one last time. Both operations are necessary, otherwise messages are reconsumed after processor restart.</p>
+<p>Goka takes care of <em>marking</em> offsets as consumed automatically. To manually mark offsets, one can use [</p>
+<h2 id="what-happens-if-my-processor-crashes">What happens if my processor crashes?</h2>
 <p>Is the message lost? Is the message resent? What happens to any side-effects?</p>
 <h3 id="short-answer">Short answer</h3>
 <p>like Kafka, goka provides <strong>at-least-once</strong>-semantics for processors, so <strong>a message might be received multiple times on unclean processor shutdown</strong>.</p>
@@ -294,7 +296,7 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
 	
 	
 	<div class="text-muted mt-5 pt-3 border-top">
-  Last modified December 26, 2021: <a href="https://github.com/lovoo/goka/commit/b5fd822b5acc02c230460025db73733297564896">wip (b5fd822)</a>
+  Last modified January 19, 2022: <a href="https://github.com/lovoo/goka/commit/472273789d42baa6a34b9fb4343cc53e49764fe2">wip (4722737)</a>
 </div>
 
 </div>
@@ -342,7 +344,7 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
         
       </div>
       <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
-        <small class="text-white">&copy; 2021 The Docsy Authors All Rights Reserved</small>
+        <small class="text-white">&copy; 2022 The Docsy Authors All Rights Reserved</small>
         <small class="ml-1"><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Privacy Policy</a></small>
 	
 		<p class="mt-2"><a href="/goka/about/">About Goka</a></p>
@@ -384,7 +386,7 @@ If you need exactly-once, maybe take should look into ksql or kstreams. However,
 
 
 
-<script src="/goka/js/main.min.affe3d18a02e663f46338e9b25bce2a31ff073a5a0fa18b3fd1f03664d8732e2.js" integrity="sha256-r/49GKAuZj9GM46bJbziox/wc6Wg&#43;hiz/R8DZk2HMuI=" crossorigin="anonymous"></script>
+<script src="/goka/js/main.min.ce952b6f0d0524c3f34022664da74b53bd1a9a7595e705383637eba5b14330bd.js" integrity="sha256-zpUrbw0FJMPzQCJmTadLU70amnWV5wU4NjfrpbFDML0=" crossorigin="anonymous"></script>
 
 
 

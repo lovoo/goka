@@ -5,19 +5,38 @@
     <loc>https://lovoo.github.io/goka/docs/getting_started/</loc>
     <lastmod>2021-12-28T22:50:11+01:00</lastmod>
   </url><url>
+    <loc>https://lovoo.github.io/goka/docs/guide/01_principles/</loc>
+    <lastmod>2022-01-19T20:32:15+01:00</lastmod>
+  </url><url>
     <loc>https://lovoo.github.io/goka/docs/guide/</loc>
-    <lastmod>2021-12-28T22:50:11+01:00</lastmod>
+    <lastmod>2022-01-19T20:32:15+01:00</lastmod>
+  </url><url>
+    <loc>https://lovoo.github.io/goka/docs/guide/02_overview/</loc>
+    <lastmod>2022-01-19T20:32:15+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/docs/cookbook/</loc>
-    <lastmod>2021-12-26T15:02:15+01:00</lastmod>
+    <lastmod>2021-12-29T07:18:00+01:00</lastmod>
+  </url><url>
+    <loc>https://lovoo.github.io/goka/docs/guide/callback/</loc>
+    <lastmod>2022-01-19T20:32:15+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/docs/guide/processor/</loc>
-    <lastmod>2021-12-28T22:50:11+01:00</lastmod>
+    <lastmod>2022-01-27T12:33:05+01:00</lastmod>
+  </url><url>
+    <loc>https://lovoo.github.io/goka/docs/guide/configuration/</loc>
+    <lastmod>2022-01-22T22:36:26+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/docs/</loc>
-    <lastmod>2021-12-26T15:02:15+01:00</lastmod>
+    <lastmod>2021-12-29T07:18:00+01:00</lastmod>
+  </url><url>
+    <loc>https://lovoo.github.io/goka/docs/guide/04_emitters/</loc>
+    <lastmod>2022-01-22T22:36:26+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/docs/guide/partitions/</loc>
+    <lastmod>2021-12-29T07:18:00+01:00</lastmod>
+  </url><url>
+    <loc>https://lovoo.github.io/goka/docs/cookbook/example_wordcount/</loc>
+    <lastmod>2022-01-26T11:33:30+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/docs/guide/codecs/</loc>
     <lastmod>2021-12-28T22:50:11+01:00</lastmod>
@@ -29,9 +48,7 @@
     <lastmod>2021-12-28T22:50:11+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/about/</loc>
-  </url><url>
-    <loc>https://lovoo.github.io/goka/docs/guide/building_blocks/</loc>
-    <lastmod>2021-12-28T22:50:11+01:00</lastmod>
+    <lastmod>2021-12-29T07:18:00+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/categories/</loc>
   </url><url>
@@ -39,10 +56,10 @@
     <lastmod>2021-12-26T15:02:15+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/docs/guide/concistency/</loc>
-    <lastmod>2021-12-26T15:02:15+01:00</lastmod>
+    <lastmod>2022-01-19T20:32:15+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/docs/getting_started/first_steps/</loc>
-    <lastmod>2021-12-28T22:50:11+01:00</lastmod>
+    <lastmod>2022-01-27T12:33:05+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/</loc>
     <lastmod>2021-12-28T22:50:11+01:00</lastmod>
@@ -67,6 +84,9 @@
   </url><url>
     <loc>https://lovoo.github.io/goka/docs/cookbook/reconnecting_views/</loc>
     <lastmod>2021-12-26T15:02:15+01:00</lastmod>
+  </url><url>
+    <loc>https://lovoo.github.io/goka/docs/cookbook/boilerplate/</loc>
+    <lastmod>2022-01-26T11:33:30+01:00</lastmod>
   </url><url>
     <loc>https://lovoo.github.io/goka/search/</loc>
     <lastmod>2021-12-26T15:02:15+01:00</lastmod>
