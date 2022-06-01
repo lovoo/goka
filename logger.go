@@ -9,11 +9,9 @@ import (
 	"github.com/Shopify/sarama"
 )
 
-var (
-	defaultLogger = &std{
-		log: log.New(os.Stderr, "", log.LstdFlags),
-	}
-)
+var defaultLogger = &std{
+	log: log.New(os.Stderr, "", log.LstdFlags),
+}
 
 // Logger is the interface Goka and its subpackages use for logging.
 type Logger interface {
@@ -77,6 +75,8 @@ func DefaultLogger() Logger {
 }
 
 // Debug enables or disables debug logging using the global logger.
+// The goka debugging setting is applied to any custom loggers in goka components (Processors, Views, Emitters).
+// To enable debug logging for custom loggers in selected components only, pass 'true' in the respective 'WithLogger' options.
 func Debug(gokaDebug, saramaDebug bool) {
 	defaultLogger.debug = gokaDebug
 	if saramaDebug {
@@ -89,15 +89,17 @@ func SetSaramaLogger(logger Logger) {
 }
 
 // newLogger creates a new goka logger
-func wrapLogger(l Logger) logger {
+func wrapLogger(l Logger, debug bool) logger {
 	return &std{
-		log: l,
+		log:   l,
+		debug: debug,
 	}
 }
 
 func (s *std) CurrentPrefix() string {
 	return s.prefix
 }
+
 func (s *std) StackPrefix(prefix string) logger {
 	var prefPath []string
 	// append existing path
