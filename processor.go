@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -158,6 +159,9 @@ func (g *Processor) Get(key string) (interface{}, error) {
 		return nil, fmt.Errorf("can't get a value from stateless processor")
 	}
 
+	g.mTables.RLock()
+	defer g.mTables.RUnlock()
+
 	// find partition where key is located
 	s, err := g.find(key)
 	if err != nil {
@@ -193,6 +197,8 @@ func (g *Processor) find(key string) (storage.Storage, error) {
 	if !ok {
 		return nil, fmt.Errorf("this processor does not contain partition %v", p)
 	}
+
+	--> race condition as pproc might be in changing
 	return pproc.table.st, nil
 }
 
@@ -623,6 +629,7 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 	// setup all processors
 	setupErrg, setupCtx := multierr.NewErrGroup(session.Context())
 	g.mTables.RLock()
+	defer g.mTables.RUnlock()
 	for partID, partition := range g.partitions {
 		pproc := partition
 		setupErrg.Go(func() error {
@@ -636,7 +643,6 @@ func (g *Processor) Setup(session sarama.ConsumerGroupSession) error {
 			return nil
 		})
 	}
-	g.mTables.RUnlock()
 
 	return setupErrg.Wait().ErrorOrNil()
 }
@@ -931,7 +937,9 @@ func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta int
 		}
 		part := part
 		errg.Go(func() error {
-			return part.VisitValues(visitCtx, name, meta, &visited)
+			partVisited, err := part.VisitValues(visitCtx, name, meta)
+			atomic.AddInt64(&visited, partVisited)
+			return err
 		})
 	}
 

@@ -681,14 +681,16 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 // VisitValues iterates over all values in the table and calls the "visit"-callback for the passed name.
 // Optional parameter value can be set, which will just be forwarded to the visitor-function
 // the function returns after all items of the table have been added to the channel.
-func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta interface{}, visited *int64) error {
+func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta interface{}) (int64, error) {
 	if _, ok := pp.visitCallbacks[name]; !ok {
-		return fmt.Errorf("unconfigured visit callback. Did you initialize the processor with DefineGroup(..., Visit(%s, ...), ...)?", name)
+		return 0, fmt.Errorf("unconfigured visit callback. Did you initialize the processor with DefineGroup(..., Visit(%s, ...), ...)?", name)
 	}
+
+	var visited int64
 
 	it, err := pp.table.Iterator()
 	if err != nil {
-		return fmt.Errorf("error creating storage iterator")
+		return 0, fmt.Errorf("error creating storage iterator")
 	}
 
 	var wg sync.WaitGroup
@@ -715,18 +717,18 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 		case <-stopping:
 			drainVisitInput()
 			wg.Done()
-			return ErrVisitAborted
+			return visited, ErrVisitAborted
 		case <-ctx.Done():
 			drainVisitInput()
 			wg.Done()
-			return ctx.Err()
+			return visited, ctx.Err()
 		// enqueue the visit
 		case pp.visitInput <- &visit{
 			key:  string(it.Key()),
 			name: name,
 			meta: meta,
 			done: func() {
-				atomic.AddInt64(visited, 1)
+				atomic.AddInt64(&visited, 1)
 				wg.Done()
 			},
 		}:
@@ -744,10 +746,10 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 	select {
 	case <-stopping:
 		drainVisitInput()
-		return ErrVisitAborted
+		return atomic.LoadInt64(&visited), ErrVisitAborted
 	case <-ctx.Done():
-		return ctx.Err()
+		return atomic.LoadInt64(&visited), ctx.Err()
 	case <-wgDone:
 	}
-	return nil
+	return visited, nil
 }
