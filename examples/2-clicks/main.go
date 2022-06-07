@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -16,6 +17,8 @@ var (
 	brokers             = []string{"127.0.0.1:9092"}
 	topic   goka.Stream = "user-click"
 	group   goka.Group  = "mini-group"
+
+	tmc *goka.TopicManagerConfig
 )
 
 // A user is the object that is stored in the processor's group table
@@ -27,6 +30,12 @@ type user struct {
 // This codec allows marshalling (encode) and unmarshalling (decode) the user to and from the
 // group table.
 type userCodec struct{}
+
+func init() {
+	tmc = goka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+}
 
 // Encodes a user into []byte
 func (jc *userCodec) Encode(value interface{}) ([]byte, error) {
@@ -82,14 +91,11 @@ func process(ctx goka.Context, msg interface{}) {
 	fmt.Printf("[proc] key: %s clicks: %d, msg: %v\n", ctx.Key(), u.Clicks, msg)
 }
 
-func runProcessor() {
+func runProcessor(initialized chan bool) {
 	g := goka.DefineGroup(group,
 		goka.Input(topic, new(codec.String), process),
 		goka.Persist(new(userCodec)),
 	)
-	tmc := goka.NewTopicManagerConfig()
-	tmc.Table.Replication = 1
-	tmc.Stream.Replication = 1
 	p, err := goka.NewProcessor(brokers,
 		g,
 		goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithTopicManagerConfig(tmc)),
@@ -99,10 +105,14 @@ func runProcessor() {
 		panic(err)
 	}
 
+	initialized <- true
+
 	p.Run(context.Background())
 }
 
-func runView() {
+func runView(initialized chan bool) {
+	<-initialized
+
 	view, err := goka.NewView(brokers,
 		goka.GroupTable(group),
 		new(userCodec),
@@ -124,7 +134,20 @@ func runView() {
 }
 
 func main() {
+	tm, err := goka.NewTopicManager(brokers, goka.DefaultConfig(), tmc)
+	if err != nil {
+		log.Fatalf("Error creating topic manager: %v", err)
+	}
+	err = tm.EnsureStreamExists(string(topic), 8)
+	if err != nil {
+		log.Printf("Error creating kafka topic %s: %v", topic, err)
+	}
+
+	// When this example is run the first time, wait for creation of all internal topics (this will be
+	// done by function runProcessor)
+	initialized := make(chan bool)
+
 	go runEmitter()
-	go runProcessor()
-	runView()
+	go runProcessor(initialized)
+	runView(initialized)
 }
