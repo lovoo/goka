@@ -91,7 +91,7 @@ func process(ctx goka.Context, msg interface{}) {
 	fmt.Printf("[proc] key: %s clicks: %d, msg: %v\n", ctx.Key(), u.Clicks, msg)
 }
 
-func runProcessor(initialized chan bool) {
+func runProcessor(initialized chan struct{}) {
 	g := goka.DefineGroup(group,
 		goka.Input(topic, new(codec.String), process),
 		goka.Persist(new(userCodec)),
@@ -105,12 +105,12 @@ func runProcessor(initialized chan bool) {
 		panic(err)
 	}
 
-	initialized <- true
+	close(initialized)
 
 	p.Run(context.Background())
 }
 
-func runView(initialized chan bool) {
+func runView(initialized chan struct{}) {
 	<-initialized
 
 	view, err := goka.NewView(brokers,
@@ -143,9 +143,9 @@ func main() {
 		log.Printf("Error creating kafka topic %s: %v", topic, err)
 	}
 
-	// When this example is run the first time, wait for creation of all internal topics (this will be
-	// done by function runProcessor)
-	initialized := make(chan bool)
+	// When this example is run the first time, wait for creation of all internal topics (this is done
+	// by goka.NewProcessor)
+	initialized := make(chan struct{})
 
 	go runEmitter()
 	go runProcessor(initialized)
