@@ -3,7 +3,7 @@ package blocker
 import (
 	"context"
 	"encoding/json"
-	"github.com/lovoo/goka/examples/3-messaging/topic"
+	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 	"sync"
 
 	"github.com/lovoo/goka"
@@ -62,7 +62,7 @@ func block(ctx goka.Context, msg interface{}) {
 
 func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) func() error {
 	return func() error {
-		topic.EnsureStreamExists(string(Stream), brokers)
+		topicinit.EnsureStreamExists(string(Stream), brokers)
 
 		g := goka.DefineGroup(group,
 			goka.Input(Stream, new(BlockEventCodec), block),

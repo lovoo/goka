@@ -115,7 +115,23 @@ func process(ctx goka.Context, msg interface{}) {
 	ctx.SetValue(u)
 }
 
-func runProcessor(ctx context.Context, monitor *monitor.Server, query *query.Server) error {
+func runProcessor(ctx context.Context,
+	monitor *monitor.Server,
+	query *query.Server,
+	groupInitialized chan struct{}) error {
+
+	tmc := goka.NewTopicManagerConfig()
+	tm, err := goka.NewTopicManager(brokers, goka.DefaultConfig(), tmc)
+	if err != nil {
+		log.Fatalf("Error creating topic manager: %v", err)
+	}
+	for _, topicName := range []string{string(inputA), string(inputB)} {
+		err = tm.EnsureStreamExists(topicName, 8)
+		if err != nil {
+			log.Printf("Error creating kafka topic %s: %v", topicName, err)
+		}
+	}
+
 	p, err := goka.NewProcessor(brokers, goka.DefineGroup(group,
 		goka.Input(inputA, new(codec.String), process),
 		goka.Input(inputB, new(codec.String), process),
@@ -126,6 +142,8 @@ func runProcessor(ctx context.Context, monitor *monitor.Server, query *query.Ser
 	if err != nil {
 		return err
 	}
+
+	close(groupInitialized)
 
 	// attach the processor to the monitor
 	monitor.AttachProcessor(p)
@@ -138,7 +156,14 @@ func runProcessor(ctx context.Context, monitor *monitor.Server, query *query.Ser
 	return err
 }
 
-func runView(ctx context.Context, errg *multierr.ErrGroup, root *mux.Router, monitor *monitor.Server) error {
+func runView(ctx context.Context,
+	errg *multierr.ErrGroup,
+	root *mux.Router,
+	monitor *monitor.Server,
+	groupInitialized chan struct{}) error {
+
+	<-groupInitialized
+
 	view, err := goka.NewView(brokers,
 		goka.GroupTable(group),
 		new(userCodec),
@@ -223,6 +248,9 @@ func main() {
 		cancel()
 	}()
 
+	// runView uses the group table, which first has to be initialized by runProcessor
+	groupInitialized := make(chan struct{})
+
 	errg, ctx := multierr.NewErrGroup(ctx)
 	errg.Go(func() error {
 		defer log.Printf("emitter done")
@@ -230,9 +258,9 @@ func main() {
 	})
 	errg.Go(func() error {
 		defer log.Printf("processor done")
-		return runProcessor(ctx, monitorServer, queryServer)
+		return runProcessor(ctx, monitorServer, queryServer, groupInitialized)
 	})
-	if err := runView(ctx, errg, root, monitorServer); err != nil {
+	if err := runView(ctx, errg, root, monitorServer, groupInitialized); err != nil {
 		log.Printf("Error running view, will shutdown: %v", err)
 		cancel()
 	}

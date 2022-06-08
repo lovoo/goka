@@ -2,7 +2,7 @@ package translator
 
 import (
 	"context"
-	"github.com/lovoo/goka/examples/3-messaging/topic"
+	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 	"sync"
 
 	"github.com/lovoo/goka"
@@ -25,8 +25,8 @@ func translate(ctx goka.Context, msg interface{}) {
 
 func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) func() error {
 	return func() error {
-		topic.EnsureStreamExists(string(group), brokers)
-		topic.EnsureStreamExists(string(Stream), brokers)
+		topicinit.EnsureStreamExists(string(group), brokers)
+		topicinit.EnsureStreamExists(string(Stream), brokers)
 
 		g := goka.DefineGroup(group,
 			goka.Input(Stream, new(ValueCodec), translate),

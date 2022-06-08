@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/examples/3-messaging"
-	"github.com/lovoo/goka/examples/3-messaging/topic"
+	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 	"sync"
 )
 
@@ -45,7 +45,7 @@ func collect(ctx goka.Context, msg interface{}) {
 
 func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) func() error {
 	return func() error {
-		topic.EnsureStreamExists(string(messaging.ReceivedStream), brokers)
+		topicinit.EnsureStreamExists(string(messaging.ReceivedStream), brokers)
 
 		g := goka.DefineGroup(group,
 			goka.Input(messaging.ReceivedStream, new(messaging.MessageCodec), collect),

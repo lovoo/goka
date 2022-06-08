@@ -1,4 +1,4 @@
-package topic
+package topicinit
 
 import (
 	"github.com/lovoo/goka"

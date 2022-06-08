@@ -3,7 +3,7 @@ package detector
 import (
 	"context"
 	"encoding/json"
-	"github.com/lovoo/goka/examples/3-messaging/topic"
+	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 	"sync"
 
 	"github.com/lovoo/goka"
@@ -53,7 +53,7 @@ func detectSpammer(ctx goka.Context, c *Counters) bool {
 
 func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) func() error {
 	return func() error {
-		topic.EnsureStreamExists(string(messaging.SentStream), brokers)
+		topicinit.EnsureStreamExists(string(messaging.SentStream), brokers)
 
 		g := goka.DefineGroup(group,
 			goka.Input(messaging.SentStream, new(messaging.MessageCodec), func(ctx goka.Context, msg interface{}) {
