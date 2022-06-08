@@ -123,6 +123,9 @@ func runProcessor(ctx context.Context, monitor *monitor.Server, query *query.Ser
 	),
 		goka.WithStorageBuilder(randomStorageBuilder("proc")),
 	)
+	if err != nil {
+		return err
+	}
 
 	// attach the processor to the monitor
 	monitor.AttachProcessor(p)
