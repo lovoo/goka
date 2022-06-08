@@ -12,12 +12,24 @@ import (
 )
 
 func main() {
+	var brokers = []string{"127.0.0.1:9092"}
+	var topic goka.Table = "restartable-view-test-table"
+
+	tmc := goka.NewTopicManagerConfig()
+	tm, err := goka.NewTopicManager(brokers, goka.DefaultConfig(), tmc)
+	if err != nil {
+		log.Fatalf("Error creating topic manager: %v", err)
+	}
+	err = tm.EnsureStreamExists(string(topic), 8)
+	if err != nil {
+		log.Printf("Error creating kafka topic %s: %v", topic, err)
+	}
 
 	view, err := goka.NewView(
 		// connect to example kafka cluster
 		[]string{"localhost:9092"},
 		// name does not matter, table will be empty
-		"restartable-view-test-table",
+		topic,
 		// codec doesn't matter, the table will be empty
 		new(codec.String),
 		// start the view autoconnecting
