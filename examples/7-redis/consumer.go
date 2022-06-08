@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 
 	"github.com/lovoo/goka"
 	storage "github.com/lovoo/goka/storage/redis"
@@ -18,6 +19,16 @@ type Publisher interface {
 // Consume starts goka events consumer.
 func Consume(pub Publisher, brokers []string, group string, stream string, store string, namespace string) error {
 	codec := new(Codec)
+
+	tmc := goka.NewTopicManagerConfig()
+	tm, err := goka.NewTopicManager(brokers, goka.DefaultConfig(), tmc)
+	if err != nil {
+		log.Fatalf("Error creating topic manager: %v", err)
+	}
+	err = tm.EnsureStreamExists(stream, 8)
+	if err != nil {
+		log.Printf("Error creating kafka topic %s: %v", stream, err)
+	}
 
 	input := goka.Input(goka.Stream(stream), codec, func(ctx goka.Context, msg interface{}) {
 		event, ok := msg.(*Event)
