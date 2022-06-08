@@ -52,9 +52,10 @@ func detectSpammer(ctx goka.Context, c *Counters) bool {
 }
 
 func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) func() error {
-	return func() error {
-		topicinit.EnsureStreamExists(string(messaging.SentStream), brokers)
+	// to prevent race conditions we ensure that topics exist before the execution of the Goroutine
+	topicinit.EnsureStreamExists(string(messaging.SentStream), brokers)
 
+	return func() error {
 		g := goka.DefineGroup(group,
 			goka.Input(messaging.SentStream, new(messaging.MessageCodec), func(ctx goka.Context, msg interface{}) {
 				c := getValue(ctx)

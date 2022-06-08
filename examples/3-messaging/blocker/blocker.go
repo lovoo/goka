@@ -61,9 +61,10 @@ func block(ctx goka.Context, msg interface{}) {
 }
 
 func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) func() error {
-	return func() error {
-		topicinit.EnsureStreamExists(string(Stream), brokers)
+	// to prevent race conditions we ensure that topics exist before the execution of the Goroutine
+	topicinit.EnsureStreamExists(string(Stream), brokers)
 
+	return func() error {
 		g := goka.DefineGroup(group,
 			goka.Input(Stream, new(BlockEventCodec), block),
 			goka.Persist(new(BlockValueCodec)),

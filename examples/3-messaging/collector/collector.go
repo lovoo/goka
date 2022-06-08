@@ -44,9 +44,10 @@ func collect(ctx goka.Context, msg interface{}) {
 }
 
 func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) func() error {
-	return func() error {
-		topicinit.EnsureStreamExists(string(messaging.ReceivedStream), brokers)
+	// to prevent race conditions we ensure that topics exist before the execution of the Goroutine
+	topicinit.EnsureStreamExists(string(messaging.ReceivedStream), brokers)
 
+	return func() error {
 		g := goka.DefineGroup(group,
 			goka.Input(messaging.ReceivedStream, new(messaging.MessageCodec), collect),
 			goka.Persist(new(MessageListCodec)),
