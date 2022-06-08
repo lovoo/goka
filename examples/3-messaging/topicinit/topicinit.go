@@ -14,7 +14,7 @@ func EnsureStreamExists(topic string, brokers []string) {
 	}
 }
 
-// EnsureStreamExists is a convenience wrapper for TopicManager.EnsureTableExists
+// EnsureTableExists is a convenience wrapper for TopicManager.EnsureTableExists
 func EnsureTableExists(topic string, brokers []string) {
 	tm := createTopicManager(brokers)
 	err := tm.EnsureTableExists(topic, 8)
