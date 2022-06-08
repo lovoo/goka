@@ -96,7 +96,7 @@ func collect(ctx goka.Context, msg interface{}) {
 	ml = append(ml, *m)
 
 	if len(ml) > maxMessages {
-		ml = ml[len(ml)-maxMessages-1:]
+		ml = ml[len(ml)-maxMessages:]
 	}
 	ctx.SetValue(ml)
 }
