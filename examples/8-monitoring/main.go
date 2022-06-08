@@ -122,7 +122,10 @@ func runStatelessProcessor(ctx context.Context, monitor *monitor.Server) error {
 	return p.Run(ctx)
 }
 
-func runJoinProcessor(ctx context.Context, monitor *monitor.Server) error {
+func runJoinProcessor(ctx context.Context,
+	monitor *monitor.Server,
+	joinGroupInitialized chan struct{}) error {
+
 	g := goka.DefineGroup(joinGroup,
 		goka.Input(topic,
 			new(codec.String),
@@ -145,13 +148,19 @@ func runJoinProcessor(ctx context.Context, monitor *monitor.Server) error {
 		return err
 	}
 
+	close(joinGroupInitialized)
+
 	// attach the processor to the monitor
 	monitor.AttachProcessor(p)
 
 	return p.Run(ctx)
 }
 
-func runProcessor(ctx context.Context, monitor *monitor.Server, query *query.Server, actions *actions.Server) error {
+func runProcessor(ctx context.Context,
+	monitor *monitor.Server,
+	query *query.Server,
+	actions *actions.Server,
+	joinGroupInitialized chan struct{}) error {
 
 	// helper function that waits the configured number of times
 	waitVisitor := func(ctx goka.Context, value interface{}) {
@@ -175,6 +184,9 @@ func runProcessor(ctx context.Context, monitor *monitor.Server, query *query.Ser
 		goka.Visitor("action2", waitVisitor),
 		goka.Visitor("action3", waitVisitor),
 	)
+
+	<-joinGroupInitialized
+
 	p, err := goka.NewProcessor(brokers, g)
 	if err != nil {
 		return err
@@ -313,9 +325,13 @@ func main() {
 		defer log.Printf("emitter done")
 		return runEmitter(ctx)
 	})
+
+	// in runProcessor we use joinGroup, which depends on its initialization in runJoinProcessor
+	joinGroupInitialized := make(chan struct{})
+
 	errg.Go(func() error {
 		defer log.Printf("processor done")
-		return runProcessor(ctx, monitorServer, queryServer, actionServer)
+		return runProcessor(ctx, monitorServer, queryServer, actionServer, joinGroupInitialized)
 	})
 	errg.Go(func() error {
 		defer log.Printf("stateless processor done")
@@ -323,7 +339,7 @@ func main() {
 	})
 	errg.Go(func() error {
 		defer log.Printf("join procdessor done")
-		return runJoinProcessor(ctx, monitorServer)
+		return runJoinProcessor(ctx, monitorServer, joinGroupInitialized)
 	})
 	if err := runView(errg, ctx, root, monitorServer); err != nil {
 		log.Printf("Error running view, will shutdown: %v", err)
