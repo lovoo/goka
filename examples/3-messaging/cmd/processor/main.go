@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/lovoo/goka/examples/3-messaging/blocker"
@@ -31,25 +32,43 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	grp, ctx := errgroup.WithContext(ctx)
 
+	// When this example is run the first time, wait for creation of all internal topics
+	initialized := sync.WaitGroup{}
+	if *runCollector {
+		initialized.Add(1)
+	}
+	if *runFilter {
+		initialized.Add(1)
+	}
+	if *runBlocker {
+		initialized.Add(1)
+	}
+	if *runDetector {
+		initialized.Add(1)
+	}
+	if *runTranslator {
+		initialized.Add(1)
+	}
+
 	if *runCollector {
 		log.Println("starting collector")
-		grp.Go(collector.Run(ctx, brokers))
+		grp.Go(collector.Run(ctx, brokers, &initialized))
 	}
 	if *runFilter {
 		log.Println("starting filter")
-		grp.Go(filter.Run(ctx, brokers))
+		grp.Go(filter.Run(ctx, brokers, &initialized))
 	}
 	if *runBlocker {
 		log.Println("starting blocker")
-		grp.Go(blocker.Run(ctx, brokers))
+		grp.Go(blocker.Run(ctx, brokers, &initialized))
 	}
 	if *runDetector {
 		log.Println("starting detector")
-		grp.Go(detector.Run(ctx, brokers))
+		grp.Go(detector.Run(ctx, brokers, &initialized))
 	}
 	if *runTranslator {
 		log.Println("starting translator")
-		grp.Go(translator.Run(ctx, brokers))
+		grp.Go(translator.Run(ctx, brokers, &initialized))
 	}
 
 	// Wait for SIGINT/SIGTERM

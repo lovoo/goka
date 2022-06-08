@@ -2,7 +2,9 @@ package filter
 
 import (
 	"context"
+	"github.com/lovoo/goka/examples/3-messaging/topic"
 	"strings"
+	"sync"
 
 	"github.com/lovoo/goka"
 	messaging "github.com/lovoo/goka/examples/3-messaging"
@@ -41,8 +43,16 @@ func translate(ctx goka.Context, m *messaging.Message) *messaging.Message {
 	}
 }
 
-func Run(ctx context.Context, brokers []string) func() error {
+func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) func() error {
 	return func() error {
+		topic.EnsureStreamExists(string(messaging.SentStream), brokers)
+
+		// We refer to these tables, ensure that they exist initially also in the
+		// case if the translator or blocker processors are not started
+		for _, topicName := range []string{string(translator.Table), string(blocker.Table)} {
+			topic.EnsureTableExists(topicName, brokers)
+		}
+
 		g := goka.DefineGroup(group,
 			goka.Input(messaging.SentStream, new(messaging.MessageCodec), filter),
 			goka.Output(messaging.ReceivedStream, new(messaging.MessageCodec)),
@@ -51,8 +61,15 @@ func Run(ctx context.Context, brokers []string) func() error {
 		)
 		p, err := goka.NewProcessor(brokers, g)
 		if err != nil {
+			// we have to signal done here so other Goroutines of the errgroup
+			// can continue execution
+			initialized.Done()
 			return err
 		}
+
+		initialized.Done()
+		initialized.Wait()
+
 		return p.Run(ctx)
 	}
 }
