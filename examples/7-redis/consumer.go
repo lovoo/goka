@@ -25,6 +25,7 @@ func Consume(pub Publisher, brokers []string, group string, stream string, store
 	if err != nil {
 		log.Fatalf("Error creating topic manager: %v", err)
 	}
+	defer tm.Close()
 	err = tm.EnsureStreamExists(stream, 8)
 	if err != nil {
 		log.Printf("Error creating kafka topic %s: %v", stream, err)

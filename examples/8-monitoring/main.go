@@ -297,6 +297,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating topic manager: %v", err)
 	}
+	defer tmgr.Close()
 	tmgr.EnsureStreamExists(string(topic), 2)
 	tmgr.EnsureTableExists(string(goka.GroupTable(group)), 2)
 

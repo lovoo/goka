@@ -125,6 +125,7 @@ func runProcessor(ctx context.Context,
 	if err != nil {
 		log.Fatalf("Error creating topic manager: %v", err)
 	}
+	defer tm.Close()
 	for _, topicName := range []string{string(inputA), string(inputB)} {
 		err = tm.EnsureStreamExists(topicName, 8)
 		if err != nil {
