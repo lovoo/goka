@@ -2,14 +2,12 @@ package filter
 
 import (
 	"context"
-	"github.com/lovoo/goka/examples/3-messaging/topicinit"
-	"strings"
-	"sync"
-
 	"github.com/lovoo/goka"
 	messaging "github.com/lovoo/goka/examples/3-messaging"
 	"github.com/lovoo/goka/examples/3-messaging/blocker"
+	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 	"github.com/lovoo/goka/examples/3-messaging/translator"
+	"strings"
 )
 
 var (
@@ -43,16 +41,17 @@ func translate(ctx goka.Context, m *messaging.Message) *messaging.Message {
 	}
 }
 
-func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) func() error {
-	// to prevent race conditions we ensure that topics exist before the execution of the Goroutine
+func PrepareTopics(brokers []string) {
 	topicinit.EnsureStreamExists(string(messaging.SentStream), brokers)
 
 	// We refer to these tables, ensure that they exist initially also in the
-	// case if the translator or blocker processors are not started
+	// case that the translator or blocker processors are not started
 	for _, topicName := range []string{string(translator.Table), string(blocker.Table)} {
 		topicinit.EnsureTableExists(topicName, brokers)
 	}
+}
 
+func Run(ctx context.Context, brokers []string) func() error {
 	return func() error {
 		g := goka.DefineGroup(group,
 			goka.Input(messaging.SentStream, new(messaging.MessageCodec), filter),
@@ -62,14 +61,8 @@ func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) fun
 		)
 		p, err := goka.NewProcessor(brokers, g)
 		if err != nil {
-			// we have to signal done here so other Goroutines of the errgroup
-			// can continue execution
-			initialized.Done()
 			return err
 		}
-
-		initialized.Done()
-		initialized.Wait()
 
 		return p.Run(ctx)
 	}

@@ -3,10 +3,8 @@ package blocker
 import (
 	"context"
 	"encoding/json"
-	"github.com/lovoo/goka/examples/3-messaging/topicinit"
-	"sync"
-
 	"github.com/lovoo/goka"
+	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 )
 
 var (
@@ -60,10 +58,11 @@ func block(ctx goka.Context, msg interface{}) {
 	ctx.SetValue(s)
 }
 
-func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) func() error {
-	// to prevent race conditions we ensure that topics exist before the execution of the Goroutine
+func PrepareTopics(brokers []string) {
 	topicinit.EnsureStreamExists(string(Stream), brokers)
+}
 
+func Run(ctx context.Context, brokers []string) func() error {
 	return func() error {
 		g := goka.DefineGroup(group,
 			goka.Input(Stream, new(BlockEventCodec), block),
@@ -71,14 +70,8 @@ func Run(ctx context.Context, brokers []string, initialized *sync.WaitGroup) fun
 		)
 		p, err := goka.NewProcessor(brokers, g)
 		if err != nil {
-			// we have to signal done here so other Goroutines of the errgroup
-			// can continue execution
-			initialized.Done()
 			return err
 		}
-
-		initialized.Done()
-		initialized.Wait()
 
 		return p.Run(ctx)
 	}
