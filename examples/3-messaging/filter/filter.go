@@ -2,12 +2,12 @@ package filter
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lovoo/goka"
 	messaging "github.com/lovoo/goka/examples/3-messaging"
 	"github.com/lovoo/goka/examples/3-messaging/blocker"
+	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 	"github.com/lovoo/goka/examples/3-messaging/translator"
+	"strings"
 )
 
 var (
@@ -41,6 +41,16 @@ func translate(ctx goka.Context, m *messaging.Message) *messaging.Message {
 	}
 }
 
+func PrepareTopics(brokers []string) {
+	topicinit.EnsureStreamExists(string(messaging.SentStream), brokers)
+
+	// We refer to these tables, ensure that they exist initially also in the
+	// case that the translator or blocker processors are not started
+	for _, topicName := range []string{string(translator.Table), string(blocker.Table)} {
+		topicinit.EnsureTableExists(topicName, brokers)
+	}
+}
+
 func Run(ctx context.Context, brokers []string) func() error {
 	return func() error {
 		g := goka.DefineGroup(group,
@@ -53,6 +63,7 @@ func Run(ctx context.Context, brokers []string) func() error {
 		if err != nil {
 			return err
 		}
+
 		return p.Run(ctx)
 	}
 }

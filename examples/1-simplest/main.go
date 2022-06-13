@@ -112,6 +112,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating topic manager: %v", err)
 	}
+	defer tm.Close()
 	err = tm.EnsureStreamExists(string(topic), 8)
 	if err != nil {
 		log.Printf("Error creating kafka topic %s: %v", topic, err)

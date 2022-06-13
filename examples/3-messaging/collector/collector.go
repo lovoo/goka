@@ -3,9 +3,9 @@ package collector
 import (
 	"context"
 	"encoding/json"
-
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/examples/3-messaging"
+	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 )
 
 const maxMessages = 5
@@ -40,6 +40,10 @@ func collect(ctx goka.Context, msg interface{}) {
 		ml = ml[len(ml)-maxMessages:]
 	}
 	ctx.SetValue(ml)
+}
+
+func PrepareTopics(brokers []string) {
+	topicinit.EnsureStreamExists(string(messaging.ReceivedStream), brokers)
 }
 
 func Run(ctx context.Context, brokers []string) func() error {

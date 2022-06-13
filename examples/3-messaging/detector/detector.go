@@ -3,10 +3,10 @@ package detector
 import (
 	"context"
 	"encoding/json"
-
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/examples/3-messaging"
 	"github.com/lovoo/goka/examples/3-messaging/blocker"
+	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 )
 
 const (
@@ -47,6 +47,10 @@ func detectSpammer(ctx goka.Context, c *Counters) bool {
 		rate  = float64(c.Sent) / total
 	)
 	return total >= minMessages && rate >= maxRate
+}
+
+func PrepareTopics(brokers []string) {
+	topicinit.EnsureStreamExists(string(messaging.SentStream), brokers)
 }
 
 func Run(ctx context.Context, brokers []string) func() error {

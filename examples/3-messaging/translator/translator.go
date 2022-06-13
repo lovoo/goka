@@ -2,9 +2,9 @@ package translator
 
 import (
 	"context"
-
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 )
 
 var (
@@ -21,6 +21,10 @@ func translate(ctx goka.Context, msg interface{}) {
 	ctx.SetValue(msg.(string))
 }
 
+func PrepareTopics(brokers []string) {
+	topicinit.EnsureStreamExists(string(Stream), brokers)
+}
+
 func Run(ctx context.Context, brokers []string) func() error {
 	return func() error {
 		g := goka.DefineGroup(group,
@@ -31,6 +35,7 @@ func Run(ctx context.Context, brokers []string) func() error {
 		if err != nil {
 			return err
 		}
+
 		return p.Run(ctx)
 	}
 }

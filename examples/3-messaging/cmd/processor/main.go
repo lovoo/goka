@@ -31,6 +31,23 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	grp, ctx := errgroup.WithContext(ctx)
 
+	// Create topics if they do not already exist
+	if *runCollector {
+		collector.PrepareTopics(brokers)
+	}
+	if *runFilter {
+		filter.PrepareTopics(brokers)
+	}
+	if *runBlocker {
+		blocker.PrepareTopics(brokers)
+	}
+	if *runDetector {
+		detector.PrepareTopics(brokers)
+	}
+	if *runTranslator {
+		translator.PrepareTopics(brokers)
+	}
+
 	if *runCollector {
 		log.Println("starting collector")
 		grp.Go(collector.Run(ctx, brokers))
