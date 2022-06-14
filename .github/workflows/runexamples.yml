@@ -1,9 +1,8 @@
 name: run examples
 
 on:
-  # TODO
   push:
-#  branches: [ master ]
+    branches: [master]
   pull_request:
     branches: [master]
 
