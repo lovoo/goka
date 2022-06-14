@@ -1,0 +1,54 @@
+name: 'run-application'
+description: 'Run an application, wait until an expected output appears, then optionally terminate the application'
+inputs:
+  file:
+    description: 'Binary to run (file name only)'
+    required: true
+  args:
+    description: 'Parameters for the started binary'
+    required: false
+    default: ''
+  wait-for:
+    description: 'JSON string or array of strings to search for in the stdout/stderr output of the started application'
+    required: true
+  working-directory:
+    description: 'The directory where to run the application'
+    required: true
+  terminate:
+    description: 'When set to true, the started process will be terminated'
+    required: false
+    default: 'true'
+outputs:
+  pid:
+    description: 'PID of started process, only relevant when terminate is set to true'
+    value: ${{ steps.runapp.outputs.pid }}
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Start application in background and save the PID'
+      id: runapp
+      shell: bash
+      working-directory: '${{ inputs.working-directory }}'
+      run: |
+        ./${{ inputs.file }} ${{ inputs.args }} &> ${{ inputs.file }}.log & PID=$!
+        echo "::set-output name=pid::${PID}"
+
+    - name: 'Wait for output to appear'
+      shell: bash
+      working-directory: '${{ inputs.working-directory }}'
+      run: |
+        python3 ${GITHUB_WORKSPACE}/examples/wait_for_output.py ${{ inputs.file }}.log '${{ inputs.wait-for }}'
+
+    - name: 'Display log file'
+      shell: bash
+      working-directory: '${{ inputs.working-directory }}'
+      run: |
+        cat ${{ inputs.file }}.log
+      if: always()
+
+    - name: 'Send SIGTERM to process with pid ${{ steps.runapp.outputs.pid }}'
+      shell: bash
+      working-directory: '${{ inputs.working-directory }}'
+      run: |
+        kill ${{ steps.runapp.outputs.pid }}
+      if: ${{ inputs.terminate == 'true' }}
