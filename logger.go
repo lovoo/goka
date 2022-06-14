@@ -15,7 +15,6 @@ var defaultLogger = &std{
 
 // Logger is the interface Goka and its subpackages use for logging.
 type Logger interface {
-
 	// Print will simply print the params
 	Print(...interface{})
 
@@ -51,6 +50,7 @@ type std struct {
 func (s *std) Print(msgs ...interface{}) {
 	s.log.Print(msgs...)
 }
+
 func (s *std) Println(msgs ...interface{}) {
 	s.log.Print(msgs...)
 }
@@ -76,7 +76,6 @@ func DefaultLogger() Logger {
 
 // Debug enables or disables debug logging using the global logger.
 // The goka debugging setting is applied to any custom loggers in goka components (Processors, Views, Emitters).
-// To enable debug logging for custom loggers in selected components only, pass 'true' in the respective 'WithLogger' options.
 func Debug(gokaDebug, saramaDebug bool) {
 	defaultLogger.debug = gokaDebug
 	if saramaDebug {
