@@ -60,6 +60,7 @@ func send(from, to, content string) {
 		log.Printf("error sending request: %v", err)
 		return
 	}
+	log.Printf("Posted message '%s' (%s -> %s)", content, from, to)
 	defer resp.Body.Close()
 	//TODO(diogo) check response status code
 }

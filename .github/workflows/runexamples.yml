@@ -1,0 +1,176 @@
+name: run examples
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  run-examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+
+      - name: Build examples
+        shell: bash
+        working-directory: examples
+        run: |
+          go build -o 1-simplest/example-1 1-simplest/main.go
+          go build -o 2-clicks/example-2 2-clicks/main.go
+          go build -o 3-messaging/example-3-processor 3-messaging/cmd/processor/main.go
+          go build -o 3-messaging/example-3-service 3-messaging/cmd/service/main.go
+          go build -o 3-messaging/example-3-loadgen 3-messaging/cmd/loadgen/main.go
+          go build -o 3-messaging/example-3-block-user 3-messaging/cmd/block-user/main.go
+          go build -o 3-messaging/example-3-translate-word 3-messaging/cmd/translate-word/main.go
+          go build -o 5-multiple/example-5 5-multiple/main.go
+          go build -o 6-reconnecting-view/example-6 6-reconnecting-view/main.go
+          go build -o 7-redis/example-7 7-redis/*.go
+          go build -o 8-monitoring/example-8 8-monitoring/main.go
+          go build -o 9-defer-commit/example-9 9-defer-commit/main.go
+          go build -o 10-visit/example-10 10-visit/main.go
+
+      - name: Start services
+        shell: bash
+        working-directory: examples
+        run: |
+          make start
+
+      - name: Run example 1
+        uses: ./.github/actions/run-application
+        with:
+          file: example-1
+          wait-for: '"Processor example-group"'
+          working-directory: examples/1-simplest
+
+      - name: Run example 2
+        uses: ./.github/actions/run-application
+        with:
+          file: example-2
+          wait-for: '"Processor mini-group"'
+          working-directory: examples/2-clicks
+
+      # Example 3 is a more complex example consisting of multiple steps
+      - name: Start example 3 processors
+        id: run_example_3_processor
+        uses: ./.github/actions/run-application
+        with:
+          file: example-3-processor
+          args: -collector -blocker -filter -translator -detector
+          wait-for: '["Processor blocker", "Processor collector", "Processor message_filter", "Processor message_filter", "Processor message_filter"]'
+          working-directory: examples/3-messaging
+          terminate: false
+
+      - name: Start example 3 service
+        id: run_example_3_service
+        uses: ./.github/actions/run-application
+        with:
+          file: example-3-service
+          args: -sent
+          wait-for: '"Listen port 8080"'
+          working-directory: examples/3-messaging
+          terminate: false
+
+      - name: Start example 3 loadgen
+        id: run_example_3_loadgen
+        uses: ./.github/actions/run-application
+        with:
+          file: example-3-loadgen
+          wait-for: '"Posted message"'
+          working-directory: examples/3-messaging
+          terminate: false
+
+      - name: Run example 3 list users
+        shell: bash
+        working-directory: examples/3-messaging
+        run: |
+          curl localhost:8080/Alice/feed
+
+      - name: Run example 3 block user
+        shell: bash
+        working-directory: examples/3-messaging
+        run: |
+          ./example-3-block-user -user Bob
+
+      - name: Run example 3 translate word
+        shell: bash
+        working-directory: examples/3-messaging
+        run: |
+          ./example-3-translate-word -word "together" -with "t°9e+her"
+
+      - name: Stop example 3 loadgen
+        shell: bash
+        working-directory: examples/3-messaging
+        run: |
+          kill ${{ steps.run_example_3_loadgen.outputs.pid }}
+
+      - name: Stop example 3 service
+        shell: bash
+        working-directory: examples/3-messaging
+        run: |
+          kill ${{ steps.run_example_3_service.outputs.pid }}
+
+      - name: Stop example 3 processors
+        shell: bash
+        working-directory: examples/3-messaging
+        run: |
+          kill ${{ steps.run_example_3_processor.outputs.pid }}
+
+      - name: Run example 4
+        shell: bash
+        working-directory: examples/4-tests
+        run: |
+          go test example_test.go
+
+      - name: Run example 5
+        uses: ./.github/actions/run-application
+        with:
+          file: example-5
+          wait-for: '"Processor multiInput"'
+          working-directory: examples/5-multiple
+
+      - name: Run example 6
+        uses: ./.github/actions/run-application
+        with:
+          file: example-6
+          wait-for: '"View is in state"'
+          working-directory: examples/6-reconnecting-view
+
+      - name: Run example 7
+        uses: ./.github/actions/run-application
+        with:
+          file: example-7
+          wait-for: '"Processor examples"'
+          working-directory: examples/7-redis
+
+      - name: Run example 8
+        uses: ./.github/actions/run-application
+        with:
+          file: example-8
+          wait-for: '["Processor mini-group-stateless", "Processor mini-group-join", "Processor mini-group"]'
+          working-directory: examples/8-monitoring
+
+      - name: Run example 9
+        uses: ./.github/actions/run-application
+        with:
+          file: example-9
+          wait-for: '["Processor forwarder", "Processor consumer"]'
+          working-directory: examples/9-defer-commit
+
+      - name: Run example 10
+        uses: ./.github/actions/run-application
+        with:
+          file: example-10
+          wait-for: '"Processor example-visit-group"'
+          working-directory: examples/10-visit
+
+      - name: Stop services
+        shell: bash
+        working-directory: examples
+        run: |
+          make stop
