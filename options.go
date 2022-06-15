@@ -85,7 +85,6 @@ func DefaultHasher() func() hash.Hash32 {
 	return func() hash.Hash32 {
 		return fnv.New32a()
 	}
-
 }
 
 // DefaultUpdateContext implements the UpdateContext interface.
@@ -221,7 +220,7 @@ func WithLogger(l Logger) ProcessorOption {
 		if prefixLogger, ok := l.(logger); ok {
 			o.log = prefixLogger
 		} else {
-			o.log = wrapLogger(l)
+			o.log = wrapLogger(l, defaultLogger.debug)
 		}
 	}
 }
@@ -406,7 +405,7 @@ func WithViewLogger(l Logger) ViewOption {
 		if prefixLogger, ok := l.(logger); ok {
 			o.log = prefixLogger
 		} else {
-			o.log = wrapLogger(l)
+			o.log = wrapLogger(l, defaultLogger.debug)
 		}
 	}
 }
@@ -555,7 +554,7 @@ func WithEmitterLogger(l Logger) EmitterOption {
 		if prefixLogger, ok := l.(logger); ok {
 			o.log = prefixLogger
 		} else {
-			o.log = wrapLogger(l)
+			o.log = wrapLogger(l, defaultLogger.debug)
 		}
 	}
 }
