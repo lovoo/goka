@@ -706,12 +706,13 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 	}
 
 	defer it.Release()
+	stopping := pp.stopping()
 	for it.Next() {
 		// add one that we were able to be put into the queue.
 		// wg.Done will be called by the visit handler as commit
 		wg.Add(1)
 		select {
-		case <-pp.stopping():
+		case <-stopping:
 			drainVisitInput()
 			wg.Done()
 			return ErrVisitAborted
@@ -741,7 +742,7 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 		wg.Wait()
 	}()
 	select {
-	case <-pp.stopping():
+	case <-stopping:
 		drainVisitInput()
 		return ErrVisitAborted
 	case <-ctx.Done():
