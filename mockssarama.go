@@ -353,6 +353,11 @@ func (m *MockClusterAdmin) EXPECT() *MockClusterAdminMockRecorder {
 	return m.recorder
 }
 
+// CreateACLs is a mock function creating access control lists (ACLs) which are bound to specific resources.
+func (m *MockClusterAdmin) CreateACLs(acls []*sarama.ResourceAcls) error {
+	return nil
+}
+
 // AlterClientQuotas mocks base method
 func (m *MockClusterAdmin) AlterClientQuotas(arg0 []sarama.QuotaEntityComponent, arg1 sarama.ClientQuotasOp, arg2 bool) error {
 	m.ctrl.T.Helper()
