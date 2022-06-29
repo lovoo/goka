@@ -40,9 +40,7 @@ type nilLogger int
 
 func (*nilLogger) Printf(s string, args ...interface{}) {}
 
-var (
-	logger debugLogger = new(nilLogger)
-)
+var logger debugLogger = new(nilLogger)
 
 // T abstracts the interface we assume from the test case.
 // Will most likely be T
@@ -73,7 +71,6 @@ type Tester struct {
 
 // New creates a new tester instance
 func New(t T) *Tester {
-
 	tt := &Tester{
 		t: t,
 
@@ -178,11 +175,14 @@ func (tt *Tester) TopicManagerBuilder() goka.TopicManagerBuilder {
 // `WithTester(..)`.
 // This will setup the tester with the neccessary consumer structure
 func (tt *Tester) RegisterGroupGraph(gg *goka.GroupGraph) string {
-
 	client := tt.nextClient()
 	// we need to expect a consumer group so we're creating one in the client
 	if gg.GroupTable() != nil || len(gg.InputStreams()) > 0 {
 		client.consumerGroup = newConsumerGroup(tt.t, tt)
+	}
+
+	if gg.Group() == "" {
+		tt.t.Errorf("group graph cannot be empty")
 	}
 
 	// register codecs
@@ -311,6 +311,7 @@ func (tt *Tester) SetTableValue(table goka.Table, key string, value interface{})
 		panic(fmt.Errorf("Error setting key %s in storage %s: %v", key, table, err))
 	}
 }
+
 func (tt *Tester) getOrCreateStorage(table string) (storage.Storage, error) {
 	tt.mStorages.Lock()
 	defer tt.mStorages.Unlock()
@@ -341,7 +342,6 @@ func (tt *Tester) ClearValues() {
 			st.Delete(string(it.Key()))
 		}
 	}
-
 }
 
 // NewQueueTracker creates a new queue tracker
