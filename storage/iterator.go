@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"github.com/syndtr/goleveldb/leveldb"
 	ldbiter "github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
@@ -9,7 +8,6 @@ import (
 // offset key skipping.
 type iterator struct {
 	iter ldbiter.Iterator
-	snap *leveldb.Snapshot
 }
 
 func (i *iterator) Next() bool {
@@ -40,7 +38,6 @@ func (i *iterator) Value() ([]byte, error) {
 
 func (i *iterator) Release() {
 	i.iter.Release()
-	i.snap.Release()
 }
 
 func (i *iterator) Seek(key []byte) bool {

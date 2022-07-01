@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
@@ -44,7 +45,6 @@ type Iterator interface {
 // Implementations of this interface must be safe for any number of concurrent
 // readers with one writer.
 type Storage interface {
-
 	// Opens/Initialize the storage
 	Open() error
 
@@ -95,7 +95,6 @@ type storage struct {
 
 // New creates a new Storage backed by LevelDB.
 func New(db *leveldb.DB) (Storage, error) {
-
 	return &storage{
 		db:        db,
 		recovered: make(chan struct{}),
@@ -106,35 +105,23 @@ func New(db *leveldb.DB) (Storage, error) {
 
 // Iterator returns an iterator that traverses over a snapshot of the storage.
 func (s *storage) Iterator() (Iterator, error) {
-	snap, err := s.db.GetSnapshot()
-	if err != nil {
-		return nil, err
-	}
-
 	return &iterator{
-		iter: s.db.NewIterator(nil, nil),
-		snap: snap,
+		iter: s.db.NewIterator(nil, &opt.ReadOptions{
+			DontFillCache: true,
+		}),
 	}, nil
 }
 
 // Iterator returns an iterator that traverses over a snapshot of the storage.
 func (s *storage) IteratorWithRange(start, limit []byte) (Iterator, error) {
-	snap, err := s.db.GetSnapshot()
-	if err != nil {
-		return nil, err
-	}
-
-	if limit != nil && len(limit) > 0 {
+	if len(limit) > 0 {
 		return &iterator{
 			iter: s.db.NewIterator(&util.Range{Start: start, Limit: limit}, nil),
-			snap: snap,
 		}, nil
 	}
 	return &iterator{
 		iter: s.db.NewIterator(util.BytesPrefix(start), nil),
-		snap: snap,
 	}, nil
-
 }
 
 func (s *storage) Has(key string) (bool, error) {
