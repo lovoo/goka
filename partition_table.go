@@ -79,8 +79,8 @@ func newPartitionTable(topic string,
 	builder storage.Builder,
 	log logger,
 	backoff Backoff,
-	backoffResetTimeout time.Duration) *PartitionTable {
-
+	backoffResetTimeout time.Duration,
+) *PartitionTable {
 	pt := &PartitionTable{
 		partition:      partition,
 		state:          newPartitionTableState(),
@@ -107,7 +107,6 @@ func newPartitionTable(topic string,
 
 // SetupAndRecover  sets up the partition storage and recovers to HWM
 func (p *PartitionTable) SetupAndRecover(ctx context.Context, restartOnError bool) error {
-
 	err := p.setup(ctx)
 	if err != nil {
 		return err
@@ -405,7 +404,6 @@ func (p *PartitionTable) markRecovered(ctx context.Context) error {
 }
 
 func (p *PartitionTable) drainConsumer(cons sarama.PartitionConsumer) error {
-
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), consumerDrainTimeout)
 	defer cancel()
 
@@ -448,7 +446,6 @@ func (p *PartitionTable) drainConsumer(cons sarama.PartitionConsumer) error {
 }
 
 func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.PartitionConsumer, partitionHwm int64, stopAfterCatchup bool) error {
-
 	stallTicker := time.NewTicker(p.stallPeriod)
 	defer stallTicker.Stop()
 
@@ -527,7 +524,6 @@ func (p *PartitionTable) enqueueStatsUpdate(ctx context.Context, updater func())
 // recover/catchup mechanism so clients can always request stats even if the partition table is not
 // running (like a processor table after it's recovered).
 func (p *PartitionTable) RunStatsLoop(ctx context.Context) {
-
 	updateHwmStatsTicker := time.NewTicker(statsHwmUpdateInterval)
 	defer updateHwmStatsTicker.Stop()
 	for {
