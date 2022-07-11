@@ -18,8 +18,6 @@ const (
 
 	// internal offset we use to detect if the offset has never been stored locally
 	offsetNotStored int64 = -3
-
-	consumerDrainTimeout = time.Second
 )
 
 // Backoff is used for adding backoff capabilities to the restarting
@@ -404,42 +402,22 @@ func (p *PartitionTable) markRecovered(ctx context.Context) error {
 }
 
 func (p *PartitionTable) drainConsumer(cons sarama.PartitionConsumer) error {
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), consumerDrainTimeout)
-	defer cancel()
-
 	errg, _ := multierr.NewErrGroup(context.Background())
 
 	// drain errors channel
 	errg.Go(func() error {
 		var errs *multierror.Error
-
-		for {
-			select {
-			case <-timeoutCtx.Done():
-				p.log.Printf("draining errors channel timed out")
-				return errs
-			case err, ok := <-cons.Errors():
-				if !ok {
-					return errs
-				}
-				errs = multierror.Append(errs, err)
-			}
+		for err := range cons.Errors() {
+			errs = multierror.Append(errs, err)
 		}
+		return errs
 	})
 
 	// drain message channel
 	errg.Go(func() error {
-		for {
-			select {
-			case <-timeoutCtx.Done():
-				p.log.Printf("draining messages channel timed out")
-				return nil
-			case _, ok := <-cons.Messages():
-				if !ok {
-					return nil
-				}
-			}
+		for range cons.Messages() {
 		}
+		return nil
 	})
 
 	return errg.Wait().ErrorOrNil()
