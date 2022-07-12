@@ -447,7 +447,7 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	require.Equal(t, 0, p1Passive)
 
 	p2, cancelP2, p2Done := runProc(createProc())
-	pollTimed(t, "p2 started", 10, p2.Recovered)
+	pollTimed(t, "p2 started", 20, p2.Recovered)
 	pollTimed(t, "p1 still running", 10, p1.Recovered)
 
 	// now p1 and p2 share the partitions
