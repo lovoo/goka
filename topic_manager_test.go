@@ -507,8 +507,6 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
-		tm, bm, ctrl := createTopicManager(t)
-		defer ctrl.Finish()
 		var (
 			topic   = "some-topic"
 			npar    = 1
@@ -520,37 +518,57 @@ func TestTM_EnsureTopicExists(t *testing.T) {
 		)
 
 		// client.Topics() fails
-		bm.client.EXPECT().RefreshMetadata().Return(nil)
-		bm.client.EXPECT().Topics().Return(nil, retErr)
-		err := tm.EnsureTopicExists(topic, npar, rfactor, config)
-		require.Error(t, err)
+		t.Run("topics-fails", func(t *testing.T) {
+			tm, bm, ctrl := createTopicManager(t)
+			defer ctrl.Finish()
+
+			bm.client.EXPECT().RefreshMetadata().Return(nil)
+			bm.client.EXPECT().Topics().Return(nil, retErr)
+			err := tm.EnsureTopicExists(topic, npar, rfactor, config)
+			require.Error(t, err)
+		})
 
 		// client.Partitions() fails
-		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
-		bm.client.EXPECT().RefreshMetadata().Return(nil)
-		bm.client.EXPECT().Partitions(topic).Return(nil, retErr)
-		err = tm.EnsureTopicExists(topic, npar, rfactor, config)
-		require.Error(t, err)
+		t.Run("partitions-fails", func(t *testing.T) {
+			tm, bm, ctrl := createTopicManager(t)
+			defer ctrl.Finish()
+			bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+			bm.client.EXPECT().RefreshMetadata().Return(nil)
+			bm.client.EXPECT().Partitions(topic).Return(nil, retErr)
+			err := tm.EnsureTopicExists(topic, npar, rfactor, config)
+			require.Error(t, err)
+		})
 
 		// client.DescribeConfig() fails
-		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
-		bm.client.EXPECT().RefreshMetadata().Return(nil)
-		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
-		cfg := sarama.NewConfig()
-		cfg.Version = sarama.V0_11_0_0
-		bm.client.EXPECT().Config().Return(cfg)
-		bm.admin.EXPECT().DescribeConfig(gomock.Any()).Return(nil, retErr)
-		err = tm.EnsureTopicExists(topic, npar, rfactor, config)
-		require.Error(t, err)
+		t.Run("describeconfig-fails", func(t *testing.T) {
+			tm, bm, ctrl := createTopicManager(t)
+			defer ctrl.Finish()
+
+			bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+			bm.client.EXPECT().RefreshMetadata().Return(nil)
+			bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
+			cfg := sarama.NewConfig()
+			cfg.Version = sarama.V0_11_0_0
+			bm.client.EXPECT().Config().Return(cfg)
+			bm.admin.EXPECT().DescribeConfig(gomock.Any()).Return(nil, retErr).AnyTimes()
+			err := tm.EnsureTopicExists(topic, npar, rfactor, config)
+			require.Error(t, err)
+		})
 
 		// client.DescribeTopics() fails
-		bm.client.EXPECT().Topics().Return([]string{topic}, nil)
-		bm.client.EXPECT().RefreshMetadata().Return(nil)
-		bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
-		bm.client.EXPECT().Config().Return(cfg)
-		bm.admin.EXPECT().DescribeConfig(gomock.Any()).Return([]sarama.ConfigEntry{{Name: "a", Value: "a"}}, nil)
-		bm.admin.EXPECT().DescribeTopics(gomock.Any()).Return(nil, retErr)
-		err = tm.EnsureTopicExists(topic, npar, rfactor, config)
-		require.Error(t, err)
+		t.Run("describe-topics-fails", func(t *testing.T) {
+			tm, bm, ctrl := createTopicManager(t)
+			defer ctrl.Finish()
+			cfg := sarama.NewConfig()
+			cfg.Version = sarama.V0_11_0_0
+			bm.client.EXPECT().Topics().Return([]string{topic}, nil)
+			bm.client.EXPECT().RefreshMetadata().Return(nil)
+			bm.client.EXPECT().Partitions(topic).Return([]int32{0}, nil)
+			bm.client.EXPECT().Config().Return(cfg)
+			bm.admin.EXPECT().DescribeConfig(gomock.Any()).Return([]sarama.ConfigEntry{{Name: "a", Value: "a"}}, nil)
+			bm.admin.EXPECT().DescribeTopics(gomock.Any()).Return(nil, retErr)
+			err := tm.EnsureTopicExists(topic, npar, rfactor, config)
+			require.Error(t, err)
+		})
 	})
 }

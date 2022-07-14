@@ -37,7 +37,6 @@ type topicManager struct {
 
 // NewTopicManager creates a new topic manager using the sarama library
 func NewTopicManager(brokers []string, saramaConfig *sarama.Config, topicManagerConfig *TopicManagerConfig) (TopicManager, error) {
-
 	if !saramaConfig.Version.IsAtLeast(sarama.V0_10_0_0) {
 		return nil, fmt.Errorf("goka's topic manager needs kafka version v0.10.0.0 or higher to function. Version is %s", saramaConfig.Version.String())
 	}
@@ -169,9 +168,7 @@ func (m *topicManager) handleConfigMismatch(message string) error {
 }
 
 func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[string]string) error {
-
 	partitions, err := m.Partitions(topic)
-
 	if err != nil {
 		if err != errTopicNotFound {
 			return fmt.Errorf("error checking topic: %v", err)
@@ -254,16 +251,25 @@ func (m *topicManager) adminSupported() bool {
 }
 
 func (m *topicManager) getTopicConfigMap(topic string) (map[string]sarama.ConfigEntry, error) {
-	cfg, err := m.admin.DescribeConfig(sarama.ConfigResource{
+	var (
+		err error
+		cfg []sarama.ConfigEntry
+	)
+
+	// #375 retrying to get topic config to avoid a failing processor in case of slow cluster.
+	// err = retry.Do(func() error {
+	cfg, err = m.admin.DescribeConfig(sarama.ConfigResource{
 		Type: sarama.TopicResource,
 		Name: topic,
 	})
+
+	// return err
+	// }, retry.Delay(1*time.Second), retry.Attempts(5))
 
 	// now it does not exist anymore -- this means the cluster is somehow unstable
 	if err != nil {
 		return nil, fmt.Errorf("Error getting config for topic %s: %w", topic, err)
 	}
-
 	// remap the config values to a map
 	cfgMap := make(map[string]sarama.ConfigEntry, len(cfg))
 	for _, cfgEntry := range cfg {
@@ -311,7 +317,6 @@ func (m *topicManager) EnsureTopicExists(topic string, npar, rfactor int, config
 }
 
 func (m *topicManager) EnsureTableExists(topic string, npar int) error {
-
 	return m.ensureExists(
 		topic,
 		npar,
@@ -364,7 +369,6 @@ type TopicManagerConfig struct {
 }
 
 func (tmc *TopicManagerConfig) streamCleanupPolicy() string {
-
 	if tmc.Stream.CleanupPolicy != "" {
 		return tmc.Stream.CleanupPolicy
 	}

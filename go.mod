@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/Shopify/sarama v1.33.0
 	github.com/Shopify/toxiproxy/v2 v2.4.0 // indirect
+	github.com/avast/retry-go v3.0.0+incompatible // indirect
 	github.com/go-stack/stack v1.8.0
 	github.com/golang/mock v1.4.4
 	github.com/gorilla/mux v1.8.0

@@ -3,6 +3,8 @@ package systemtest
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
+	"log"
 	"strings"
 	"testing"
 	"time"
@@ -33,7 +35,7 @@ func TestTopicManager_v11(t *testing.T) {
 	cfg := sarama.NewConfig()
 	cfg.Version = sarama.V0_11_0_0
 	tmc := goka.NewTopicManagerConfig()
-	tmc.Table.Replication = 1
+	tmc.Table.Replication = 3
 	tmc.MismatchBehavior = goka.TMConfigMismatchBehaviorFail
 
 	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
@@ -58,6 +60,19 @@ func TestTopicManager_v11(t *testing.T) {
 		// partitions changed - error
 		err = tm.EnsureStreamExists(topic, 11)
 		require.Error(t, err)
+	})
+
+	t.Run("create-many-new", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			topic := fmt.Sprintf("goka-systemtest-topic-%d-%d", time.Now().Unix(), i)
+			log.Printf("trying topic %s", topic)
+			err := tm.EnsureStreamExists(topic, 10)
+			require.NoError(t, err)
+
+			partitions, err := tm.Partitions(topic)
+			require.EqualValues(t, 10, len(partitions))
+			require.NoError(t, err)
+		}
 	})
 
 	t.Run("list-partitions", func(t *testing.T) {
