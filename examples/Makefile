@@ -22,3 +22,4 @@ compose-up:
 compose-down:
 	@echo stop docker compose
 	@docker-compose down
+	@docker-compose rm

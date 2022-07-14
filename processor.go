@@ -198,7 +198,7 @@ func (g *Processor) find(key string) (storage.Storage, error) {
 		return nil, fmt.Errorf("this processor does not contain partition %v", p)
 	}
 
-	--> race condition as pproc might be in changing
+	// --> race condition as pproc might be in changing
 	return pproc.table.st, nil
 }
 
