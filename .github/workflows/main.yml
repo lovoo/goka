@@ -2,7 +2,7 @@ name: run tests
 
 on:
   push:
-    branches: [master]
+    branches: [master, 375-retry-topicmanager]
   pull_request:
     branches: [master]
 
