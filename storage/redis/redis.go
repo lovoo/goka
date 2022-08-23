@@ -133,6 +133,8 @@ func (s *redisStorage) Close() error {
 	return nil
 }
 
+// redisIterator is populated with the results of an HSCAN call for the table's key (https://redis.io/commands/scan/).
+// This result is a single-dimension array that contains [n] == key, [n+1] == value.
 type redisIterator struct {
 	current uint64
 	keys    []string
@@ -141,19 +143,26 @@ type redisIterator struct {
 }
 
 func (i *redisIterator) exhausted() bool {
-	return uint64(len(i.keys)) <= i.current
+	return uint64(len(i.keys)) <= i.current+1
 }
 
-func (i *redisIterator) Next() bool {
-	i.current++
-	if string(i.Key()) == offsetKey {
-		i.current++
+func (i *redisIterator) ignoreOffsetKey() bool {
+	if i.exhausted() {
+		return false
+	}
+	if string(i.keys[i.current]) == offsetKey {
+		i.current = i.current + 2
 	}
 	return !i.exhausted()
 }
 
+func (i *redisIterator) Next() bool {
+	i.current = i.current + 2
+	return i.ignoreOffsetKey()
+}
+
 func (i *redisIterator) Key() []byte {
-	if i.exhausted() {
+	if !i.ignoreOffsetKey() {
 		return nil
 	}
 	key := i.keys[i.current]
@@ -165,11 +174,10 @@ func (i *redisIterator) Err() error {
 }
 
 func (i *redisIterator) Value() ([]byte, error) {
-	if i.exhausted() {
+	if !i.ignoreOffsetKey() {
 		return nil, nil
 	}
-	key := i.keys[i.current]
-	return i.client.HGet(i.hash, key).Bytes()
+	return []byte(i.keys[i.current+1]), nil
 }
 
 func (i *redisIterator) Release() {
