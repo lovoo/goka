@@ -42,12 +42,14 @@ func Test_redisIterator(t *testing.T) {
 }
 
 func assertRedisIterator(t *testing.T, it *redisIterator) {
+	// the iterator contract implies we must call `Next()` first
+	it.Next()
 	assertRedisIteratorKey(t, it, "key1", "val1")
-	it.Next()
 
+	it.Next()
 	assertRedisIteratorKey(t, it, "key2", "val2")
+	
 	it.Next()
-
 	if !it.exhausted() {
 		t.Fatalf("Expected iterator to be exhausted in %s", string(debug.Stack()))
 	}

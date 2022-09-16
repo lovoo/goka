@@ -136,10 +136,11 @@ func (s *redisStorage) Close() error {
 // redisIterator is populated with the results of an HSCAN call for the table's key (https://redis.io/commands/scan/).
 // This result is a single-dimension array that contains [n] == key, [n+1] == value.
 type redisIterator struct {
-	current uint64
-	keys    []string
-	client  *redis.Client
-	hash    string
+	current     uint64
+	keys        []string
+	client      *redis.Client
+	hash        string
+	initialized bool
 }
 
 func (i *redisIterator) exhausted() bool {
@@ -157,7 +158,11 @@ func (i *redisIterator) ignoreOffsetKey() bool {
 }
 
 func (i *redisIterator) Next() bool {
-	i.current = i.current + 2
+	if !i.initialized {
+		i.initialized = true
+	} else {
+		i.current = i.current + 2
+	}
 	return i.ignoreOffsetKey()
 }
 
