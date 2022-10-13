@@ -194,10 +194,10 @@ func (pp *PartitionProcessor) Recovered() bool {
 // * run the join-tables in catchup mode
 // * start the processor processing loop to receive messages
 // This method takes two contexts, as it does two distinct phases:
-// * setting up the partition (loading table, joins etc.), after which it returns.
-//   This needs a separate context to allow terminatin the setup phase
-// * starting the message-processing-loop of the actual processor. This will keep running
-//   after `Start` returns, so it uses the second context.
+//   - setting up the partition (loading table, joins etc.), after which it returns.
+//     This needs a separate context to allow terminatin the setup phase
+//   - starting the message-processing-loop of the actual processor. This will keep running
+//     after `Start` returns, so it uses the second context.
 func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 	if state := pp.state.State(); state != PPStateIdle {
 		return fmt.Errorf("partitionprocessor is not idle (but %v), cannot start", state)
@@ -296,8 +296,8 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 	return nil
 }
 
-func (pp *PartitionProcessor) stopping() <-chan struct{} {
-	return pp.state.WaitForStateMin(PPStateStopping)
+func (pp *PartitionProcessor) stopping() (<-chan struct{}, func()) {
+	return pp.state.WaitForStateMinWithCleanup(PPStateStopping)
 }
 
 // Stop stops the partition processor
@@ -706,7 +706,10 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 	}
 
 	defer it.Release()
-	stopping := pp.stopping()
+	
+	stopping, doneWaitingForStop := pp.stopping()
+	defer doneWaitingForStop()
+
 	for it.Next() {
 		// add one that we were able to be put into the queue.
 		// wg.Done will be called by the visit handler as commit
