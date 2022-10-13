@@ -67,6 +67,7 @@ func (s *Signal) SetState(state State) *Signal {
 
 	for w, _ := range s.waiters {
 		if w.state == state || (w.minState && state >= w.state) {
+			delete(s.waiters, w)
 			close(w.done)
 			continue
 		}
