@@ -800,7 +800,8 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 	}
 
 	messages := claim.Messages()
-	stopping := part.stopping()
+	stopping, doneWaitingForStop := part.stopping()
+	defer doneWaitingForStop()
 
 	for {
 		select {
