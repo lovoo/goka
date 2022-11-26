@@ -93,11 +93,13 @@ func newOutputStats() *OutputStats {
 }
 
 func (is *InputStats) clone() *InputStats {
-	return &(*is)
+	var clone = *is
+	return &clone
 }
 
 func (os *OutputStats) clone() *OutputStats {
-	return &(*os)
+	var clone = *os
+	return &clone
 }
 
 type inputStatsMap map[string]*InputStats
