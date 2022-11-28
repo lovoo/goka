@@ -31,7 +31,7 @@ runs:
       working-directory: '${{ inputs.working-directory }}'
       run: |
         ./${{ inputs.file }} ${{ inputs.args }} &> ${{ inputs.file }}.log & PID=$!
-        echo "::set-output name=pid::${PID}"
+        echo "{pid}=${PID}" >> $GITHUB_OUTPUT
 
     - name: 'Wait for output to appear'
       shell: bash
