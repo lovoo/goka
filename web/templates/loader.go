@@ -1,35 +1,45 @@
 package templates
 
-import "fmt"
+import (
+	"embed"
+	"fmt"
+	"path/filepath"
+)
 
-// DefaultLoader is the default loader to be used with Get when it is not called
-// on a loader.
-var DefaultLoader = &BinLoader{}
+var (
+	// DefaultLoader is the default loader to be used with Get.
+	DefaultLoader = &EmbedLoader{}
+
+	// templateFiles embeds all the files in the templates directory.
+	//go:embed *
+	templateFiles embed.FS
+)
 
 // Loader is an interface for a template loader.
 type Loader interface {
 	Get(filename string) (string, error)
 }
 
-// BinLoader is for loading templates from bindata assets.
-type BinLoader struct{}
+// EmbedLoader loads templates from the templates directory.
+type EmbedLoader struct{}
 
-// NewBinLoader creates a new BinLoader.
-func NewBinLoader() *BinLoader {
-	return &BinLoader{}
+// NewEmbedLoader creates a new EmbedLoader.
+func NewEmbedLoader() *EmbedLoader {
+	return &EmbedLoader{}
 }
 
-// Get retrieves a template by filename.
-func (l *BinLoader) Get(filename string) (string, error) {
+// Get reads and returns the file's content.
+func (l *EmbedLoader) Get(filename string) (string, error) {
 	return Get(filename)
 }
 
-// Get retrieves a template by filename.
+// Get reads and returns the file's content.
 func Get(filename string) (string, error) {
-	data, err := Asset(filename)
+	directory := filepath.Base(filepath.Dir(filename))
+	file := filepath.Base(filename)
+	fileBytes, err := templateFiles.ReadFile(directory + "/" + file)
 	if err != nil {
-		return "", fmt.Errorf("error loading bindata template: %v", err)
+		return "", fmt.Errorf("error reading and returning contents of embedded file: %v", err)
 	}
-
-	return string(data), nil
+	return string(fileBytes), nil
 }
