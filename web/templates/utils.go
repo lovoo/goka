@@ -18,7 +18,7 @@ func LoadTemplates(filenames ...string) (*template.Template, error) {
 	files := make(map[string]string)
 
 	for _, name := range filenames {
-		content, err := DefaultLoader.Get(name)
+		content, err := DefaultLoader.LoadTemplates(name)
 		if err != nil {
 			return nil, fmt.Errorf("error retrieving %s: %v", name, err)
 		}

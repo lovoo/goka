@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	// DefaultLoader is the default loader to be used with Get.
+	// DefaultLoader is the default loader to be used with LoadTemplates.
 	DefaultLoader = &EmbedLoader{}
 
 	// templateFiles embeds all the files in the templates directory.
@@ -17,7 +17,7 @@ var (
 
 // Loader is an interface for a template loader.
 type Loader interface {
-	Get(filename string) (string, error)
+	LoadTemplates(filename string) (string, error)
 }
 
 // EmbedLoader loads templates from the templates directory.
@@ -28,13 +28,8 @@ func NewEmbedLoader() *EmbedLoader {
 	return &EmbedLoader{}
 }
 
-// Get reads and returns the file's content.
-func (l *EmbedLoader) Get(filename string) (string, error) {
-	return Get(filename)
-}
-
-// Get reads and returns the file's content.
-func Get(filename string) (string, error) {
+// LoadTemplates reads and returns the file's content.
+func (l *EmbedLoader) LoadTemplates(filename string) (string, error) {
 	directory := filepath.Base(filepath.Dir(filename))
 	file := filepath.Base(filename)
 	fileBytes, err := templateFiles.ReadFile(directory + "/" + file)
