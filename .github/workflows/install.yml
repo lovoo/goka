@@ -18,5 +18,5 @@ jobs:
       - name: Install
         shell: bash
         run: |
-          go get -u github.com/lovoo/goka@master
+          go install github.com/lovoo/goka@master@latest
           
