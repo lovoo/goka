@@ -8,7 +8,6 @@ This example shows how to:
 * Write an emitter to push data to kafka
 * Writing a view to query the user table
 
-To get an introduction into goka, see this [blog post](http://tech.lovoo.com/2017/05/23/goka).
 
 ## How to get it running
 ```bash

@@ -26,8 +26,6 @@ The following figure depicts our initial design using these three components tog
 
 ![Architecture](figs/goka-arch-simple.png)
 
-The architecture here follows the approach in [this blog post](https://tech.lovoo.com/2017/05/23/goka/).
-
 ### Send endpoint
 
 The main type we will be dealing with is the [`Message`](message.go#L14) type:
