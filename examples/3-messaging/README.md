@@ -180,14 +180,14 @@ This solution allows us to start, stop, and scale them independently.
 Before starting any Go program, run `make start` in `examples` to start Docker containers for ZooKeeper and Kafka.
 Next, to start the service, change directory to `examples/3-messaging` and type:
 
+Start the collector processor:
 ```sh
-go run cmd/service/main.go # start endpoint handlers, emitter and view
+go run cmd/processor/main.go -collector
 ```
 
-In another terminal, start the processor:
-
+In another terminal, start the endpoint handlers, emitter and view:
 ```sh
-go run cmd/processor/main.go -collector # start collector processor
+go run cmd/service/main.go
 ```
 
 After you started both Go programs, you can use `curl` to see the messages sent to Alice:
