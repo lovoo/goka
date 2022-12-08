@@ -18,5 +18,7 @@ jobs:
       - name: Install
         shell: bash
         run: |
-          go install github.com/lovoo/goka@master
+          go mod tidy
+          go get github.com/lovoo/goka@master
+          go test -v github.com/lovoo/goka
           
