@@ -28,15 +28,18 @@ type StateReader interface {
 type Signal struct {
 	m                    sync.RWMutex
 	state                State
-	waiters              []*waiter
+	waiters              map[*waiter]struct{}
 	stateChangeObservers []*StateChangeObserver
 	allowedStates        map[State]bool
 }
+
+var emptyValue struct{}
 
 // NewSignal creates a new Signal based on the states
 func NewSignal(states ...State) *Signal {
 	s := &Signal{
 		allowedStates: make(map[State]bool),
+		waiters:       make(map[*waiter]struct{}),
 	}
 	for _, state := range states {
 		s.allowedStates[state] = true
@@ -62,15 +65,14 @@ func (s *Signal) SetState(state State) *Signal {
 	// set the state and notify all channels waiting for it.
 	s.state = state
 
-	var newWaiters []*waiter
-	for _, w := range s.waiters {
+	for w, _ := range s.waiters {
 		if w.state == state || (w.minState && state >= w.state) {
+			delete(s.waiters, w)
 			close(w.done)
 			continue
 		}
-		newWaiters = append(newWaiters, w)
+		s.waiters[w] = emptyValue
 	}
-	s.waiters = newWaiters
 
 	// notify the state change observers
 	for _, obs := range s.stateChangeObservers {
@@ -107,6 +109,26 @@ func (s *Signal) WaitForStateMin(state State) <-chan struct{} {
 	return s.waitForWaiter(state, w)
 }
 
+// WaitForStateMinWithCleanup functions identically to WaitForStateMin, but returns a cleanup function in addition
+// so that the caller can cleanup resources if it no longer wants to wait
+func (s *Signal) WaitForStateMinWithCleanup(state State) (<-chan struct{}, func()) {
+
+	w := &waiter{
+		done:     make(chan struct{}),
+		state:    state,
+		minState: true,
+	}
+
+	cleanup := func() {
+		s.m.Lock()
+		defer s.m.Unlock()
+
+		delete(s.waiters, w)
+	}
+
+	return s.waitForWaiter(state, w), cleanup
+}
+
 // WaitForState returns a channel that closes when the signal reaches passed
 // state.
 func (s *Signal) WaitForState(state State) <-chan struct{} {
@@ -127,7 +149,7 @@ func (s *Signal) waitForWaiter(state State, w *waiter) chan struct{} {
 	if curState := s.state; state == curState || (w.minState && curState >= state) {
 		close(w.done)
 	} else {
-		s.waiters = append(s.waiters, w)
+		s.waiters[w] = emptyValue
 	}
 
 	return w.done
