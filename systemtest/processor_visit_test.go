@@ -20,7 +20,6 @@ const (
 
 // TestProcessorVisit tests the visiting functionality.
 func TestProcessorVisit(t *testing.T) {
-	t.Parallel()
 	brokers := initSystemTest(t)
 
 	tmc := goka.NewTopicManagerConfig()
