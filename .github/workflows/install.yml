@@ -20,6 +20,6 @@ jobs:
         run: |
           go mod init test
           go mod tidy
-          go get -u github.com/lovoo/goka@master
+          go get -t github.com/lovoo/goka@master
           go test -v github.com/lovoo/goka
           
