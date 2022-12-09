@@ -15,12 +15,6 @@ jobs:
         with:
           go-version: 1.18
 
-      - name: Build examples
-        shell: bash
-        working-directory: examples
-        run: |
-          go build -o 1-simplest/example-1 1-simplest/main.go
-
       - name: Install
         shell: bash
         run: |
