@@ -34,7 +34,7 @@ func NewServer(basePath string, router *mux.Router, opts ...Option) *Server {
 	srv := &Server{
 		log:      goka.DefaultLogger(),
 		basePath: basePath,
-		loader:   &templates.BinLoader{},
+		loader:   &templates.EmbedLoader{},
 		actions:  make(map[string]*action),
 	}
 
