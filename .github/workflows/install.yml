@@ -19,6 +19,7 @@ jobs:
         shell: bash
         run: |
           go mod init test
-          export GOSUMDB=off go get -t github.com/lovoo/goka@master
+          export GOSUMDB=off
+          go get -t github.com/lovoo/goka@master
           go test -v github.com/lovoo/goka
           
