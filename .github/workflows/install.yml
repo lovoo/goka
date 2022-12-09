@@ -18,8 +18,7 @@ jobs:
       - name: Install
         shell: bash
         run: |
-          GOSUMDB=off
           go mod init test
-          go get -t github.com/lovoo/goka@master
+          GOSUMDB=off go get -t github.com/lovoo/goka@master
           go test -v github.com/lovoo/goka
           
