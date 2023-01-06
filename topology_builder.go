@@ -1,15 +1,109 @@
 package goka
 
 // AUTO GENERATED DO NOT MODIFY!
-type topologyProcessorBuilder struct {
-}
-type topologyContext interface {
-	EmitPhotoHashed(key string, msg *PhotoHashed)
-	LookupProfile(key string) *BigProfile
-	LookupSmallProfile(key string) *SmallProfile
-	SetValue(value *PhotoHashed)
-	Value() *PhotoHashed
+type topologyContext struct {
+	ctx                Context // goka context
+	_PhotoHashedTopic  Stream
+	_ProfileTopic      Table
+	_ProfileJoinTopic  Table
+	_SmallProfileTopic Table
 }
 
-func (p *topologyProcessorBuilder) HandlePhotoUploaded(handler func(ctx topologyContext, key string, msg *PhotoUploaded)) {
+func (b *topologyProcessorBuilder) newContext(ctx Context) *topologyContext {
+	return &topologyContext{
+		ctx:                ctx,
+		_PhotoHashedTopic:  Stream(b._PhotoHashed.topicName()),
+		_ProfileTopic:      Table(b._Profile.topicName()),
+		_ProfileJoinTopic:  Table(b._ProfileJoin.topicName()),
+		_SmallProfileTopic: Table(b._SmallProfile.topicName()),
+	}
+}
+func (c *topologyContext) EmitPhotoHashed(key string, msg *PhotoHashed) {
+	c.ctx.Emit(c._PhotoHashedTopic, key, msg)
+}
+func (c *topologyContext) LookupProfile(key string) *BigProfile {
+	if val := c.ctx.Lookup(c._ProfileTopic, key); val != nil {
+		return val.(*BigProfile)
+	}
+	return nil
+}
+func (c *topologyContext) JoinProfileJoin() *BigProfile {
+	if val := c.ctx.Join(c._ProfileJoinTopic); val != nil {
+		return val.(*BigProfile)
+	}
+	return nil
+}
+func (c *topologyContext) LookupSmallProfile(key string) *SmallProfile {
+	if val := c.ctx.Lookup(c._SmallProfileTopic, key); val != nil {
+		return val.(*SmallProfile)
+	}
+	return nil
+}
+func (c *topologyContext) SetValue(value *PhotoHashed) {
+	c.ctx.SetValue(value)
+}
+func (c *topologyContext) Value() *PhotoHashed {
+	if val := c.ctx.Value(); val != nil {
+		return val.(*PhotoHashed)
+	}
+	return nil
+}
+
+type topologyProcessorBuilder struct {
+	edges          []Edge
+	_PhotoUploaded GInput[string, *PhotoUploaded]
+	_PhotoHashed   GOutput[string, *PhotoHashed]
+	_Profile       GLookup[string, *BigProfile]
+	_ProfileJoin   GJoin[string, *BigProfile]
+	_SmallProfile  GMappedLookup[string, *BigProfile, *SmallProfile]
+	_State         GState[string, *PhotoHashed]
+}
+
+func NewTopologyProcessorBuilder(_PhotoUploaded GInput[string, *PhotoUploaded],
+	_PhotoHashed GOutput[string, *PhotoHashed],
+	_Profile GLookup[string, *BigProfile],
+	_ProfileJoin GJoin[string, *BigProfile],
+	_SmallProfile GMappedLookup[string, *BigProfile, *SmallProfile],
+	_State GState[string, *PhotoHashed],
+) *topologyProcessorBuilder {
+	return &topologyProcessorBuilder{_PhotoUploaded: _PhotoUploaded,
+		_PhotoHashed:  _PhotoHashed,
+		_Profile:      _Profile,
+		_ProfileJoin:  _ProfileJoin,
+		_SmallProfile: _SmallProfile,
+		_State:        _State,
+	}
+}
+
+func (p *topologyProcessorBuilder) OnPhotoUploaded(handler func(ctx *topologyContext, key string, msg *PhotoUploaded)) {
+	var (
+		valCodec = p._PhotoUploaded.valueCodec()
+		keyCodec = p._PhotoUploaded.keyCodec()
+	)
+
+	codecBridge := NewCodecBridge[*PhotoUploaded](valCodec)
+	edge := Input(Stream(p._PhotoUploaded.topicName()), codecBridge, func(ctx Context, _msg interface{}) {
+
+		decKey, err := keyCodec.Decode([]byte(ctx.Key()))
+		if err != nil {
+			ctx.Fail(err)
+		}
+		var msg *PhotoUploaded
+		if _msg != nil {
+			msg = _msg.(*PhotoUploaded)
+		}
+
+		handler(p.newContext(ctx), decKey, msg)
+	})
+	p.edges = append(p.edges, edge)
+}
+func (p *topologyProcessorBuilder) Build(group Group) (*GroupGraph, error) {
+	var edges []Edge
+	edges = append(edges, Output(Stream(p._PhotoHashed.topicName()), NewCodecBridge[*PhotoHashed](p._PhotoHashed.valueCodec())))
+	edges = append(edges, Lookup(Table(p._Profile.topicName()), NewCodecBridge[*BigProfile](p._Profile.valueCodec())))
+	edges = append(edges, Join(Table(p._ProfileJoin.topicName()), NewCodecBridge[*BigProfile](p._ProfileJoin.valueCodec())))
+	edges = append(edges, Lookup(Table(p._SmallProfile.topicName()), NewCodecBridge[*SmallProfile](p._SmallProfile.valueCodec())))
+	edges = append(edges, Persist(NewCodecBridge[*PhotoHashed](p._State.valueCodec())))
+
+	return DefineGroup(group, append(edges, p.edges...)...), nil
 }
