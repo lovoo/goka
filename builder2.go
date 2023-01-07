@@ -40,7 +40,6 @@ type gstream[K, V any] struct {
 	topic       string
 	_keyCodec   GCodec[K]
 	_valueCodec GCodec[V]
-	autocreate  bool // set via options
 }
 
 func (g *gstream[K, V]) topicName() string {
@@ -206,6 +205,7 @@ func NewCodecBridge[T any](codec GCodec[T]) *CodecBridge[T] {
 // go:generate goka-topology -type topology
 type topology struct {
 	PhotoUploaded GInput[string, *PhotoUploaded]
+	PhotoHashed2  GInput[string, *PhotoHashed]
 	PhotoHashed   GOutput[string, *PhotoHashed]
 	Profile       GLookup[string, *BigProfile]
 	ProfileJoin   GJoin[string, *BigProfile]

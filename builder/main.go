@@ -435,26 +435,28 @@ func (g *Generator2) renderBuilder() error {
 			err := g.PrintTemplate(`
 			func (p*{{.builder}}) On{{.edgeName}}(handler func(ctx *{{.ctxName}},key {{.keyType}}, msg {{.valueType}})){
 			var (
-				valCodec = p._PhotoUploaded.valueCodec()
-				keyCodec = p._PhotoUploaded.keyCodec()
+				valCodec = p.{{.edgeField}}.valueCodec()
+				keyCodec = p.{{.edgeField}}.keyCodec()
 			)
 		
-			codecBridge := NewCodecBridge[*PhotoUploaded](valCodec)
-			edge := Input(Stream(p._PhotoUploaded.topicName()), codecBridge, func(ctx Context, _msg interface{}) {
+			codecBridge := NewCodecBridge(valCodec)
+			edge := Input(Stream(p.{{.edgeField}}.topicName()), codecBridge, func(ctx Context, _msg interface{}) {
 				
 				decKey, err := keyCodec.Decode([]byte(ctx.Key()))
 				if err != nil {
 					ctx.Fail(err)
 				}
-				var msg *PhotoUploaded
+				var msg {{.valueType}}
 				if _msg != nil {
-					msg = _msg.(*PhotoUploaded)
+					msg = _msg.({{.valueType}})
 				}
 
 				handler(p.newContext(ctx), decKey, msg)
 			})
 			p.edges = append(p.edges, edge)
-			`, kv("builder", procBuilderName), kv("edgeName", edgeName), kv("ctxName", ctxName), kv("keyType", edge.keyType), kv("valueType", valueType))
+			`, kv("builder", procBuilderName), kv("edgeName", edgeName),
+				kv("ctxName", ctxName), kv("keyType", edge.keyType),
+				kv("valueType", valueType), kv("edgeField", edge.builderFieldName()))
 			if err != nil {
 				return err
 			}
@@ -469,18 +471,18 @@ func (g *Generator2) renderBuilder() error {
 		case "GState":
 			// set up the codec-bridges and add a "Persist"-edge
 			// follow the pattern with all other edge types that need edge-initialization
-			g.Printf("edges = append(edges, Persist(NewCodecBridge[%s](p.%s.valueCodec())))\n", edge.valueTypes[0], edge.builderFieldName())
+			g.Printf("edges = append(edges, Persist(NewCodecBridge(p.%s.valueCodec())))\n", edge.builderFieldName())
 
 		case "GJoin":
-			g.Printf("edges = append(edges, Join(Table(p.%s.topicName()), NewCodecBridge[%s](p.%s.valueCodec())))\n", edge.builderFieldName(), edge.valueTypes[0], edge.builderFieldName())
+			g.Printf("edges = append(edges, Join(Table(p.%s.topicName()), NewCodecBridge(p.%s.valueCodec())))\n", edge.builderFieldName(), edge.builderFieldName())
 		case "GLookup":
-			g.Printf("edges = append(edges, Lookup(Table(p.%s.topicName()), NewCodecBridge[%s](p.%s.valueCodec())))\n", edge.builderFieldName(), edge.valueTypes[0], edge.builderFieldName())
+			g.Printf("edges = append(edges, Lookup(Table(p.%s.topicName()), NewCodecBridge(p.%s.valueCodec())))\n", edge.builderFieldName(), edge.builderFieldName())
 		case "GMappedLookup":
 			log.Printf("mapped lookup is not supported yet")
-			g.Printf("edges = append(edges, Lookup(Table(p.%s.topicName()), NewCodecBridge[%s](p.%s.valueCodec())))\n", edge.builderFieldName(), edge.valueTypes[len(edge.valueTypes)-1], edge.builderFieldName())
+			g.Printf("edges = append(edges, Lookup(Table(p.%s.topicName()), NewCodecBridge(p.%s.valueCodec())))\n", edge.builderFieldName(), edge.builderFieldName())
 
 		case "GOutput":
-			g.Printf("edges = append(edges, Output(Stream(p.%s.topicName()), NewCodecBridge[%s](p.%s.valueCodec())))\n", edge.builderFieldName(), edge.valueTypes[0], edge.builderFieldName())
+			g.Printf("edges = append(edges, Output(Stream(p.%s.topicName()), NewCodecBridge(p.%s.valueCodec())))\n", edge.builderFieldName(), edge.builderFieldName())
 		}
 	}
 	g.Printf("\n")
