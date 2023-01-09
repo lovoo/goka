@@ -19,7 +19,7 @@ type emitter func(topic string, key string, value []byte, headers Headers) *Prom
 // ConsumeCallback is invoked with a context object along with the input message.
 // The context is only valid within the callback, do not store it or pass it to other goroutines.
 //
-// Error handling
+// # Error handling
 //
 // Most methods of the context can fail due to different reasons, which are handled in different ways:
 // Synchronous errors like
@@ -448,7 +448,7 @@ func (ctx *cbContext) tryCommit(err error) {
 
 	// commit if no errors, otherwise fail context
 	if ctx.errors.ErrorOrNil() != nil {
-		ctx.asyncFailer(ctx.errors.ErrorOrNil())
+		ctx.asyncFailer(fmt.Errorf("could not commit message with key '%s': %w", ctx.Key(), ctx.errors.ErrorOrNil()))
 	} else {
 		ctx.commit()
 	}
