@@ -110,6 +110,9 @@ func TestContext_DeferCommit_witherror(t *testing.T) {
 		wg:               &sync.WaitGroup{},
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 		asyncFailer:      failer,
+		msg: &message{
+			key: "testKey",
+		},
 	}
 
 	ctx.start()
@@ -119,6 +122,7 @@ func TestContext_DeferCommit_witherror(t *testing.T) {
 	// ack is not done
 	require.Equal(t, 0, ack)
 	doneFunc(fmt.Errorf("async error"))
+
 	// no commit, no ack, so we'll get the message again.
 	require.Equal(t, 0, ack)
 	require.Contains(t, ctx.errors.ErrorOrNil().Error(), "async error")
@@ -155,6 +159,9 @@ func TestContext_EmitError(t *testing.T) {
 		trackOutputStats: func(ctx context.Context, topic string, size int) {},
 		syncFailer:       failer,
 		asyncFailer:      failer,
+		msg: &message{
+			key: "testKey",
+		},
 	}
 	ctx.emitter = newEmitter(errToEmit, func(err error) {
 		emitted++
@@ -163,7 +170,7 @@ func TestContext_EmitError(t *testing.T) {
 	})
 
 	ctx.start()
-	ctx.emit("emit-topic", "key", []byte("value"), nil)
+	ctx.emit("emit-topic", ctx.Key(), []byte("value"), nil)
 	ctx.finish(nil)
 
 	// we can now for all callbacks -- it should also guarantee a memory fence
