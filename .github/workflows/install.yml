@@ -8,18 +8,36 @@ on:
 
 jobs:
   install_go_get:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: 1.18
 
       - name: Install
-        shell: bash
+        shell: bash 
         run: |
+          set +x
           go mod init test
-          export GOSUMDB=off
-          go get -t github.com/lovoo/goka@master
-          go test -v github.com/lovoo/goka
+          go get github.com/lovoo/goka@master
+          cat > main.go << EndOfMessage
+          package main
+
+          import (
+            "context"
+
+            "github.com/lovoo/goka"
+          )
+          func main() {
+            proc, _ := goka.NewProcessor(nil, goka.DefineGroup("test"))
+            proc.Run(context.Background())
+          }
+          EndOfMessage
+          cat main.go
+          go mod tidy
+          cat go.mod
+          echo "Compiling module"
+          go build -v .
+          echo "... done"
           

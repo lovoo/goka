@@ -56,6 +56,9 @@ func (fip *FIProxy) Dial(network, addr string) (c net.Conn, err error) {
 	defer fip.m.Unlock()
 
 	conn, err := net.Dial(network, addr)
+	if err != nil {
+		return nil, err
+	}
 
 	wrappedConn := &Conn{
 		Conn: conn,
@@ -72,18 +75,6 @@ func (fip *FIProxy) removeConn(c net.Conn) {
 	defer fip.m.Unlock()
 
 	delete(fip.conns, c.LocalAddr().String())
-}
-
-func (fip *FIProxy) getConns() []string {
-	fip.m.Lock()
-	defer fip.m.Unlock()
-	var conns []string
-
-	for c := range fip.conns {
-		conns = append(conns, c)
-	}
-
-	return conns
 }
 
 func (fip *FIProxy) SetReadError(err error) {

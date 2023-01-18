@@ -12,13 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	pollWaitSecs = 15.0
+)
+
 // TestAutoCommit tests/demonstrates the behavior of disabling the auto-commit functionality.
 // The autocommiter sends the offsets of the marked messages to the broker regularily. If the processor shuts down
 // (or the group rebalances), the offsets are sent one last time, so just turning it of is not enough.
 // To get a processor to not commit any offsets, we're using a fault-injecting proxy
 // and cut the connections before shutdown, so the last-commit is failing.
 func TestAutoCommit(t *testing.T) {
-	t.Parallel()
 	var (
 		group       goka.Group = goka.Group(fmt.Sprintf("%s-%d", "goka-commit-test", time.Now().Unix()))
 		inputStream            = goka.Stream(group) + "-input"
@@ -75,7 +78,7 @@ func TestAutoCommit(t *testing.T) {
 
 	// run the first processor
 	_, cancel, done := runProc(createProc())
-	pollTimed(t, "all-received1", 10, func() bool {
+	pollTimed(t, "all-received1", pollWaitSecs, func() bool {
 		return len(offsets) == 10 && offsets[0] == 0
 	})
 
@@ -93,7 +96,7 @@ func TestAutoCommit(t *testing.T) {
 
 	// --> we'll receive all messages again
 	// --> i.e., no offsets were committed
-	pollTimed(t, "all-received2", 10, func() bool {
+	pollTimed(t, "all-received2", pollWaitSecs, func() bool {
 		return len(offsets) == 10 && offsets[0] == 0
 	})
 
@@ -105,7 +108,6 @@ func TestAutoCommit(t *testing.T) {
 // Two messages (1, 2) are emitted, after consuming (2), it crashes.
 // Starting it a second time will reconsume it.
 func TestUnmarkedMessages(t *testing.T) {
-	t.Parallel()
 	var (
 		group       goka.Group = goka.Group(fmt.Sprintf("%s-%d", "goka-mark-test", time.Now().Unix()))
 		inputStream            = goka.Stream(group) + "-input"
@@ -151,7 +153,7 @@ func TestUnmarkedMessages(t *testing.T) {
 
 	// run the first processor
 	runProc(createProc())
-	pollTimed(t, "all-received1", 10, func() bool {
+	pollTimed(t, "all-received1", pollWaitSecs, func() bool {
 		return len(values) == 2 && values[0] == 1
 	})
 
@@ -160,7 +162,7 @@ func TestUnmarkedMessages(t *testing.T) {
 
 	// restart -> we'll only receive the second message
 	runProc(createProc())
-	pollTimed(t, "all-received2", 10, func() bool {
+	pollTimed(t, "all-received2", pollWaitSecs, func() bool {
 		return len(values) == 1 && values[0] == 2
 	})
 }

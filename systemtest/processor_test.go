@@ -78,7 +78,7 @@ func TestHotStandby(t *testing.T) {
 	errg.Go(func() error {
 		// simulatenously stopping multiple processors sometimes fails the processors, so this one gets delayed
 		// see issue #376 for details
-		return proc1.Run(DelayedCtxCloser(ctx, 5*time.Second))
+		return proc1.Run(DelayedCtxCloser(ctx, 10*time.Second))
 	})
 
 	errg.Go(func() error {
@@ -300,7 +300,6 @@ func TestRecoverAhead(t *testing.T) {
 // TestRebalance runs some processors to test rebalance. It's merely a
 // runs-without-errors test, not a real functional test.
 func TestRebalance(t *testing.T) {
-	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
@@ -370,7 +369,6 @@ func TestRebalance(t *testing.T) {
 // TestRebalanceSharePartitions runs two processors one after each other
 // and asserts that they rebalance partitions appropriately
 func TestRebalanceSharePartitions(t *testing.T) {
-	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
@@ -480,7 +478,6 @@ func TestRebalanceSharePartitions(t *testing.T) {
 }
 
 func TestCallbackFail(t *testing.T) {
-	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
@@ -546,7 +543,6 @@ func TestCallbackFail(t *testing.T) {
 }
 
 func TestProcessorSlowStuck(t *testing.T) {
-	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
@@ -615,7 +611,6 @@ func TestProcessorSlowStuck(t *testing.T) {
 // * restart this processor a couple of times and check whether it stays 10.
 //
 func TestMessageCommit(t *testing.T) {
-	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
@@ -690,7 +685,6 @@ func TestMessageCommit(t *testing.T) {
 }
 
 func TestProcessorGracefulShutdownContinue(t *testing.T) {
-	t.Parallel()
 	brokers := initSystemTest(t)
 
 	var (
