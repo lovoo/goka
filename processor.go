@@ -40,7 +40,10 @@ type Processor struct {
 	log     logger
 	brokers []string
 
+	mRebalance        sync.RWMutex
 	rebalanceCallback RebalanceCallback
+	// current consumer group
+	consGroup sarama.ConsumerGroup
 
 	// rwmutex protecting read/write of partitions and lookuptables.
 	mTables sync.RWMutex
@@ -322,12 +325,45 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	return errg.Wait().ErrorOrNil()
 }
 
+// Pause pauses the processor's underlying consumer group (see https://pkg.go.dev/github.com/Shopify/sarama#ConsumerGroup) by forwarding
+// passed partitions. If no partitions are provided (map==nil), all partitions will be paused.
+// This call has no effect if the processor is not running, has been stopped, or its internal rebalance loop has not started yet.
+func (g *Processor) Pause(partitions map[string][]int32) {
+	g.mRebalance.RLock()
+	defer g.mRebalance.RUnlock()
+	if g.consGroup != nil {
+		if partitions != nil {
+			g.consGroup.Pause(partitions)
+		} else {
+			g.consGroup.PauseAll()
+		}
+	}
+}
+
+// Resume resumes the processor's underlying consumer group (see https://pkg.go.dev/github.com/Shopify/sarama#ConsumerGroup) by forwarding
+// passed partitions. If no partitions are provided (map==nil), all partitions will be resumed.
+// This call has no effect if the processor is not running, has been stopped, or its internal rebalance loop has not started yet.
+func (g *Processor) Resume(partitions map[string][]int32) {
+	g.mRebalance.RLock()
+	defer g.mRebalance.RUnlock()
+	if g.consGroup != nil {
+		if partitions != nil {
+			g.consGroup.Resume(partitions)
+		} else {
+			g.consGroup.ResumeAll()
+		}
+	}
+}
+
 func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 	// create kafka consumer
 	consumerGroup, err := g.opts.builders.consumerGroup(g.brokers, string(g.graph.Group()), g.opts.clientID)
 	if err != nil {
 		return fmt.Errorf(errBuildConsumer, err)
 	}
+	g.mRebalance.Lock()
+	g.consGroup = consumerGroup
+	g.mRebalance.Unlock()
 
 	var topics []string
 	for _, e := range g.graph.InputStreams() {
@@ -345,6 +381,11 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 
 	defer func() {
 		g.log.Debugf("closing consumer group")
+
+		// remove the current consumer group from the instance
+		g.mRebalance.Lock()
+		g.consGroup = nil
+		g.mRebalance.Unlock()
 
 		closeErr := consumerGroup.Close()
 		if closeErr != nil {
