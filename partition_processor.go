@@ -47,6 +47,8 @@ type visit struct {
 
 type commitCallback func(msg *message, meta string)
 
+type ContextWrapper func(ctx Context) Context
+
 // PartitionProcessor handles message processing of one partition by serializing
 // messages from different input topics.
 // It also handles joined tables as well as lookup views (managed by `Processor`).
@@ -595,7 +597,6 @@ func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGro
 		emitterDefaultHeaders: pp.opts.producerDefaultHeaders,
 		table:                 pp.table,
 	}
-
 	// start context and call the ProcessorCallback cb
 	msgContext.start()
 
@@ -610,8 +611,8 @@ func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGro
 		}
 	}()
 
-	// now call cb
-	cb(msgContext, v.meta)
+	// now call cb, wrap the context
+	cb(pp.opts.contextWrapper(msgContext), v.meta)
 	msgContext.finish(nil)
 	return
 }
@@ -673,7 +674,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	msgContext.start()
 
 	// now call cb
-	cb(msgContext, m)
+	cb(pp.opts.contextWrapper(msgContext), m)
 	msgContext.finish(nil)
 	return nil
 }
@@ -706,7 +707,7 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 	}
 
 	defer it.Release()
-	
+
 	stopping, doneWaitingForStop := pp.stopping()
 	defer doneWaitingForStop()
 
