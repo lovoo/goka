@@ -11,9 +11,19 @@ import (
 	"github.com/lovoo/goka/storage"
 )
 
+var (
+	pollMaxWait = 30 * time.Second
+	sleepTime   = 100 * time.Millisecond
+)
+
 // polls all pollers until all return true or fails the test when secTimeout has passed.
-func pollTimed(t *testing.T, what string, secTimeout float64, pollers ...func() bool) {
-	for i := 0; i < int(secTimeout/0.02); i++ {
+func pollTimed(t *testing.T, what string, pollers ...func() bool) {
+	end := time.Now().Add(pollMaxWait)
+	for i := 0; ; i++ {
+		// we're past max wait time, let's fail
+		if end.Before(time.Now()) {
+			break
+		}
 		ok := true
 		for _, poller := range pollers {
 			if !poller() {
@@ -24,7 +34,7 @@ func pollTimed(t *testing.T, what string, secTimeout float64, pollers ...func() 
 		if ok {
 			return
 		}
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(sleepTime)
 	}
 	t.Fatalf("waiting for %s timed out", what)
 }

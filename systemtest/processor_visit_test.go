@@ -13,11 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	waitRecoveredTimeoutSecs = 15
-	emitWaitTimeoutSecs      = 15
-)
-
 // TestProcessorVisit tests the visiting functionality.
 func TestProcessorVisit(t *testing.T) {
 	brokers := initSystemTest(t)
@@ -93,17 +88,17 @@ func TestProcessorVisit(t *testing.T) {
 		defer finish()
 		proc, cancel, done := runProc(createProc(group, input, 0))
 
-		pollTimed(t, "recovered", waitRecoveredTimeoutSecs, proc.Recovered)
+		pollTimed(t, "recovered", proc.Recovered)
 
 		em.EmitSync("value1", int64(1))
 
-		pollTimed(t, "value-ok", emitWaitTimeoutSecs, func() bool {
+		pollTimed(t, "value-ok", func() bool {
 			val1, _ := proc.Get("value1")
 			return val1 != nil && val1.(int64) == 1
 		})
 
 		require.NoError(t, proc.VisitAll(context.Background(), "visitor", int64(25)))
-		pollTimed(t, "values-ok", emitWaitTimeoutSecs, func() bool {
+		pollTimed(t, "values-ok", func() bool {
 			val1, _ := proc.Get("value1")
 			return val1 != nil && val1.(int64) == 25
 		})
@@ -117,11 +112,11 @@ func TestProcessorVisit(t *testing.T) {
 		defer finish()
 		proc, cancel, done := runProc(createProc(group, input, 0))
 
-		pollTimed(t, "recovered", waitRecoveredTimeoutSecs, proc.Recovered)
+		pollTimed(t, "recovered", proc.Recovered)
 
 		em.EmitSync("value1", int64(1))
 
-		pollTimed(t, "value-ok", emitWaitTimeoutSecs, func() bool {
+		pollTimed(t, "value-ok", func() bool {
 			val1, _ := proc.Get("value1")
 			return val1 != nil && val1.(int64) == 1
 		})
@@ -139,14 +134,14 @@ func TestProcessorVisit(t *testing.T) {
 		defer finish()
 		proc, cancel, done := runProc(createProc(group, input, 500*time.Millisecond))
 
-		pollTimed(t, "recovered", waitRecoveredTimeoutSecs, proc.Recovered)
+		pollTimed(t, "recovered", proc.Recovered)
 
 		// emit two values where goka.DefaultHasher says they're in the same partition.
 		// We need to achieve this to test that a shutdown will visit one value but not the other
 		em.EmitSync("0", int64(1))
 		em.EmitSync("02", int64(1))
 
-		pollTimed(t, "value-ok", emitWaitTimeoutSecs, func() bool {
+		pollTimed(t, "value-ok", func() bool {
 			val1, _ := proc.Get("02")
 			val2, _ := proc.Get("0")
 			return val1 != nil && val1.(int64) == 1 && val2 != nil && val2.(int64) == 1
@@ -206,8 +201,8 @@ func TestProcessorVisit(t *testing.T) {
 		proc, cancel, done := runProc(createProc(group, input, 500*time.Millisecond))
 		view, viewCancel, viewDone := runView(createView(group))
 
-		pollTimed(t, "recovered", waitRecoveredTimeoutSecs, proc.Recovered)
-		pollTimed(t, "recovered", waitRecoveredTimeoutSecs, view.Recovered)
+		pollTimed(t, "recovered", proc.Recovered)
+		pollTimed(t, "recovered", view.Recovered)
 
 		// emit two values where goka.DefaultHasher says they're in the same partition.
 		// We need to achieve this to test that a shutdown will visit one value but not the other
@@ -217,7 +212,7 @@ func TestProcessorVisit(t *testing.T) {
 		// emFinish()
 
 		// poll until all values are there
-		pollTimed(t, "value-ok", emitWaitTimeoutSecs, func() bool {
+		pollTimed(t, "value-ok", func() bool {
 			for i := 0; i < 100; i++ {
 				val, _ := proc.Get(fmt.Sprintf("value-%d", i))
 				if val == nil || val.(int64) != 1 {
@@ -260,7 +255,7 @@ func TestProcessorVisit(t *testing.T) {
 		// scenario: sleep in visit, processor shuts down--> visit should cancel too
 		proc1, cancel1, done1 := runProc(createProc(group, input, 500*time.Millisecond))
 
-		pollTimed(t, "recovered", waitRecoveredTimeoutSecs, proc1.Recovered)
+		pollTimed(t, "recovered", proc1.Recovered)
 
 		// emit two values where goka.DefaultHasher says they're in the same partition.
 		// We need to achieve this to test that a shutdown will visit one value but not the other
@@ -269,7 +264,7 @@ func TestProcessorVisit(t *testing.T) {
 		}
 
 		// poll until all values are there
-		pollTimed(t, "value-ok", emitWaitTimeoutSecs, func() bool {
+		pollTimed(t, "value-ok", func() bool {
 			for i := 0; i < 100; i++ {
 				val, _ := proc1.Get(fmt.Sprintf("value-%d", i))
 				if val == nil || val.(int64) != 1 {
@@ -293,7 +288,7 @@ func TestProcessorVisit(t *testing.T) {
 		_, cancel2, done2 := runProc(createProc(group, input, 500*time.Millisecond))
 
 		// wait until the visit is aborted by the new processor (rebalance)
-		pollTimed(t, "visit-abort", 10, func() bool {
+		pollTimed(t, "visit-abort", func() bool {
 			select {
 			case <-visitDone:
 				return errors.Is(visitErr, goka.ErrVisitAborted) && visited > 0 && visited < 100

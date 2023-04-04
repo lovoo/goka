@@ -78,7 +78,7 @@ func TestEmitter_KafkaDisconnect(t *testing.T) {
 		}
 	}()
 
-	pollTimed(t, "emitter emitted something successfully", 10, func() bool {
+	pollTimed(t, "emitter emitted something successfully", func() bool {
 		return atomic.LoadInt64(&success) > 0
 	})
 
