@@ -85,7 +85,7 @@ func TestHotStandby(t *testing.T) {
 		return proc2.Run(ctx)
 	})
 
-	pollTimed(t, "procs 1&2 recovered", 25.0, proc1.Recovered, proc2.Recovered)
+	pollTimed(t, "procs 1&2 recovered", proc1.Recovered, proc2.Recovered)
 
 	// check the storages that were initalized by the processors:
 	// proc1 is without hotstandby -> only two storages: (1 for the table, 1 for the join)
@@ -120,7 +120,7 @@ func TestHotStandby(t *testing.T) {
 	joinStorage2 := proc2Storages.storages[proc2Storages.key(string(joinTable), party)]
 
 	// wait until the keys are present
-	pollTimed(t, "key-values are present", 10,
+	pollTimed(t, "key-values are present",
 		func() bool {
 			has, _ := tableStorage1.Has("key1")
 			return has
@@ -241,7 +241,7 @@ func TestRecoverAhead(t *testing.T) {
 		return proc2.Run(ctx)
 	})
 
-	pollTimed(t, "procs 1&2 recovered", 10.0, func() bool {
+	pollTimed(t, "procs 1&2 recovered", func() bool {
 		return true
 	}, proc1.Recovered, proc2.Recovered)
 
@@ -257,7 +257,7 @@ func TestRecoverAhead(t *testing.T) {
 	joinStorage2 := proc2Storages.storages[proc2Storages.key(string(joinTable), 0)]
 
 	// wait until the keys are present
-	pollTimed(t, "key-values are present", 20.0,
+	pollTimed(t, "key-values are present",
 
 		func() bool {
 			return true
@@ -436,7 +436,7 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	}
 
 	p1, cancelP1, p1Done := runProc(createProc())
-	pollTimed(t, "p1 started", 10, p1.Recovered)
+	pollTimed(t, "p1 started", p1.Recovered)
 
 	// p1 has all active partitions
 	p1Stats := p1.Stats()
@@ -445,8 +445,8 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	require.Equal(t, 0, p1Passive)
 
 	p2, cancelP2, p2Done := runProc(createProc())
-	pollTimed(t, "p2 started", 20, p2.Recovered)
-	pollTimed(t, "p1 still running", 10, p1.Recovered)
+	pollTimed(t, "p2 started", p2.Recovered)
+	pollTimed(t, "p1 still running", p1.Recovered)
 
 	// now p1 and p2 share the partitions
 	p2Stats := p2.Stats()
@@ -463,7 +463,7 @@ func TestRebalanceSharePartitions(t *testing.T) {
 	require.True(t, <-p1Done == nil)
 
 	// p2 should have all partitions
-	pollTimed(t, "p2 has all partitions", 10, func() bool {
+	pollTimed(t, "p2 has all partitions", func() bool {
 		p2Stats = p2.Stats()
 		p2Active, p2Passive := activePassivePartitions(p2Stats)
 		return p2Active == numPartitions && p2Passive == 0
@@ -515,7 +515,7 @@ func TestCallbackFail(t *testing.T) {
 
 	proc, cancel, done := runProc(proc)
 
-	pollTimed(t, "recovered", 10, proc.Recovered)
+	pollTimed(t, "recovered", proc.Recovered)
 
 	go func() {
 		for i := 0; i < 10000; i++ {
@@ -524,7 +524,7 @@ func TestCallbackFail(t *testing.T) {
 	}()
 
 	defer cancel()
-	pollTimed(t, "error-response", 10, func() bool {
+	pollTimed(t, "error-response", func() bool {
 		select {
 		case err, ok := <-done:
 			if !ok {
@@ -745,7 +745,7 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 
 	proc, cancelProc, procDone := runProc(createProc())
 
-	pollTimed(t, "proc-running", 10, proc.Recovered)
+	pollTimed(t, "proc-running", proc.Recovered)
 
 	// stop it
 	cancelProc()
@@ -759,7 +759,7 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		log.Printf("creating proc round %d", i)
 		proc, cancelProc, procDone := runProc(createProc())
-		pollTimed(t, "proc-running", 10, proc.Recovered)
+		pollTimed(t, "proc-running", proc.Recovered)
 		// stop it
 		cancelProc()
 		require.NoError(t, <-procDone)
@@ -772,9 +772,9 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 	// start one last time to check the values
 	log.Printf("creating a proc for the last time to check values")
 	proc, cancelProc, procDone = runProc(createProc())
-	pollTimed(t, "proc-running", 10, proc.Recovered)
+	pollTimed(t, "proc-running", proc.Recovered)
 
-	pollTimed(t, "correct-values", 10, func() bool {
+	pollTimed(t, "correct-values", func() bool {
 		for key, value := range valueSum {
 			tableVal, err := proc.Get(key)
 			if tableVal == nil || err != nil {

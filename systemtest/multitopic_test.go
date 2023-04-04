@@ -85,7 +85,7 @@ func TestMultiTopics(t *testing.T) {
 	})
 
 	log.Printf("waiting for processor/view to be running")
-	pollTimed(t, "proc and view are recovered", 10.0, proc.Recovered, view.Recovered)
+	pollTimed(t, "proc and view are recovered", proc.Recovered, view.Recovered)
 	log.Printf("...done")
 
 	var sum int64
@@ -110,7 +110,7 @@ func TestMultiTopics(t *testing.T) {
 	}
 
 	// poll the view and the processor until we're sure that we have
-	pollTimed(t, "all messages have been transferred", 10.0,
+	pollTimed(t, "all messages have been transferred",
 		func() bool {
 			value, err := view.Get("key")
 			require.NoError(t, err)

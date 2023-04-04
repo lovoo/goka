@@ -45,6 +45,8 @@ func newConsumerGroup(t T, tt *Tester) *consumerGroup {
 }
 
 func (cg *consumerGroup) catchupAndWait() int {
+	cg.mu.RLock()
+	defer cg.mu.RUnlock()
 	if cg.currentSession == nil {
 		panic("There is currently no session. Cannot catchup, but we shouldn't be at this point")
 	}
@@ -105,7 +107,9 @@ func (cg *consumerGroup) Consume(ctx context.Context, topics []string, handler s
 	errs = multierror.Append(errs, handler.Cleanup(session))
 
 	// remove current sessions
+	cg.mu.Lock()
 	cg.currentSession = nil
+	cg.mu.Unlock()
 
 	return errs.ErrorOrNil()
 }
@@ -169,7 +173,6 @@ type cgSession struct {
 }
 
 func newCgSession(ctx context.Context, generation int32, cg *consumerGroup, topics []string) *cgSession {
-
 	ctx, cancel := context.WithCancel(ctx)
 	cgs := &cgSession{
 		ctx:             ctx,

@@ -168,7 +168,8 @@ func (gg *GroupGraph) joint(topic string) bool {
 // DefineGroup creates a group graph with a given group name and a list of
 // edges.
 func DefineGroup(group Group, edges ...Edge) *GroupGraph {
-	gg := GroupGraph{group: string(group),
+	gg := GroupGraph{
+		group:              string(group),
 		codecs:             make(map[string]Codec),
 		callbacks:          make(map[string]ProcessCallback),
 		joinCheck:          make(map[string]bool),

@@ -68,7 +68,7 @@ func TestView_Reconnect(t *testing.T) {
 	errg.Go(func() error {
 		return view.Run(ctx)
 	})
-	pollTimed(t, "view-recovered", 10, view.Recovered)
+	pollTimed(t, "view-recovered", view.Recovered)
 
 	val := func() int64 {
 		val, err := view.Get("key")
@@ -79,7 +79,7 @@ func TestView_Reconnect(t *testing.T) {
 		return val.(int64)
 	}
 
-	pollTimed(t, "wait-first-value", 3, func() bool {
+	pollTimed(t, "wait-first-value", func() bool {
 		return val() > 0
 	})
 	firstVal := val()
@@ -88,7 +88,7 @@ func TestView_Reconnect(t *testing.T) {
 
 	// kill kafka connection
 	fi.SetReadError(io.EOF)
-	pollTimed(t, "view-reconnecting", 10, func() bool {
+	pollTimed(t, "view-reconnecting", func() bool {
 		return view.CurrentState() == goka.ViewStateConnecting
 	})
 
@@ -102,10 +102,10 @@ func TestView_Reconnect(t *testing.T) {
 
 	// connect kafka again, wait until it's running -> the value should have changed
 	fi.ResetErrors()
-	pollTimed(t, "view-running", 10, func() bool {
+	pollTimed(t, "view-running", func() bool {
 		return view.CurrentState() == goka.ViewStateRunning
 	})
-	pollTimed(t, "view-running", 5, func() bool {
+	pollTimed(t, "value-propagated", func() bool {
 		return val() > secondVal
 	})
 

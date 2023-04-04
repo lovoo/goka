@@ -80,7 +80,7 @@ func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
 	errg.Go(func() error {
 		return proc.Run(ctx)
 	})
-	pollTimed(t, "proc running", 10, proc.Recovered, func() bool {
+	pollTimed(t, "proc running", proc.Recovered, func() bool {
 		if val, _ := proc.Get("key-15"); val != nil && val.(int64) > 0 {
 			return true
 		}

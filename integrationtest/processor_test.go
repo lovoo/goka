@@ -223,6 +223,76 @@ func TestProcessorVisit(t *testing.T) {
 	require.NoError(t, err)
 }
 
+type (
+	gokaCtx = goka.Context
+	wrapper struct {
+		gokaCtx
+		value int64
+	}
+)
+
+func (w *wrapper) SetValue(value interface{}, options ...goka.ContextOption) {
+	val := value.(int64)
+	w.value = val
+	w.gokaCtx.SetValue(val + 1)
+}
+
+func TestProcessorContextWrapper(t *testing.T) {
+	gkt := tester.New(t)
+
+	// holds the last wrapper
+	var w *wrapper
+
+	// create a new processor, registering the tester
+	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("proc",
+		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			ctx.SetValue(msg)
+		}),
+		goka.Visitor("visit", func(ctx goka.Context, msg interface{}) {
+			ctx.SetValue(msg.(int64))
+		}),
+		goka.Persist(new(codec.Int64)),
+	),
+		goka.WithTester(gkt),
+		goka.WithContextWrapper(func(ctx goka.Context) goka.Context {
+			w = &wrapper{
+				gokaCtx: ctx,
+			}
+			return w
+		}),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	// start it
+	go func() {
+		defer close(done)
+		err := proc.Run(ctx)
+		if err != nil {
+			t.Errorf("error running processor: %v", err)
+		}
+	}()
+
+	// send a message
+	gkt.Consume("input", "key", int64(23))
+
+	// both wrapper value and real value are set
+	require.EqualValues(t, 23, w.value)
+	require.EqualValues(t, 24, gkt.TableValue("proc-table", "key"))
+
+	// also the visitor should wrap the context
+	err := proc.VisitAll(ctx, "visit", int64(815))
+	require.NoError(t, err)
+
+	// both values are set again
+	require.EqualValues(t, 815, w.value)
+	require.EqualValues(t, 816, gkt.TableValue("proc-table", "key"))
+
+	cancel()
+	<-done
+}
+
 /*
 import (
 	"context"

@@ -40,6 +40,7 @@ type Processor struct {
 	log     logger
 	brokers []string
 
+	// hook used to be notified whenever the processor has rebalanced to a new assignment
 	rebalanceCallback RebalanceCallback
 
 	// rwmutex protecting read/write of partitions and lookuptables.
@@ -737,8 +738,8 @@ func (g *Processor) Cleanup(session sarama.ConsumerGroupSession) error {
 // WaitForReady waits until the processor is ready to consume messages
 // (or is actually consuming messages)
 // i.e., it is done catching up all partition tables, joins and lookup tables
-func (g *Processor) WaitForReady() {
-	g.waitForReady(context.Background())
+func (g *Processor) WaitForReady() error {
+	return g.waitForReady(context.Background())
 }
 
 // WaitForReadyContext is context aware option of WaitForReady.

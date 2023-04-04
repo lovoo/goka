@@ -12,10 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	pollWaitSecs = 15.0
-)
-
 // TestAutoCommit tests/demonstrates the behavior of disabling the auto-commit functionality.
 // The autocommiter sends the offsets of the marked messages to the broker regularily. If the processor shuts down
 // (or the group rebalances), the offsets are sent one last time, so just turning it of is not enough.
@@ -78,7 +74,7 @@ func TestAutoCommit(t *testing.T) {
 
 	// run the first processor
 	_, cancel, done := runProc(createProc())
-	pollTimed(t, "all-received1", pollWaitSecs, func() bool {
+	pollTimed(t, "all-received1", func() bool {
 		return len(offsets) == 10 && offsets[0] == 0
 	})
 
@@ -96,7 +92,7 @@ func TestAutoCommit(t *testing.T) {
 
 	// --> we'll receive all messages again
 	// --> i.e., no offsets were committed
-	pollTimed(t, "all-received2", pollWaitSecs, func() bool {
+	pollTimed(t, "all-received2", func() bool {
 		return len(offsets) == 10 && offsets[0] == 0
 	})
 
@@ -153,7 +149,7 @@ func TestUnmarkedMessages(t *testing.T) {
 
 	// run the first processor
 	runProc(createProc())
-	pollTimed(t, "all-received1", pollWaitSecs, func() bool {
+	pollTimed(t, "all-received1", func() bool {
 		return len(values) == 2 && values[0] == 1
 	})
 
@@ -162,7 +158,7 @@ func TestUnmarkedMessages(t *testing.T) {
 
 	// restart -> we'll only receive the second message
 	runProc(createProc())
-	pollTimed(t, "all-received2", pollWaitSecs, func() bool {
+	pollTimed(t, "all-received2", func() bool {
 		return len(values) == 1 && values[0] == 2
 	})
 }

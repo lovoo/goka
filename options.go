@@ -129,6 +129,7 @@ type poptions struct {
 
 	updateCallback         UpdateCallback
 	rebalanceCallback      RebalanceCallback
+	contextWrapper         ContextWrapper
 	partitionChannelSize   int
 	hasher                 func() hash.Hash32
 	nilHandling            NilHandling
@@ -144,6 +145,15 @@ type poptions struct {
 		producer       ProducerBuilder
 		topicmgr       TopicManagerBuilder
 		backoff        BackoffBuilder
+	}
+}
+
+// WithContextWrapper allows to intercept the context passed to each callback invocation.
+// The wrapper function will be called concurrently across all partitions the returned context
+// must not be shared.
+func WithContextWrapper(wrapper ContextWrapper) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.contextWrapper = wrapper
 	}
 }
 
@@ -329,6 +339,8 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	opt.log = defaultLogger
 	opt.hasher = DefaultHasher()
 	opt.backoffResetTime = defaultBackoffResetTime
+	// default context wrapper returns the original context
+	opt.contextWrapper = func(ctx Context) Context { return ctx }
 
 	for _, o := range opts {
 		o(opt, gg)
