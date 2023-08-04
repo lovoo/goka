@@ -10,6 +10,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/hashicorp/go-multierror"
+
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
@@ -812,15 +813,27 @@ func (g *Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim sara
 			}
 
 			select {
-			case part.input <- &message{
-				key:       string(msg.Key),
-				topic:     msg.Topic,
-				offset:    msg.Offset,
-				partition: msg.Partition,
-				timestamp: msg.Timestamp,
-				headers:   msg.Headers,
-				value:     msg.Value,
-			}:
+			case part.input <- func() *message {
+				m := &message{
+					key:       string(msg.Key),
+					topic:     msg.Topic,
+					offset:    msg.Offset,
+					partition: msg.Partition,
+					timestamp: msg.Timestamp,
+					headers:   msg.Headers,
+					value:     msg.Value,
+				}
+				g.log.Debugf(
+					"topic=%s, partition=%v, key=%s, offset=%v, timestamp=%v, value=%v",
+					msg.Topic,
+					msg.Partition,
+					string(msg.Key),
+					msg.Offset,
+					msg.Timestamp,
+					msg.Value,
+				)
+				return m
+			}():
 			case <-stopping:
 				return nil
 			case <-session.Context().Done():
