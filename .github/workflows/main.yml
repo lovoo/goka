@@ -5,6 +5,8 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+env:
+    GO_VERSION: '1.20'
 
 jobs:
   unit:
@@ -15,7 +17,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.20
+            go-version: "^${{ env.GO_VERSION }}"
 
       - name: Test
         shell: bash
@@ -30,7 +32,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.20
+            go-version: "^${{ env.GO_VERSION }}"
 
       - name: Services
         shell: bash
