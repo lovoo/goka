@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/gorilla/mux"
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"

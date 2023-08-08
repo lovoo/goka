@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
@@ -223,7 +223,9 @@ func (v *View) runStateMerger(ctx context.Context) {
 //
 // The view will shutdown in case of errors or when the context is closed.
 // It can be initialized with autoreconnect
-//  view := NewView(..., WithViewAutoReconnect())
+//
+//	view := NewView(..., WithViewAutoReconnect())
+//
 // which makes the view internally reconnect in case of errors.
 // Then it will only stop by canceling the context (see example).
 func (v *View) Run(ctx context.Context) (rerr error) {
@@ -459,20 +461,20 @@ func (v *View) CurrentState() ViewState {
 //
 // Example
 //
-//  view := goka.NewView(...)
-//  go view.Run(ctx)
+//	view := goka.NewView(...)
+//	go view.Run(ctx)
 //
-//  go func(){
-//    obs := view.ObserveStateChanges()
-//    defer obs.Stop()
-//    for {
-//      select{
-//        case state, ok := <-obs.C:
-//          // handle state (or closed channel)
-//        case <-ctx.Done():
-//      }
-//    }
-//  }()
+//	go func(){
+//	  obs := view.ObserveStateChanges()
+//	  defer obs.Stop()
+//	  for {
+//	    select{
+//	      case state, ok := <-obs.C:
+//	        // handle state (or closed channel)
+//	      case <-ctx.Done():
+//	    }
+//	  }
+//	}()
 func (v *View) ObserveStateChanges() *StateChangeObserver {
 	return v.state.ObserveStateChange()
 }

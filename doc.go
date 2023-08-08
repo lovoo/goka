@@ -1,6 +1,6 @@
 //go:generate mockgen -self_package github.com/lovoo/goka -package goka -destination mockstorage.go github.com/lovoo/goka/storage Storage
 //go:generate mockgen -self_package github.com/lovoo/goka -package goka -destination mocks.go github.com/lovoo/goka TopicManager,Producer,Broker
-//go:generate mockgen -self_package github.com/lovoo/goka -package goka -destination mockssarama.go github.com/Shopify/sarama Client,ClusterAdmin
+//go:generate mockgen -self_package github.com/lovoo/goka -package goka -destination mockssarama.go github.com/IBM/sarama Client,ClusterAdmin
 
 /*
 Package goka is a stateful stream processing library for Apache Kafka (version 0.9+) that eases
@@ -10,7 +10,7 @@ group.
 A microservice modifies and serves the content of a table employing two complementary object types:
 processors and views.
 
-Processors
+# Processors
 
 A processor is a set of callback functions that modify the group table when messages arrive and may
 also emit messages into other topics.
@@ -26,12 +26,11 @@ When multiple processor instances start in the same consumer group, the instance
 co-partitioned input topics and load the respective group table partitions from the group topic.
 A local disk storage minimizes recovery time by caching partitions of group table.
 
-Views
+# Views
 
 A view is a materialized (ie, persistent) cache of a group table.
 A view subscribes for the updates of all partitions of a group table and keeps local disk storage
 in sync with the group topic.
 With a view, one can easily serve up-to-date content of the group table via, for example, gRPC.
-
 */
 package goka

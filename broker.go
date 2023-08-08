@@ -1,6 +1,6 @@
 package goka
 
-import "github.com/Shopify/sarama"
+import "github.com/IBM/sarama"
 
 // Broker is an interface for the sarama broker
 type Broker interface {

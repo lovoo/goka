@@ -41,7 +41,7 @@ You can install Goka by running the following command:
 
 ## Configuration
 
-Goka relies on [Sarama](https://github.com/Shopify/sarama) to perform the actual communication with Kafka, which offers many configuration settings. The config is documented [here](https://godoc.org/github.com/Shopify/sarama#Config).
+Goka relies on [Sarama](https://github.com/IBM/sarama) to perform the actual communication with Kafka, which offers many configuration settings. The config is documented [here](https://godoc.org/github.com/IBM/sarama#Config).
 
 In most cases, you need to modify the config, e.g. to set the Kafka Version.
 

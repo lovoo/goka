@@ -3,7 +3,7 @@ package tester
 import (
 	"fmt"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 )
 
 // MockTopicManager mimicks the behavior of the real topic manager

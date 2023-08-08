@@ -3,7 +3,7 @@ package goka
 import (
 	"testing"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/lovoo/goka/storage"
 )
 

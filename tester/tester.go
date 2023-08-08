@@ -9,7 +9,7 @@ import (
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/storage"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 )
 
 type emitOption struct {
