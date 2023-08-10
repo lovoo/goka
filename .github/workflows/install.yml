@@ -2,9 +2,11 @@ name: install
 
 on:
   push:
-    branches: [master]
+    branches: [ '**' ]
   pull_request:
     branches: [master]
+env:
+    GO_VERSION: '1.20'
 
 jobs:
   install_go_get:
@@ -13,7 +15,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.18
+            go-version: "^${{ env.GO_VERSION }}"
 
       - name: Install
         shell: bash 

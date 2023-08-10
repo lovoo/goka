@@ -1,7 +1,7 @@
 package goka
 
 import (
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 )
 
 // Headers represents custom message headers with a convenient interface.

@@ -3,7 +3,7 @@ package goka
 import (
 	"sync"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 )
 
 // Promise as in https://en.wikipedia.org/wiki/Futures_and_promises

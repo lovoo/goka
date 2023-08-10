@@ -3,7 +3,7 @@ package goka
 import (
 	"hash"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 )
 
 // ProducerBuilder create a Kafka producer.

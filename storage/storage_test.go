@@ -2,7 +2,6 @@ package storage
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -140,7 +139,7 @@ func TestSetGet(t *testing.T) {
 		hasKey bool
 	)
 
-	tmpdir, err := ioutil.TempDir("", "goka_storage_TestSetGet")
+	tmpdir, err := os.MkdirTemp("", "goka_storage_TestSetGet")
 	require.NoError(t, err)
 
 	db, err := leveldb.OpenFile(tmpdir, nil)
@@ -195,7 +194,7 @@ func TestSetGet(t *testing.T) {
 }
 
 func TestLeveldbStorage(t *testing.T) {
-	path, err := ioutil.TempDir("", "goka_storage_leveldb_test")
+	path, err := os.MkdirTemp("", "goka_storage_leveldb_test")
 	require.NoError(t, err)
 
 	newStorage := func(delete bool, t *testing.T) Storage {
