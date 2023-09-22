@@ -13,6 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// size of the channel used for the visitor, defined in goka/config.go
+var (
+	visitChannelSize = 100
+	numPartitions    = 10
+)
+
 // TestProcessorVisit tests the visiting functionality.
 func TestProcessorVisit(t *testing.T) {
 	brokers := initSystemTest(t)
@@ -34,7 +40,7 @@ func TestProcessorVisit(t *testing.T) {
 	}
 
 	createEmitter := func(topic goka.Stream) (*goka.Emitter, func()) {
-		err = tm.EnsureStreamExists(string(topic), 10)
+		err = tm.EnsureStreamExists(string(topic), numPartitions)
 		require.NoError(t, err)
 
 		em, err := goka.NewEmitter(brokers, topic, new(codec.Int64),
@@ -90,7 +96,7 @@ func TestProcessorVisit(t *testing.T) {
 
 		pollTimed(t, "recovered", proc.Recovered)
 
-		em.EmitSync("value1", int64(1))
+		_ = em.EmitSync("value1", int64(1))
 
 		pollTimed(t, "value-ok", func() bool {
 			val1, _ := proc.Get("value1")
@@ -114,7 +120,7 @@ func TestProcessorVisit(t *testing.T) {
 
 		pollTimed(t, "recovered", proc.Recovered)
 
-		em.EmitSync("value1", int64(1))
+		_ = em.EmitSync("value1", int64(1))
 
 		pollTimed(t, "value-ok", func() bool {
 			val1, _ := proc.Get("value1")
@@ -128,6 +134,87 @@ func TestProcessorVisit(t *testing.T) {
 		require.Error(t, <-done)
 	})
 
+	// Tests if a panic occurs while visiting, while the iterator is still pushing
+	// messages into the partition processor's visit-channel.
+	// Regression test for https://github.com/lovoo/goka/issues/433
+	t.Run("visit-panic-slow", func(t *testing.T) {
+		group, input := nextTopics()
+		em, finish := createEmitter(input)
+		defer finish()
+		proc, cancel, done := runProc(createProc(group, input, 500*time.Millisecond))
+
+		pollTimed(t, "recovered", proc.Recovered)
+
+		// create twice as many items in the table as the visit-channel's size.
+		// This way we can make sure that the visitor will have to block on
+		// pushing it to the partition-processor visitInputChannel.
+		numMsgs := visitChannelSize * numPartitions * 2
+		for i := 0; i < numMsgs; i++ {
+			_, _ = em.Emit(fmt.Sprintf("value-%d", i), int64(1))
+		}
+
+		// wait for all messages to have propagated
+		pollTimed(t, "value-ok", func() bool {
+			val1, _ := proc.Get(fmt.Sprintf("value-%d", numMsgs-1))
+			return val1 != nil && val1.(int64) == 1
+		})
+
+		// pass wrong type to visitor -> which will be passed to the visit --> will panic
+		require.Error(t, proc.VisitAll(context.Background(), "visitor", "asdf"))
+
+		// no need to cancel, the visitAll will kill the processor.
+		_ = cancel
+		require.Error(t, <-done)
+	})
+
+	// Verifies a visit is gracefully shutdown when the processor is canceled while
+	// the visit is running.
+	t.Run("visit-shutdown-slow", func(t *testing.T) {
+		group, input := nextTopics()
+		em, finish := createEmitter(input)
+		defer finish()
+		proc, cancel, done := runProc(createProc(group, input, 1*time.Second))
+
+		pollTimed(t, "recovered", proc.Recovered)
+
+		// create twice as many items in the table as the visit-channel's size.
+		// This way we can make sure that the visitor will have to block on
+		// pushing it to the partition-processor visitInputChannel.
+		numMsgs := visitChannelSize * numPartitions * 2
+		for i := 0; i < numMsgs; i++ {
+			_, _ = em.Emit(fmt.Sprintf("value-%d", i), int64(1))
+		}
+
+		// wait for all messages to have propagated
+		pollTimed(t, "value-ok", func() bool {
+			val1, _ := proc.Get(fmt.Sprintf("value-%d", numMsgs-1))
+			return val1 != nil && val1.(int64) == 1
+		})
+
+		visitCtx, visitCancel := context.WithCancel(context.Background())
+		defer visitCancel()
+
+		var (
+			visitErr  error
+			visitDone = make(chan struct{})
+		)
+		// pass wrong type to visitor -> which will be passed to the visit --> will panic
+		go func() {
+			defer close(visitDone)
+			visitErr = proc.VisitAll(visitCtx, "visitor", int64(25))
+		}()
+
+		time.Sleep(500 * time.Millisecond)
+		// stop the visit
+		visitCancel()
+
+		<-visitDone
+		require.ErrorContains(t, visitErr, "canceled")
+
+		cancel()
+		require.NoError(t, <-done)
+	})
+
 	t.Run("visit-shutdown", func(t *testing.T) {
 		group, input := nextTopics()
 		em, finish := createEmitter(input)
@@ -138,8 +225,8 @@ func TestProcessorVisit(t *testing.T) {
 
 		// emit two values where goka.DefaultHasher says they're in the same partition.
 		// We need to achieve this to test that a shutdown will visit one value but not the other
-		em.EmitSync("0", int64(1))
-		em.EmitSync("02", int64(1))
+		_ = em.EmitSync("0", int64(1))
+		_ = em.EmitSync("02", int64(1))
 
 		pollTimed(t, "value-ok", func() bool {
 			val1, _ := proc.Get("02")
@@ -196,7 +283,7 @@ func TestProcessorVisit(t *testing.T) {
 		defer emFinish()
 		// create the group table manually, otherwise the proc and the view are racing
 
-		tm.EnsureTableExists(string(goka.GroupTable(group)), 10)
+		_ = tm.EnsureTableExists(string(goka.GroupTable(group)), 10)
 		// scenario: sleep in visit, processor shuts down--> visit should cancel too
 		proc, cancel, done := runProc(createProc(group, input, 500*time.Millisecond))
 		view, viewCancel, viewDone := runView(createView(group))
@@ -207,7 +294,7 @@ func TestProcessorVisit(t *testing.T) {
 		// emit two values where goka.DefaultHasher says they're in the same partition.
 		// We need to achieve this to test that a shutdown will visit one value but not the other
 		for i := 0; i < 100; i++ {
-			em.Emit(fmt.Sprintf("value-%d", i), int64(1))
+			_, _ = em.Emit(fmt.Sprintf("value-%d", i), int64(1))
 		}
 		// emFinish()
 
@@ -251,7 +338,7 @@ func TestProcessorVisit(t *testing.T) {
 		em, finish := createEmitter(input)
 		defer finish()
 		// create the group table manually, otherwise the proc and the view are racing
-		tm.EnsureTableExists(string(goka.GroupTable(group)), 10)
+		_ = tm.EnsureTableExists(string(goka.GroupTable(group)), 10)
 		// scenario: sleep in visit, processor shuts down--> visit should cancel too
 		proc1, cancel1, done1 := runProc(createProc(group, input, 500*time.Millisecond))
 
@@ -260,7 +347,7 @@ func TestProcessorVisit(t *testing.T) {
 		// emit two values where goka.DefaultHasher says they're in the same partition.
 		// We need to achieve this to test that a shutdown will visit one value but not the other
 		for i := 0; i < 100; i++ {
-			em.Emit(fmt.Sprintf("value-%d", i), int64(1))
+			_, _ = em.Emit(fmt.Sprintf("value-%d", i), int64(1))
 		}
 
 		// poll until all values are there
