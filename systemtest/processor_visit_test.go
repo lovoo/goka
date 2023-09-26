@@ -198,16 +198,19 @@ func TestProcessorVisit(t *testing.T) {
 			visitErr  error
 			visitDone = make(chan struct{})
 		)
-		// pass wrong type to visitor -> which will be passed to the visit --> will panic
+
+		// start the visitor
 		go func() {
 			defer close(visitDone)
 			visitErr = proc.VisitAll(visitCtx, "visitor", int64(25))
 		}()
 
+		// wait half of what the processor takes for message to process, so we can stop it in the middle
 		time.Sleep(500 * time.Millisecond)
 		// stop the visit
 		visitCancel()
 
+		// wait for visiting done
 		<-visitDone
 		require.ErrorContains(t, visitErr, "canceled")
 
