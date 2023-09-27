@@ -156,7 +156,7 @@ func newPartitionProcessor(partition int32,
 		joins:           make(map[string]*PartitionTable),
 		input:           make(chan *message, opts.partitionChannelSize),
 		inputTopics:     topicList,
-		visitInput:      make(chan *visit, 100),
+		visitInput:      make(chan *visit, defaultPPVisitChannelSize),
 		visitCallbacks:  visitCallbacks,
 		graph:           graph,
 		stats:           newPartitionProcStats(topicList, outputList),
@@ -693,12 +693,25 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 	}
 
 	var wg sync.WaitGroup
-	// drain the channel and set all items to done we have added.
-	// Otherwise the caller will wait forever on the waitgroup
-	drainVisitInput := func() {
+
+	// drains the channel and drops out when closed.
+	// This is done when the processor shuts down during visit
+	// and makes sure the waitgroup is fully counted down.
+	drainUntilClose := func() {
+		for range pp.visitInput {
+			wg.Done()
+		}
+	}
+
+	// drains the input channel until there are no more items.
+	// does not wait for close, because the channel stays open for the next visit
+	drainUntilEmpty := func() {
 		for {
 			select {
-			case <-pp.visitInput:
+			case _, ok := <-pp.visitInput:
+				if !ok {
+					return
+				}
 				wg.Done()
 			default:
 				return
@@ -717,11 +730,11 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 		wg.Add(1)
 		select {
 		case <-stopping:
-			drainVisitInput()
+			drainUntilClose()
 			wg.Done()
 			return ErrVisitAborted
 		case <-ctx.Done():
-			drainVisitInput()
+			drainUntilEmpty()
 			wg.Done()
 			return ctx.Err()
 		// enqueue the visit
@@ -747,9 +760,10 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 	}()
 	select {
 	case <-stopping:
-		drainVisitInput()
+		drainUntilClose()
 		return ErrVisitAborted
 	case <-ctx.Done():
+		drainUntilEmpty()
 		return ctx.Err()
 	case <-wgDone:
 	}

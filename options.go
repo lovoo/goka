@@ -50,6 +50,8 @@ const (
 	defaultBackoffStep = 10 * time.Second
 	// maximum duration to wait for the backoff
 	defaultBackoffMax = 120 * time.Second
+
+	defaultPPVisitChannelSize = 100
 )
 
 // DefaultProcessorStoragePath is the default path where processor state
