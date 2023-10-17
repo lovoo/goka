@@ -15,6 +15,12 @@ type Builder func(topic string, partition int32) (Storage, error)
 // DefaultBuilder builds a LevelDB storage with default configuration.
 // The database will be stored in the given path.
 func DefaultBuilder(path string) Builder {
+	return LevelDBBuilder(path)
+}
+
+// LevelDBBuilder builds a LevelDB storage with default configuration.
+// The database will be stored in the given path.
+func LevelDBBuilder(path string) Builder {
 	return func(topic string, partition int32) (Storage, error) {
 		fp := filepath.Join(path, fmt.Sprintf("%s.%d", topic, partition))
 		db, err := leveldb.OpenFile(fp, nil)
