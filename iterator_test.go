@@ -1,7 +1,7 @@
 package goka
 
 import (
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/lovoo/goka/codec"
@@ -11,7 +11,7 @@ import (
 )
 
 func TestIterator(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "goka_storage_TestIterator")
+	tmpdir, err := os.MkdirTemp("", "goka_storage_TestIterator")
 	require.NoError(t, err)
 
 	db, err := leveldb.OpenFile(tmpdir, nil)

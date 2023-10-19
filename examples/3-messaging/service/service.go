@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 
@@ -39,7 +39,7 @@ func send(emitter *goka.Emitter, stream goka.Stream) func(w http.ResponseWriter,
 	return func(w http.ResponseWriter, r *http.Request) {
 		var m messaging.Message
 
-		b, err := ioutil.ReadAll(r.Body)
+		b, err := io.ReadAll(r.Body)
 		if err != nil {
 			fmt.Fprintf(w, "error: %v", err)
 			return
