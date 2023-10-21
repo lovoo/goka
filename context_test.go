@@ -327,8 +327,7 @@ func TestContext_Set(t *testing.T) {
 			st: &storageProxy{
 				Storage: st,
 			},
-			stats:       newTableStats(),
-			updateStats: make(chan func(), 10),
+			stats: newTableStats(),
 		}
 	)
 	st.EXPECT().Set(key, []byte(value)).Return(nil)
@@ -376,9 +375,8 @@ func TestContext_GetSetStateful(t *testing.T) {
 			st: &storageProxy{
 				Storage: st,
 			},
-			state:       newPartitionTableState().SetState(State(PartitionRunning)),
-			stats:       newTableStats(),
-			updateStats: make(chan func(), 10),
+			state: newPartitionTableState().SetState(State(PartitionRunning)),
+			stats: newTableStats(),
 		}
 	)
 

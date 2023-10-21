@@ -28,7 +28,7 @@ const (
 )
 
 const (
-	statsHwmUpdateInterval = 5 * time.Second
+	statsHwmUpdateInterval = 60 * time.Second
 	fetchStatsTimeout      = 10 * time.Second
 )
 
@@ -93,20 +93,22 @@ func newOutputStats() *OutputStats {
 }
 
 func (is *InputStats) clone() *InputStats {
-	var clone = *is
+	clone := *is
 	return &clone
 }
 
 func (os *OutputStats) clone() *OutputStats {
-	var clone = *os
+	clone := *os
 	return &clone
 }
 
-type inputStatsMap map[string]*InputStats
-type outputStatsMap map[string]*OutputStats
+type (
+	inputStatsMap  map[string]*InputStats
+	outputStatsMap map[string]*OutputStats
+)
 
 func (isp inputStatsMap) clone() map[string]*InputStats {
-	var c = map[string]*InputStats{}
+	c := map[string]*InputStats{}
 	if isp == nil {
 		return c
 	}
@@ -117,7 +119,7 @@ func (isp inputStatsMap) clone() map[string]*InputStats {
 }
 
 func (osp outputStatsMap) clone() map[string]*OutputStats {
-	var c = map[string]*OutputStats{}
+	c := map[string]*OutputStats{}
 	if osp == nil {
 		return c
 	}
@@ -132,7 +134,7 @@ func newRecoveryStats() *RecoveryStats {
 }
 
 func (rs *RecoveryStats) clone() *RecoveryStats {
-	var rsCopy = *rs
+	rsCopy := *rs
 	return &rsCopy
 }
 
