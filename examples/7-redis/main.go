@@ -4,9 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
 	"strconv"
 	"time"
 
@@ -61,7 +61,7 @@ func main() {
 }
 
 func readConfig(filename string) (*Config, error) {
-	b, err := ioutil.ReadFile(filename)
+	b, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}

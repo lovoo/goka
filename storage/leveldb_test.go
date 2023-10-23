@@ -2,7 +2,7 @@ package storage
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,7 +22,7 @@ func init() {
 }
 
 func BenchmarkStateStorage_unbatched(b *testing.B) {
-	tmpdir, err := ioutil.TempDir("", "benchmark_statestorage_unbatched")
+	tmpdir, err := os.MkdirTemp("", "benchmark_statestorage_unbatched")
 	require.NoError(b, err)
 
 	db, err := leveldb.OpenFile(tmpdir, nil)
@@ -39,7 +39,7 @@ func BenchmarkStateStorage_unbatched(b *testing.B) {
 }
 
 func BenchmarkStateStorage_transactioned(b *testing.B) {
-	tmpdir, err := ioutil.TempDir("", "benchmark_statestorage_transactioned")
+	tmpdir, err := os.MkdirTemp("", "benchmark_statestorage_transactioned")
 	require.NoError(b, err)
 
 	db, err := leveldb.OpenFile(tmpdir, nil)

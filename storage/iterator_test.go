@@ -1,14 +1,14 @@
 package storage
 
 import (
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
 func TestIterator(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "goka_storage_TestIterator")
+	tmpdir, err := os.MkdirTemp("", "goka_storage_TestIterator")
 	assertNil(t, err)
 
 	db, err := leveldb.OpenFile(tmpdir, nil)

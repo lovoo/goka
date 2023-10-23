@@ -3,7 +3,6 @@ package storage
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -18,7 +17,7 @@ type TeardownFunc func(*testing.T)
 func TempDir(t *testing.T) (string, TeardownFunc) {
 	t.Helper()
 
-	path, err := ioutil.TempDir(os.TempDir(), "goka_test_")
+	path, err := os.MkdirTemp(os.TempDir(), "goka_test_")
 	if err != nil {
 		t.Fatalf("error creating temporary directory: %v", err)
 	}
