@@ -631,6 +631,7 @@ func TestPT_loadMessages(t *testing.T) {
 			topic                  = "some-topic"
 			partition        int32
 			consumer         = defaultSaramaAutoConsumerMock(t)
+			ctx              = context.Background()
 		)
 		pt, bm, ctrl := defaultPT(
 			t,
@@ -656,7 +657,8 @@ func TestPT_loadMessages(t *testing.T) {
 					return
 				default:
 				}
-				if pt.stats.Stalled {
+
+				if pt.fetchStats(ctx).Stalled {
 					return
 				}
 			}

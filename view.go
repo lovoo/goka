@@ -149,7 +149,6 @@ func (v *View) createPartitions(brokers []string) (rerr error) {
 }
 
 func (v *View) runStateMerger(ctx context.Context) {
-
 	var (
 		states = make(map[int]PartitionStatus)
 		m      sync.Mutex
@@ -164,14 +163,14 @@ func (v *View) runStateMerger(ctx context.Context) {
 		defer m.Unlock()
 		states[idx] = PartitionStatus(state)
 
-		var lowestState = PartitionStatus(-1)
+		lowestState := PartitionStatus(-1)
 
 		for _, partitionState := range states {
 			if lowestState == -1 || partitionState < lowestState {
 				lowestState = partitionState
 			}
 		}
-		var newState = ViewState(-1)
+		newState := ViewState(-1)
 		switch lowestState {
 		case PartitionStopped:
 			newState = ViewStateIdle
@@ -249,7 +248,6 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 
 	for _, partition := range v.partitions {
 		partition := partition
-		go partition.RunStatsLoop(ctx)
 		recoverErrg.Go(func() error {
 			return partition.SetupAndRecover(recoverCtx, v.opts.autoreconnect)
 		})
@@ -333,7 +331,6 @@ func (v *View) Topic() string {
 // Get can be called by multiple goroutines concurrently.
 // Get can only be called after Recovered returns true.
 func (v *View) Get(key string) (interface{}, error) {
-
 	if v.state.IsState(State(ViewStateIdle)) || v.state.IsState(State(ViewStateInitializing)) {
 		return nil, fmt.Errorf("View is either not running, not correctly initialized or stopped again. It's not safe to retrieve values")
 	}
