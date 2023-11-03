@@ -89,6 +89,24 @@ func TestLeveldbStorage(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("has", func(t *testing.T) {
+		st := newStorage(true, t)
+
+		st.Open()
+		time.Sleep(1 * time.Second)
+
+		has, err := st.Has("key-1")
+		require.NoError(t, err)
+		require.False(t, has)
+
+		err = st.Set("key-1", []byte("content-1"))
+		require.NoError(t, err)
+
+		has, err = st.Has("key-1")
+		require.NoError(t, err)
+		require.True(t, has)
+	})
+
 	t.Run("set-reopen", func(t *testing.T) {
 		st := newStorage(true, t)
 
@@ -128,66 +146,6 @@ func TestLeveldbStorage(t *testing.T) {
 		require.Equal(t, int64(101), offset)
 		require.NoError(t, err)
 	})
-}
-
-func TestSetGet(t *testing.T) {
-	var (
-		err    error
-		hasKey bool
-	)
-
-	tmpdir, err := os.MkdirTemp("", "goka_storage_TestSetGet")
-	require.NoError(t, err)
-
-	db, err := leveldb.OpenFile(tmpdir, nil)
-	require.NoError(t, err)
-
-	storage, err := New(db)
-	require.NoError(t, err)
-
-	hasKey, err = storage.Has("example1")
-	require.NoError(t, err)
-	require.False(t, hasKey)
-
-	value, err := storage.Get("example1")
-	require.True(t, value == nil)
-	require.NoError(t, err)
-
-	err = storage.Set("example1", []byte("example-message"))
-	require.NoError(t, err)
-
-	hasKey, err = storage.Has("example1")
-	require.NoError(t, err)
-	require.True(t, hasKey)
-
-	value, err = storage.Get("example1")
-	require.NoError(t, err)
-
-	require.NoError(t, storage.Delete("example1"))
-	hasKey, err = storage.Has("example1")
-	require.NoError(t, err)
-	require.False(t, hasKey)
-
-	// test iteration
-	require.NoError(t, storage.Set("key1", []byte("value1")))
-	require.NoError(t, storage.Set("key2", []byte("value2")))
-	iter, err := storage.Iterator()
-	require.NoError(t, err)
-	defer iter.Release()
-	messages := make(map[string]string)
-
-	for iter.Next() {
-		key := string(iter.Key())
-		val, err := iter.Value()
-		require.NoError(t, err)
-		messages[key] = string(val)
-	}
-	require.True(t, len(messages) == 2)
-	require.Equal(t, "value1", messages["key1"])
-	require.Equal(t, "value2", messages["key2"])
-
-	recoveredValue := string(value)
-	require.Equal(t, "example-message", recoveredValue)
 }
 
 func TestIterator(t *testing.T) {

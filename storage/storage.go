@@ -37,6 +37,7 @@ type Storage interface {
 
 	// Close closes the storage.
 	Close() error
+
 	// Has returns whether the given key exists in the database.
 	Has(key string) (bool, error)
 
