@@ -178,7 +178,7 @@ func runProcessor() {
 }
 
 func main() {
-	go runEmitter() // emits one message and stops
+	go runEmitter() // emits one message every second forever
 	runProcessor()  // press ctrl-c to stop
 }
 
