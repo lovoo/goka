@@ -3,8 +3,11 @@ package detector
 import (
 	"context"
 	"encoding/json"
+	"io"
+
 	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/examples/3-messaging"
+	"github.com/lovoo/goka/codec"
+	messaging "github.com/lovoo/goka/examples/3-messaging"
 	"github.com/lovoo/goka/examples/3-messaging/blocker"
 	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 )
@@ -14,9 +17,7 @@ const (
 	maxRate     = 0.5
 )
 
-var (
-	group goka.Group = "detector"
-)
+var group goka.Group = "detector"
 
 type Counters struct {
 	Sent     int
@@ -32,6 +33,11 @@ func (c *CountersCodec) Encode(value interface{}) ([]byte, error) {
 func (c *CountersCodec) Decode(data []byte) (interface{}, error) {
 	var m Counters
 	return &m, json.Unmarshal(data, &m)
+}
+
+func (c *CountersCodec) DecodeP(data []byte) (interface{}, io.Closer, error) {
+	dec, err := c.Decode(data)
+	return dec, codec.NoopCloser, err
 }
 
 func getValue(ctx goka.Context) *Counters {

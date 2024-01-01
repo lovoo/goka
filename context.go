@@ -170,6 +170,8 @@ type cbContext struct {
 	// tracking statistics for the output topic
 	trackOutputStats func(ctx context.Context, topic string, size int)
 
+	deferreds []func() error
+
 	msg      *message
 	done     bool
 	counters struct {
@@ -310,17 +312,25 @@ func (ctx *cbContext) Join(topic Table) interface{} {
 	if !ok {
 		ctx.Fail(fmt.Errorf("table %s not subscribed", topic))
 	}
-	data, err := v.st.Get(ctx.Key())
+	data, getCloser, err := v.st.GetP(ctx.Key())
 	if err != nil {
 		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", ctx.Key(), topic, err))
 	} else if data == nil {
 		return nil
 	}
 
-	value, err := ctx.graph.codec(string(topic)).Decode(data)
+	if getCloser != nil {
+		ctx.addDeferred(getCloser.Close)
+	}
+
+	value, decodeCloser, err := ctx.graph.codec(string(topic)).DecodeP(data)
 	if err != nil {
 		ctx.Fail(fmt.Errorf("error decoding value key %s of table %s: %v", ctx.Key(), topic, err))
 	}
+	if decodeCloser != nil {
+		ctx.addDeferred(decodeCloser.Close)
+	}
+
 	return value
 }
 
@@ -332,9 +342,12 @@ func (ctx *cbContext) Lookup(topic Table, key string) interface{} {
 	if !ok {
 		ctx.Fail(fmt.Errorf("topic %s not subscribed", topic))
 	}
-	val, err := v.Get(key)
+	val, getCloser, err := v.GetP(key)
 	if err != nil {
 		ctx.Fail(fmt.Errorf("error getting key %s of table %s: %v", key, topic, err))
+	}
+	if getCloser != nil {
+		ctx.addDeferred(getCloser.Close)
 	}
 	return val
 }
@@ -345,17 +358,26 @@ func (ctx *cbContext) valueForKey(key string) (interface{}, error) {
 		return nil, fmt.Errorf("Cannot access state in stateless processor")
 	}
 
-	data, err := ctx.table.Get(key)
+	data, closer, err := ctx.table.Get(key)
 	if err != nil {
 		return nil, fmt.Errorf("error reading value: %v", err)
-	} else if data == nil {
+	}
+	if closer != nil {
+		ctx.addDeferred(closer.Close)
+	}
+
+	if data == nil {
 		return nil, nil
 	}
 
-	value, err := ctx.graph.GroupTable().Codec().Decode(data)
+	value, decodeCloser, err := ctx.graph.GroupTable().Codec().DecodeP(data)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding value: %v", err)
 	}
+	if decodeCloser != nil {
+		ctx.addDeferred(decodeCloser.Close)
+	}
+
 	return value, nil
 }
 
@@ -450,6 +472,14 @@ func (ctx *cbContext) tryCommit(err error) {
 	if ctx.errors.ErrorOrNil() != nil {
 		ctx.asyncFailer(fmt.Errorf("could not commit message with key '%s': %w", ctx.Key(), ctx.errors.ErrorOrNil()))
 	} else {
+
+		// execute deferred commit functions in reverse order
+		for i := len(ctx.deferreds) - 1; i >= 0; i-- {
+			if err := ctx.deferreds[i](); err != nil {
+				ctx.asyncFailer(fmt.Errorf("error executing context deferred: %w", err))
+			}
+		}
+
 		ctx.commit()
 	}
 
@@ -482,4 +512,8 @@ func (ctx *cbContext) DeferCommit() func(err error) {
 			ctx.emitDone(err)
 		})
 	}
+}
+
+func (ctx *cbContext) addDeferred(def func() error) {
+	ctx.deferreds = append(ctx.deferreds, def)
 }

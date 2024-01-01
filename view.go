@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/IBM/sarama"
@@ -330,6 +331,41 @@ func (v *View) Topic() string {
 // Get returns the value for the key in the view, if exists. Nil if it doesn't.
 // Get can be called by multiple goroutines concurrently.
 // Get can only be called after Recovered returns true.
+func (v *View) GetP(key string) (interface{}, io.Closer, error) {
+	if v.state.IsState(State(ViewStateIdle)) || v.state.IsState(State(ViewStateInitializing)) {
+		return nil, storage.NoopCloser, fmt.Errorf("View is either not running, not correctly initialized or stopped again. It's not safe to retrieve values")
+	}
+
+	// find partition where key is located
+	partTable, err := v.find(key)
+	if err != nil {
+		return nil, storage.NoopCloser, err
+	}
+
+	// get key and return
+	data, storageCloser, err := partTable.Get(key)
+	if err != nil {
+		return nil, storage.NoopCloser, fmt.Errorf("error getting value (key %s): %v", key, err)
+	}
+
+	if data == nil {
+		return nil, storageCloser, nil
+	}
+
+	// decode value
+	value, codecCloser, err := v.opts.tableCodec.DecodeP(data)
+
+	// drop the close-error, no way to handle that anyway
+	_ = storageCloser.Close()
+
+	if err != nil {
+		return nil, storage.NoopCloser, fmt.Errorf("error decoding value (key %s): %v", key, err)
+	}
+
+	// return value and the closer to close the codec pool
+	return value, codecCloser, nil
+}
+
 func (v *View) Get(key string) (interface{}, error) {
 	if v.state.IsState(State(ViewStateIdle)) || v.state.IsState(State(ViewStateInitializing)) {
 		return nil, fmt.Errorf("View is either not running, not correctly initialized or stopped again. It's not safe to retrieve values")
@@ -342,14 +378,18 @@ func (v *View) Get(key string) (interface{}, error) {
 	}
 
 	// get key and return
-	data, err := partTable.Get(key)
+	data, storageCloser, err := partTable.Get(key)
 	if err != nil {
 		return nil, fmt.Errorf("error getting value (key %s): %v", key, err)
-	} else if data == nil {
+	}
+
+	defer storageCloser.Close()
+
+	if data == nil {
 		return nil, nil
 	}
 
-	// decode value
+	// decode value (not pooled)
 	value, err := v.opts.tableCodec.Decode(data)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding value (key %s): %v", key, err)

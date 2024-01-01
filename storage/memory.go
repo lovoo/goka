@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"sync"
@@ -102,6 +103,11 @@ func (m *memory) Get(key string) ([]byte, error) {
 
 	value := m.storage[key]
 	return value, nil
+}
+
+func (m *memory) GetP(key string) ([]byte, io.Closer, error) {
+	val, err := m.Get(key)
+	return val, NoopCloser, err
 }
 
 func (m *memory) Set(key string, value []byte) error {

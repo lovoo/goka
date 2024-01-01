@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -56,6 +57,8 @@ type Storage interface {
 	// Get returns the value associated with the given key. If the key does not
 	// exist, a nil will be returned.
 	Get(key string) ([]byte, error)
+
+	GetP(key string) ([]byte, io.Closer, error)
 
 	// Set stores a key-value pair.
 	Set(key string, value []byte) error
@@ -136,6 +139,11 @@ func (s *storage) Get(key string) ([]byte, error) {
 		return nil, fmt.Errorf("error getting from leveldb (key %s): %v", key, err)
 	}
 	return value, nil
+}
+
+func (s *storage) GetP(key string) ([]byte, io.Closer, error) {
+	val, err := s.Get(key)
+	return val, NoopCloser, err
 }
 
 func (s *storage) GetOffset(defValue int64) (int64, error) {

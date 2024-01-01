@@ -380,9 +380,9 @@ func TestContext_GetSetStateful(t *testing.T) {
 		}
 	)
 
-	st.EXPECT().Get(key).Return(nil, nil)
+	st.EXPECT().GetP(key).Return(nil, nil, nil)
 	st.EXPECT().Set(key, []byte(value)).Return(nil)
-	st.EXPECT().Get(key).Return([]byte(value), nil)
+	st.EXPECT().GetP(key).Return([]byte(value), codec.NoopCloser, nil)
 
 	graph := DefineGroup(group, Persist(new(codec.String)))
 	ctx := &cbContext{
@@ -537,11 +537,11 @@ func TestContext_Join(t *testing.T) {
 		syncFailer: func(err error) { panic(err) },
 	}
 
-	st.EXPECT().Get(key).Return([]byte(value), nil)
+	st.EXPECT().GetP(key).Return([]byte(value), codec.NoopCloser, nil)
 	v := ctx.Join(table)
 	require.Equal(t, value, v)
 
-	st.EXPECT().Get(key).Return(nil, errSome)
+	st.EXPECT().GetP(key).Return(nil, codec.NoopCloser, errSome)
 	require.Panics(t, func() { ctx.Join(table) })
 
 	require.Panics(t, func() { ctx.Join("other-table") })
@@ -586,11 +586,11 @@ func TestContext_Lookup(t *testing.T) {
 		syncFailer: func(err error) { panic(err) },
 	}
 
-	st.EXPECT().Get(key).Return([]byte(value), nil)
+	st.EXPECT().GetP(key).Return([]byte(value), codec.NoopCloser, nil)
 	v := ctx.Lookup(table, key)
 	require.Equal(t, value, v)
 
-	st.EXPECT().Get(key).Return(nil, errSome)
+	st.EXPECT().GetP(key).Return(nil, codec.NoopCloser, errSome)
 	require.Panics(t, func() { ctx.Lookup(table, key) })
 	require.Panics(t, func() { ctx.Lookup("other-table", key) })
 

@@ -1,5 +1,7 @@
 package storage
 
+import "io"
+
 // Null storage discards everything that it is given. This can be useful for
 // debugging.
 type Null struct {
@@ -29,6 +31,10 @@ func (n *Null) Has(key string) (bool, error) {
 // Get returns nil values.
 func (n *Null) Get(key string) ([]byte, error) {
 	return nil, nil
+}
+
+func (n *Null) GetP(key string) ([]byte, io.Closer, error) {
+	return nil, NoopCloser, nil
 }
 
 // Set will do nothing and doesn't error.

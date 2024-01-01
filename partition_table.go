@@ -3,6 +3,7 @@ package goka
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -567,11 +568,11 @@ func (p *PartitionTable) WaitRecovered() <-chan struct{} {
 }
 
 // Get returns the value for passed key
-func (p *PartitionTable) Get(key string) ([]byte, error) {
+func (p *PartitionTable) Get(key string) ([]byte, io.Closer, error) {
 	if err := p.readyToRead(); err != nil {
-		return nil, err
+		return nil, storage.NoopCloser, err
 	}
-	return p.st.Get(key)
+	return p.st.GetP(key)
 }
 
 // Has returns whether the storage contains passed key

@@ -2,6 +2,7 @@ package codec
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 )
 
@@ -23,6 +24,11 @@ func (d *Bytes) Decode(data []byte) (interface{}, error) {
 	return data, nil
 }
 
+// Decode of defaultCodec simply returns the data
+func (d *Bytes) DecodeP(data []byte) (interface{}, io.Closer, error) {
+	return data, NoopCloser, nil
+}
+
 // String is a commonly used codec to encode and decode string <-> []byte
 type String struct{}
 
@@ -38,6 +44,10 @@ func (c *String) Encode(value interface{}) ([]byte, error) {
 // Decode decodes from []byte to string
 func (c *String) Decode(data []byte) (interface{}, error) {
 	return string(data), nil
+}
+
+func (c *String) DecodeP(data []byte) (interface{}, io.Closer, error) {
+	return string(data), NoopCloser, nil
 }
 
 // Int64 is a commonly used codec to encode and decode string <-> []byte
@@ -59,4 +69,9 @@ func (c *Int64) Decode(data []byte) (interface{}, error) {
 		return 0, fmt.Errorf("Error parsing data from string %d: %v", intVal, err)
 	}
 	return intVal, nil
+}
+
+func (c *Int64) DecodeP(data []byte) (interface{}, io.Closer, error) {
+	dec, err := c.Decode(data)
+	return dec, NoopCloser, err
 }

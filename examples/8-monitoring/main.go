@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/pprof"
@@ -63,6 +64,11 @@ func (jc *userCodec) Decode(data []byte) (interface{}, error) {
 	return &c, nil
 }
 
+func (jc *userCodec) DecodeP(data []byte) (interface{}, io.Closer, error) {
+	dec, err := jc.Decode(data)
+	return dec, codec.NoopCloser, err
+}
+
 func runEmitter(ctx context.Context) (rerr error) {
 	emitter, err := goka.NewEmitter(brokers, topic,
 		new(codec.String))
@@ -103,12 +109,13 @@ func process(ctx goka.Context, msg interface{}) {
 	ctx.SetValue(u)
 	fmt.Printf("[proc] key: %s clicks: %d, msg: %v\n", ctx.Key(), u.Clicks, msg)
 }
+
 func runStatelessProcessor(ctx context.Context, monitor *monitor.Server) error {
 	g := goka.DefineGroup(group+"-stateless",
 		goka.Input(topic,
 			new(codec.String),
 			func(ctx goka.Context, msg interface{}) {
-				//ignored
+				// ignored
 			}),
 	)
 	p, err := goka.NewProcessor(brokers, g)
@@ -124,8 +131,8 @@ func runStatelessProcessor(ctx context.Context, monitor *monitor.Server) error {
 
 func runJoinProcessor(ctx context.Context,
 	monitor *monitor.Server,
-	joinGroupInitialized chan struct{}) error {
-
+	joinGroupInitialized chan struct{},
+) error {
 	g := goka.DefineGroup(joinGroup,
 		goka.Input(topic,
 			new(codec.String),
@@ -160,11 +167,10 @@ func runProcessor(ctx context.Context,
 	monitor *monitor.Server,
 	query *query.Server,
 	actions *actions.Server,
-	joinGroupInitialized chan struct{}) error {
-
+	joinGroupInitialized chan struct{},
+) error {
 	// helper function that waits the configured number of times
 	waitVisitor := func(ctx goka.Context, value interface{}) {
-
 		waitTime, ok := value.(int64)
 		if !ok {
 			return
@@ -245,7 +251,6 @@ func runView(errg *multierr.ErrGroup, ctx context.Context, root *mux.Router, mon
 	server := &http.Server{Addr: ":9095", Handler: root}
 
 	errg.Go(func() error {
-
 		root.HandleFunc("/{key}", func(w http.ResponseWriter, r *http.Request) {
 			value, _ := view.Get(mux.Vars(r)["key"])
 			data, _ := json.Marshal(value)
@@ -287,7 +292,6 @@ func pprofInit(root *mux.Router) {
 }
 
 func main() {
-
 	cfg := goka.DefaultConfig()
 	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 	cfg.Version = sarama.V2_4_0_0

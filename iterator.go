@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka/storage"
 )
 
@@ -16,6 +17,8 @@ type Iterator interface {
 	Key() string
 	// Return the value of the current item
 	// This value is already decoded with the view's codec (or nil, if it's nil)
+	// Note that the returned reference should not be changed and might be different after
+	// calling "Next", "Seek" or "Release".
 	Value() (interface{}, error)
 	// Release the iterator. After release, the iterator is not usable anymore
 	Release()
@@ -28,12 +31,16 @@ type Iterator interface {
 }
 
 type iterator struct {
-	iter  storage.Iterator
-	codec Codec
+	iter storage.Iterator
+
+	deferreds    []func() error
+	deferredErrs error
+	codec        Codec
 }
 
 // Next advances the iterator to the next key.
 func (i *iterator) Next() bool {
+	i.runDeferred()
 	return i.iter.Next()
 }
 
@@ -50,19 +57,39 @@ func (i *iterator) Value() (interface{}, error) {
 	} else if data == nil {
 		return nil, nil
 	}
-	return i.codec.Decode(data)
+	value, decodeCloser, err := i.codec.DecodeP(data)
+	if decodeCloser != nil {
+		i.deferreds = append(i.deferreds, decodeCloser.Close)
+	}
+	return value, err
 }
 
 // Err returns the possible iteration error.
 func (i *iterator) Err() error {
+	if i.deferredErrs != nil {
+		return i.deferredErrs
+	}
 	return i.iter.Err()
 }
 
 // Releases releases the iterator. The iterator is not usable anymore after calling Release.
 func (i *iterator) Release() {
+	i.runDeferred()
 	i.iter.Release()
 }
 
 func (i *iterator) Seek(key string) bool {
+	i.runDeferred()
 	return i.iter.Seek([]byte(key))
+}
+
+func (i *iterator) runDeferred() {
+	var err *multierror.Error
+	for idx, def := range i.deferreds {
+		err = multierror.Append(err, def())
+		i.deferreds[idx] = nil // reset it for the garbage collector
+	}
+	i.deferredErrs = err.ErrorOrNil()
+	// reset length, but keep the slice
+	i.deferreds = i.deferreds[:0]
 }

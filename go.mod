@@ -3,7 +3,7 @@ module github.com/lovoo/goka
 go 1.20
 
 require (
-	github.com/IBM/sarama v1.41.3
+	github.com/IBM/sarama v1.41.2
 	github.com/go-stack/stack v1.8.1
 	github.com/golang/mock v1.6.0
 	github.com/gorilla/mux v1.8.0
