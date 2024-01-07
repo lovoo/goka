@@ -6,6 +6,7 @@ import (
 	"io"
 	"strconv"
 
+	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/storage"
 
 	redis "gopkg.in/redis.v5"
@@ -55,7 +56,7 @@ func (s *redisStorage) Get(key string) ([]byte, error) {
 func (s *redisStorage) GetP(key string) ([]byte, io.Closer, error) {
 	val, err := s.Get(key)
 
-	return val, storage.NoopCloser, err
+	return val, codec.NoopCloser, err
 }
 
 func (s *redisStorage) GetOffset(defValue int64) (int64, error) {

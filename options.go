@@ -398,7 +398,7 @@ type ViewOption func(*voptions, Table, Codec)
 type voptions struct {
 	log              logger
 	clientID         string
-	tableCodec       Codec
+	tableCodec       CodecP
 	updateCallback   UpdateCallback
 	hasher           func() hash.Hash32
 	autoreconnect    bool

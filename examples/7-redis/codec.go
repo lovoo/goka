@@ -2,9 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io"
-
-	"github.com/lovoo/goka/codec"
 )
 
 type Codec struct{}
@@ -20,9 +17,4 @@ func (c *Codec) Decode(data []byte) (interface{}, error) {
 
 	err := json.Unmarshal(data, event)
 	return event, err
-}
-
-func (c *Codec) DecodeP(data []byte) (interface{}, io.Closer, error) {
-	dec, err := c.Decode(data)
-	return dec, codec.NoopCloser, err
 }

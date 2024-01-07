@@ -67,7 +67,7 @@ type GroupGraph struct {
 	visitors      []Edge
 
 	// those fields cache the info from above edges or are used to avoid naming/codec collisions
-	codecs    map[string]Codec
+	codecs    map[string]CodecP
 	callbacks map[string]ProcessCallback
 
 	outputStreamTopics map[Stream]struct{}
@@ -121,11 +121,11 @@ func (gg *GroupGraph) OutputStreams() Edges {
 // AllEdges returns a list of all edges for the group graph.
 // This allows to modify a graph by cloning it's edges into a new one.
 //
-//  var existing Graph
-//  edges := existiting.AllEdges()
-//  // modify edges as required
-//  // recreate the modifiedg raph
-//  newGraph := DefineGroup(existing.Groug(), edges...)
+//	var existing Graph
+//	edges := existiting.AllEdges()
+//	// modify edges as required
+//	// recreate the modifiedg raph
+//	newGraph := DefineGroup(existing.Groug(), edges...)
 func (gg *GroupGraph) AllEdges() Edges {
 	return chainEdges(
 		gg.inputTables,
@@ -153,7 +153,7 @@ func (gg *GroupGraph) copartitioned() Edges {
 	return chainEdges(gg.inputStreams, gg.inputTables)
 }
 
-func (gg *GroupGraph) codec(topic string) Codec {
+func (gg *GroupGraph) codec(topic string) CodecP {
 	return gg.codecs[topic]
 }
 
@@ -170,7 +170,7 @@ func (gg *GroupGraph) joint(topic string) bool {
 func DefineGroup(group Group, edges ...Edge) *GroupGraph {
 	gg := GroupGraph{
 		group:              string(group),
-		codecs:             make(map[string]Codec),
+		codecs:             make(map[string]CodecP),
 		callbacks:          make(map[string]ProcessCallback),
 		joinCheck:          make(map[string]bool),
 		outputStreamTopics: make(map[Stream]struct{}),
@@ -264,7 +264,7 @@ func (gg *GroupGraph) Validate() error {
 type Edge interface {
 	String() string
 	Topic() string
-	Codec() Codec
+	Codec() CodecP
 }
 
 // Edges is a slice of edge objects.
@@ -296,7 +296,7 @@ func (e Edges) Topics() []string {
 
 type topicDef struct {
 	name  string
-	codec Codec
+	codec CodecP
 }
 
 func (t *topicDef) Topic() string {
@@ -307,7 +307,7 @@ func (t *topicDef) String() string {
 	return fmt.Sprintf("%s/%T", t.name, t.codec)
 }
 
-func (t *topicDef) Codec() Codec {
+func (t *topicDef) Codec() CodecP {
 	return t.codec
 }
 
@@ -322,7 +322,7 @@ type inputStream struct {
 // the group and with the group table.
 // The group starts reading the topic from the newest offset.
 func Input(topic Stream, c Codec, cb ProcessCallback) Edge {
-	return &inputStream{&topicDef{string(topic), c}, cb}
+	return &inputStream{&topicDef{string(topic), convertOrFakeCodec(c)}, cb}
 }
 
 type inputStreams Edges
@@ -347,7 +347,7 @@ func (is inputStreams) Topic() string {
 	return strings.Join(topics, ",")
 }
 
-func (is inputStreams) Codec() Codec {
+func (is inputStreams) Codec() CodecP {
 	if is == nil {
 		return nil
 	}
@@ -375,9 +375,11 @@ type visitor struct {
 func (m *visitor) Topic() string {
 	return m.name
 }
-func (m *visitor) Codec() Codec {
+
+func (m *visitor) Codec() CodecP {
 	return nil
 }
+
 func (m *visitor) String() string {
 	return fmt.Sprintf("visitor %s", m.name)
 }
@@ -399,7 +401,7 @@ type loopStream inputStream
 // process the messages of the topic. Context.Loopback() is used to write
 // messages into this topic from any callback of the group.
 func Loop(c Codec, cb ProcessCallback) Edge {
-	return &loopStream{&topicDef{codec: c}, cb}
+	return &loopStream{&topicDef{codec: convertOrFakeCodec(c)}, cb}
 }
 
 func (s *loopStream) setGroup(group Group) {
@@ -416,7 +418,7 @@ type inputTable struct {
 // The processing of input streams is blocked until all partitions of the table
 // are recovered.
 func Join(topic Table, c Codec) Edge {
-	return &inputTable{&topicDef{string(topic), c}}
+	return &inputTable{&topicDef{string(topic), convertOrFakeCodec(c)}}
 }
 
 type crossTable struct {
@@ -429,7 +431,7 @@ type crossTable struct {
 // The processing of input streams is blocked until the table is fully
 // recovered.
 func Lookup(topic Table, c Codec) Edge {
-	return &crossTable{&topicDef{string(topic), c}}
+	return &crossTable{&topicDef{string(topic), convertOrFakeCodec(c)}}
 }
 
 type groupTable struct {
@@ -448,7 +450,7 @@ type groupTable struct {
 //
 // The topic name is derived from the group name by appending "-table".
 func Persist(c Codec) Edge {
-	return &groupTable{&topicDef{codec: c}}
+	return &groupTable{&topicDef{codec: convertOrFakeCodec(c)}}
 }
 
 func (t *groupTable) setGroup(group Group) {
@@ -465,7 +467,7 @@ type outputStream struct {
 // graph.
 // The topic does not have to be copartitioned with the input streams.
 func Output(topic Stream, c Codec) Edge {
-	return &outputStream{&topicDef{string(topic), c}}
+	return &outputStream{&topicDef{string(topic), convertOrFakeCodec(c)}}
 }
 
 // GroupTable returns the name of the group table of group.

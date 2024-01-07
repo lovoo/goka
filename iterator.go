@@ -35,7 +35,7 @@ type iterator struct {
 
 	deferreds    []func() error
 	deferredErrs error
-	codec        Codec
+	codec        CodecP
 }
 
 // Next advances the iterator to the next key.

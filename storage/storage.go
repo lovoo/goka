@@ -143,7 +143,7 @@ func (s *storage) Get(key string) ([]byte, error) {
 
 func (s *storage) GetP(key string) ([]byte, io.Closer, error) {
 	val, err := s.Get(key)
-	return val, NoopCloser, err
+	return val, noopCloser, err
 }
 
 func (s *storage) GetOffset(defValue int64) (int64, error) {

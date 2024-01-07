@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"time"
@@ -57,11 +56,6 @@ func (jc *userCodec) Decode(data []byte) (interface{}, error) {
 		return nil, fmt.Errorf("Error unmarshaling user: %v", err)
 	}
 	return &c, nil
-}
-
-func (jc *userCodec) DecodeP(data []byte) (interface{}, io.Closer, error) {
-	dec, err := jc.Decode(data)
-	return dec, codec.NoopCloser, err
 }
 
 func runEmitter() {

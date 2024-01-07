@@ -34,7 +34,7 @@ func (n *Null) Get(key string) ([]byte, error) {
 }
 
 func (n *Null) GetP(key string) ([]byte, io.Closer, error) {
-	return nil, NoopCloser, nil
+	return nil, noopCloser, nil
 }
 
 // Set will do nothing and doesn't error.

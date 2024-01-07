@@ -37,7 +37,7 @@ func TestIterator(t *testing.T) {
 
 	it := &iterator{
 		iter:  storage.NewMultiIterator([]storage.Iterator{iter}),
-		codec: new(codec.String),
+		codec: convertOrFakeCodec(&codec.String{}),
 	}
 	defer it.Release()
 	count := 0

@@ -4,4 +4,4 @@ type nopCloser struct{}
 
 func (n *nopCloser) Close() error { return nil }
 
-var NoopCloser = new(nopCloser)
+var noopCloser = new(nopCloser)

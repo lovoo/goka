@@ -3,10 +3,8 @@ package collector
 import (
 	"context"
 	"encoding/json"
-	"io"
 
 	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/codec"
 	messaging "github.com/lovoo/goka/examples/3-messaging"
 	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 )
@@ -28,11 +26,6 @@ func (c *MessageListCodec) Decode(data []byte) (interface{}, error) {
 	var m []messaging.Message
 	err := json.Unmarshal(data, &m)
 	return m, err
-}
-
-func (c *MessageListCodec) DecodeP(data []byte) (interface{}, io.Closer, error) {
-	dec, err := c.Decode(data)
-	return dec, codec.NoopCloser, err
 }
 
 func collect(ctx goka.Context, msg interface{}) {

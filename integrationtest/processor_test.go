@@ -3,7 +3,6 @@ package integrationtest
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"testing"
 	"time"
@@ -21,10 +20,6 @@ type failingDecode struct {
 
 func (fc *failingDecode) Decode(_ []byte) (interface{}, error) {
 	return nil, fmt.Errorf("Error decoding")
-}
-
-func (fc *failingDecode) DecodeP(_ []byte) (interface{}, io.Closer, error) {
-	return nil, codec.NoopCloser, fmt.Errorf("Error decoding")
 }
 
 func (fc *failingDecode) Encode(msg interface{}) ([]byte, error) {
