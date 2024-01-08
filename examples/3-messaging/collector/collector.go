@@ -3,8 +3,9 @@ package collector
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/lovoo/goka"
-	"github.com/lovoo/goka/examples/3-messaging"
+	messaging "github.com/lovoo/goka/examples/3-messaging"
 	"github.com/lovoo/goka/examples/3-messaging/topicinit"
 )
 

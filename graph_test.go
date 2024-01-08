@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	c  = new(codec.String)
+	c  = convertOrFakeCodec(new(codec.String))
 	cb = func(ctx Context, msg interface{}) {}
 )
 

@@ -3,8 +3,10 @@ package redis
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 
+	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/storage"
 
 	redis "gopkg.in/redis.v5"
@@ -49,6 +51,12 @@ func (s *redisStorage) Get(key string) ([]byte, error) {
 		return nil, fmt.Errorf("error getting from redis (key %s): %v", key, err)
 	}
 	return value, nil
+}
+
+func (s *redisStorage) GetP(key string) ([]byte, io.Closer, error) {
+	val, err := s.Get(key)
+
+	return val, codec.NoopCloser, err
 }
 
 func (s *redisStorage) GetOffset(defValue int64) (int64, error) {
