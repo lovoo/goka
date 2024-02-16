@@ -14,7 +14,7 @@ services:
         soft: 65536
         hard: 65536
   kafka1:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.6.0
     hostname: kafka1
     container_name: kafka1
     ulimits:
