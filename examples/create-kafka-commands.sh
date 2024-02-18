@@ -9,7 +9,7 @@ TARGET=$1
 mkdir -p $TARGET
 
 # create Kafka scripts
-SCRIPTS=$(docker run --rm -it --entrypoint /bin/bash confluentinc/cp-kafka:5.4.0 -c "compgen -c | grep -E '(zook*|kafka*)'")
+SCRIPTS=$(docker run --rm -it --entrypoint /bin/bash confluentinc/cp-kafka:7.6.0 -c "compgen -c | grep -E '(zook*|kafka*)'")
 for SCRIPT in $SCRIPTS; do
 	SCRIPT=$(echo $SCRIPT | tr -d '\r')
 	FN=$TARGET/$(basename $SCRIPT)
@@ -17,7 +17,7 @@ for SCRIPT in $SCRIPTS; do
 	cat <<-EOF > $FN
 		#!/bin/bash
 		CMD="$SCRIPT \$@"
-		docker run --net=host --rm -it --entrypoint /bin/bash confluentinc/cp-kafka:5.4.0 -c "\$CMD"
+		docker run --net=host --rm -it --entrypoint /bin/bash confluentinc/cp-kafka:7.6.0 -c "\$CMD"
 EOF
 	chmod +x $FN
 done
@@ -27,6 +27,6 @@ echo creating $TARGET/zkCli.sh
 cat <<-EOF > $TARGET/zkCli.sh
 	#!/bin/bash
 	CMD="bin/zkCli.sh \$@"
-	docker run --net=host --rm -it zookeeper:3.4.9 bash -c "\$CMD"
+	docker run --net=host --rm -it confluentinc/cp-zookeeper:7.6.0 bash -c "\$CMD"
 EOF
 chmod +x $TARGET/zkCli.sh
