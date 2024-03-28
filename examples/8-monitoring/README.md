@@ -33,7 +33,7 @@ go proc.Run(context.Background())
 http.ListenAndServe(":9095", root)
 ```
 
-Opening the browser on [localhost:9095/monitor/]() will then show us a list of all attached processors
+Opening the browser on [localhost:9095/monitor/](http://localhost:9095/monitor/) will then show us a list of all attached processors
 and views and by selecting one of them we'll get statistics of the processor, similar like this
 
 ![Processor View](images/processor-view.png?raw=true "processor view")
@@ -49,7 +49,7 @@ idxServer := index.NewServer("/", root)
 idxServer.AddComponent(monitorServer, "Monitor")
 ```
 
-So next time we open the page at [localhost:9095](), we'll get some nice links to the monitor.
+So next time we open the page at [localhost:9095](http://localhost:9095), we'll get some nice links to the monitor.
 
 ![Index](images/index.png?raw=true "index view")
 
@@ -73,7 +73,7 @@ Voila!
 
 ## Example
 
-The example in [main.go]() demonstrates the concepts and typical applications of the web interface by
+The example in [main.go](https://github.com/lovoo/goka/blob/master/examples/8-monitoring/main.go) demonstrates the concepts and typical applications of the web interface by
 creating an Emitter, multiple Processors and a web interface.
 
 Be sure to have Apache Kafka and Zookeeper running by starting it in the examples-folder.
