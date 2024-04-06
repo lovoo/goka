@@ -10,6 +10,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/hashicorp/go-multierror"
+
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
@@ -25,6 +26,8 @@ const (
 	ProcStateRunning
 	// ProcStateStopping indicates a stopping partition processor
 	ProcStateStopping
+	// ProcStateStopped indicates a stopped partition processor
+	ProcStateStopped
 )
 
 // ProcessCallback function is called for every message received by the
@@ -128,7 +131,7 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 
 		graph: gg,
 
-		state: NewSignal(ProcStateIdle, ProcStateStarting, ProcStateSetup, ProcStateRunning, ProcStateStopping).SetState(ProcStateIdle),
+		state: NewSignal(ProcStateIdle, ProcStateStarting, ProcStateSetup, ProcStateRunning, ProcStateStopping, ProcStateStopped).SetState(ProcStateIdle),
 		done:  make(chan struct{}),
 	}
 
@@ -711,7 +714,7 @@ func (g *Processor) Cleanup(session sarama.ConsumerGroupSession) error {
 	defer g.log.Debugf("Cleaning up for %d ... done", session.GenerationID())
 
 	g.state.SetState(ProcStateStopping)
-	defer g.state.SetState(ProcStateIdle)
+	defer g.state.SetState(ProcStateStopped)
 	errg, _ := multierr.NewErrGroup(session.Context())
 	g.mTables.RLock()
 	for part, partition := range g.partitions {
@@ -924,6 +927,11 @@ func (g *Processor) createPartitionProcessor(ctx context.Context, partition int3
 // will be returned from Processor.Run(..)
 func (g *Processor) Stop() {
 	g.cancel()
+}
+
+// Done returns a channel that is closed when the processor is stopped.
+func (g *Processor) Done() <-chan struct{} {
+	return g.done
 }
 
 // VisitAllWithStats visits all keys in parallel by passing the visit request

@@ -10,9 +10,10 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+
 	"github.com/lovoo/goka/codec"
 	"github.com/lovoo/goka/storage"
-	"github.com/stretchr/testify/require"
 )
 
 func createMockBuilder(t *testing.T) (*gomock.Controller, *builderMock) {
@@ -323,4 +324,112 @@ func TestProcessor_StateReader(t *testing.T) {
 	p := Processor{state: state}
 
 	require.Equal(t, ProcStateRunning, p.StateReader().State())
+}
+
+func TestProcessor_Stop(t *testing.T) {
+	t.Run("expected-state", func(t *testing.T) {
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
+
+		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
+		bm.producer.EXPECT().Close().Times(1)
+
+		groupBuilder, _ := createTestConsumerGroupBuilder(t)
+		consBuilder, _ := createTestConsumerBuilder(t)
+
+		graph := DefineGroup("test",
+			Input("input", new(codec.Int64), func(ctx Context, msg interface{}) {
+				// Do nothing
+			}),
+		)
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
+		defer cancel()
+
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			bm.createProcessorOptions(consBuilder, groupBuilder)...,
+		)
+		require.NoError(t, err)
+		var (
+			procErr error
+			done    = make(chan struct{})
+		)
+
+		go func() {
+			defer close(done)
+			procErr = newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+
+		// if there was an error during startup, no point in continuing
+		// and waiting for the processor to be stopped
+		select {
+		case <-done:
+			require.NoError(t, procErr)
+		default:
+		}
+
+		require.Equal(t, ProcStateRunning, newProc.StateReader().State())
+
+		// shutdown
+		newProc.Stop()
+		<-done
+
+		select {
+		case <-done:
+			require.Equal(t, ProcStateStopped, newProc.StateReader().State())
+			require.NoError(t, procErr)
+		case <-time.After(10 * time.Second):
+			t.Errorf("processor did not shut down as expected")
+		}
+	})
+}
+
+func TestProcessor_Done(t *testing.T) {
+	t.Run("done-closes", func(t *testing.T) {
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
+
+		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
+		bm.producer.EXPECT().Close().Times(1)
+
+		groupBuilder, _ := createTestConsumerGroupBuilder(t)
+		consBuilder, _ := createTestConsumerBuilder(t)
+
+		graph := DefineGroup("test",
+			Input("input", new(codec.Int64), func(ctx Context, msg interface{}) {
+				// Do nothing
+			}),
+		)
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1000)
+		defer cancel()
+
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			bm.createProcessorOptions(consBuilder, groupBuilder)...,
+		)
+		require.NoError(t, err)
+		var (
+			procErr error
+		)
+
+		go func() {
+			procErr = newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+
+		// shutdown
+		newProc.Stop()
+
+		select {
+		case <-newProc.Done():
+			require.NoError(t, procErr)
+		case <-time.After(10 * time.Second):
+			t.Errorf("processor did not shut down as expected")
+		}
+	})
 }
