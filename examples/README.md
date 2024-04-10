@@ -25,7 +25,7 @@ This is a very simple toy application that demonstrates how to
 
 ### Clicks
 Similar to the first example, Emitter, Processor and View are demonstrated here.
-In Addition it shows how to
+In addition, it shows how to
 
 * access the View using a web endpoint
 * use a Codecs
@@ -39,7 +39,7 @@ The following examples show the combination of multiple processors, views, etc.
 
 By generating a random folder for storage, this example can be executed in parallel multiple times to get a feeling for the rebalancing that's happening under the hood.
 
-[Example]https://github.com/lovoo/goka/tree/master/examples/5-multiple/)
+[Example](https://github.com/lovoo/goka/tree/master/examples/5-multiple/)
 
 
 ###  Monitoring
