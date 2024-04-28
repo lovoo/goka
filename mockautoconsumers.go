@@ -249,7 +249,9 @@ func (pc *MockAutoPartitionConsumer) Close() error {
 			pc.t.Errorf("Expected the messages channel for %s/%d to be drained on close, but found %d messages.", pc.topic, pc.partition, len(pc.messages))
 		}
 
-		pc.AsyncClose()
+		close(pc.messages)
+		close(pc.errors)
+		pc.consumed = false
 
 		var (
 			closeErr error
