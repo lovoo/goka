@@ -385,9 +385,7 @@ func TestProcessor_Stop(t *testing.T) {
 			t.Errorf("processor did not shut down as expected")
 		}
 	})
-}
 
-func TestProcessor_Done(t *testing.T) {
 	t.Run("done-closes", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
