@@ -708,16 +708,19 @@ func TestPT_loadMessages(t *testing.T) {
 func TestPT_storeEvent(t *testing.T) {
 	t.Run("succeed", func(t *testing.T) {
 		var (
-			localOffset int64
-			partition   int32
-			topic       = "some-topic"
-			key         = "some-key"
-			value       = []byte("some-vale")
-			actualKey   string
-			actualValue []byte
-			updateCB    UpdateCallback = func(ctx UpdateContext, s storage.Storage, k string, v []byte) error {
+			localOffset     int64
+			partition       int32
+			topic           = "some-topic"
+			key             = "some-key"
+			value           = []byte("some-vale")
+			timestamp       = time.Now()
+			actualKey       string
+			actualValue     []byte
+			actualTimestamp time.Time
+			updateCB        UpdateCallback = func(ctx UpdateContext, s storage.Storage, k string, v []byte) error {
 				actualKey = k
 				actualValue = v
+				actualTimestamp = ctx.Timestamp()
 				return nil
 			}
 		)
@@ -735,9 +738,10 @@ func TestPT_storeEvent(t *testing.T) {
 		defer cancel()
 		err := pt.setup(ctx)
 		require.NoError(t, err)
-		err = pt.storeEvent(key, value, localOffset, nil)
+		err = pt.storeEvent(key, value, localOffset, nil, timestamp)
 		require.Equal(t, actualKey, key)
 		require.Equal(t, actualValue, value)
+		require.Equal(t, actualTimestamp, timestamp)
 		require.NoError(t, err)
 	})
 	t.Run("fail", func(t *testing.T) {
@@ -747,6 +751,7 @@ func TestPT_storeEvent(t *testing.T) {
 			topic                      = "some-topic"
 			key                        = "some-key"
 			value                      = []byte("some-vale")
+			timestamp                  = time.Now()
 			updateCB    UpdateCallback = updateCallbackNoop
 			retErr      error          = fmt.Errorf("storage err")
 		)
@@ -764,7 +769,7 @@ func TestPT_storeEvent(t *testing.T) {
 		defer cancel()
 		err := pt.setup(ctx)
 		require.NoError(t, err)
-		err = pt.storeEvent(key, value, localOffset, nil)
+		err = pt.storeEvent(key, value, localOffset, nil, timestamp)
 		require.Error(t, err)
 	})
 }
