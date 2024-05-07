@@ -315,6 +315,7 @@ func TestProcessor_Run(t *testing.T) {
 		// and waiting for them to be delivered
 		<-done
 		require.True(t, strings.Contains(procErr.Error(), "setup-error"))
+		require.True(t, strings.Contains(newProc.Error().Error(), "setup-error"))
 	})
 }
 
@@ -410,12 +411,9 @@ func TestProcessor_Stop(t *testing.T) {
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
 		)
 		require.NoError(t, err)
-		var (
-			procErr error
-		)
 
 		go func() {
-			procErr = newProc.Run(ctx)
+			newProc.Run(ctx)
 		}()
 
 		newProc.WaitForReady()
@@ -425,7 +423,7 @@ func TestProcessor_Stop(t *testing.T) {
 
 		select {
 		case <-newProc.Done():
-			require.NoError(t, procErr)
+			require.NoError(t, newProc.Error())
 		case <-time.After(10 * time.Second):
 			t.Errorf("processor did not shut down as expected")
 		}

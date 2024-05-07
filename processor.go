@@ -63,6 +63,7 @@ type Processor struct {
 
 	state *Signal
 
+	err    error
 	done   chan struct{}
 	cancel context.CancelFunc
 }
@@ -263,7 +264,8 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	// collect all errors before leaving
 	var errs *multierror.Error
 	defer func() {
-		rerr = multierror.Append(errs, rerr).ErrorOrNil()
+		g.err = multierror.Append(errs, rerr).ErrorOrNil()
+		rerr = g.err
 	}()
 
 	var err error
@@ -932,6 +934,11 @@ func (g *Processor) Stop() {
 // Done returns a channel that is closed when the processor is stopped.
 func (g *Processor) Done() <-chan struct{} {
 	return g.done
+}
+
+// Error returns the error that caused the processor to stop.
+func (g *Processor) Error() error {
+	return g.err
 }
 
 // VisitAllWithStats visits all keys in parallel by passing the visit request
