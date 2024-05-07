@@ -63,6 +63,7 @@ type Processor struct {
 
 	state *Signal
 
+	errMux sync.Mutex
 	err    error
 	done   chan struct{}
 	cancel context.CancelFunc
@@ -264,6 +265,8 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	// collect all errors before leaving
 	var errs *multierror.Error
 	defer func() {
+		g.errMux.Lock()
+		defer g.errMux.Unlock()
 		g.err = multierror.Append(errs, rerr).ErrorOrNil()
 		rerr = g.err
 	}()
@@ -938,6 +941,8 @@ func (g *Processor) Done() <-chan struct{} {
 
 // Error returns the error that caused the processor to stop.
 func (g *Processor) Error() error {
+	g.errMux.Lock()
+	defer g.errMux.Unlock()
 	return g.err
 }
 
