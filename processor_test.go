@@ -121,14 +121,9 @@ func TestProcessor_Run(t *testing.T) {
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
 		)
 		require.NoError(t, err)
-		var (
-			procErr error
-			done    = make(chan struct{})
-		)
 
 		go func() {
-			defer close(done)
-			procErr = newProc.Run(ctx)
+			newProc.Run(ctx)
 		}()
 
 		newProc.WaitForReady()
@@ -136,8 +131,8 @@ func TestProcessor_Run(t *testing.T) {
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
 		select {
-		case <-done:
-			require.NoError(t, procErr)
+		case <-newProc.Done():
+			require.NoError(t, newProc.Error())
 		default:
 		}
 
@@ -155,8 +150,8 @@ func TestProcessor_Run(t *testing.T) {
 
 		// shutdown
 		newProc.Stop()
-		<-done
-		require.NoError(t, procErr)
+		<-newProc.Done()
+		require.NoError(t, newProc.Error())
 	})
 	t.Run("loopback", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
@@ -197,14 +192,9 @@ func TestProcessor_Run(t *testing.T) {
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
 		)
 		require.NoError(t, err)
-		var (
-			procErr error
-			done    = make(chan struct{})
-		)
 
 		go func() {
-			defer close(done)
-			procErr = newProc.Run(ctx)
+			newProc.Run(ctx)
 		}()
 
 		newProc.WaitForReady()
@@ -212,8 +202,8 @@ func TestProcessor_Run(t *testing.T) {
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
 		select {
-		case <-done:
-			require.NoError(t, procErr)
+		case <-newProc.Done():
+			require.NoError(t, newProc.Error())
 		default:
 		}
 
@@ -223,8 +213,8 @@ func TestProcessor_Run(t *testing.T) {
 
 		// shutdown
 		newProc.Stop()
-		<-done
-		require.NoError(t, procErr)
+		<-newProc.Done()
+		require.NoError(t, newProc.Error())
 	})
 	t.Run("consume-error", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
@@ -249,14 +239,9 @@ func TestProcessor_Run(t *testing.T) {
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
 		)
 		require.NoError(t, err)
-		var (
-			procErr error
-			done    = make(chan struct{})
-		)
 
 		go func() {
-			defer close(done)
-			procErr = newProc.Run(ctx)
+			newProc.Run(ctx)
 		}()
 
 		newProc.WaitForReady()
@@ -264,15 +249,15 @@ func TestProcessor_Run(t *testing.T) {
 		// if there was an error during startup, no point in sending messages
 		// and waiting for them to be delivered
 		select {
-		case <-done:
-			require.NoError(t, procErr)
+		case <-newProc.Done():
+			require.NoError(t, newProc.Error())
 		default:
 		}
 		cg.SendError(fmt.Errorf("test-error"))
 		cancel()
-		<-done
+		<-newProc.Done()
 		// the errors sent back by the consumergroup do not lead to a failure of the processor
-		require.NoError(t, procErr)
+		require.NoError(t, newProc.Error())
 	})
 	t.Run("setup-error", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
@@ -297,12 +282,50 @@ func TestProcessor_Run(t *testing.T) {
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
 		)
 		require.NoError(t, err)
+
+		cg.FailOnConsume(newErrSetup(123, fmt.Errorf("setup-error")))
+
+		go func() {
+			newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+
+		// if there was an error during startup, no point in sending messages
+		// and waiting for them to be delivered
+		<-newProc.Done()
+		require.True(t, strings.Contains(newProc.Error().Error(), "setup-error"))
+	})
+	t.Run("returns-error-on-failure", func(t *testing.T) {
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
+
+		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
+		bm.producer.EXPECT().Close().Times(1)
+
+		groupBuilder, cg := createTestConsumerGroupBuilder(t)
+		consBuilder, _ := createTestConsumerBuilder(t)
+
+		graph := DefineGroup("test",
+			// not really used, we're failing anyway
+			Input("input", new(codec.Int64), accumulate),
+		)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			bm.createProcessorOptions(consBuilder, groupBuilder)...,
+		)
+		require.NoError(t, err)
+
+		cg.FailOnConsume(newErrSetup(123, fmt.Errorf("setup-error")))
+
 		var (
 			procErr error
 			done    = make(chan struct{})
 		)
-
-		cg.FailOnConsume(newErrSetup(123, fmt.Errorf("setup-error")))
 
 		go func() {
 			defer close(done)
@@ -315,7 +338,46 @@ func TestProcessor_Run(t *testing.T) {
 		// and waiting for them to be delivered
 		<-done
 		require.True(t, strings.Contains(procErr.Error(), "setup-error"))
-		require.True(t, strings.Contains(newProc.Error().Error(), "setup-error"))
+	})
+	t.Run("returns-nil-on-success", func(t *testing.T) {
+		ctrl, bm := createMockBuilder(t)
+		defer ctrl.Finish()
+
+		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
+		bm.producer.EXPECT().Close().Times(1)
+
+		groupBuilder, _ := createTestConsumerGroupBuilder(t)
+		consBuilder, _ := createTestConsumerBuilder(t)
+
+		graph := DefineGroup("test",
+			// not really used, we're failing anyway
+			Input("input", new(codec.Int64), accumulate),
+		)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
+			bm.createProcessorOptions(consBuilder, groupBuilder)...,
+		)
+		require.NoError(t, err)
+
+		var (
+			procErr error
+			done    = make(chan struct{})
+		)
+
+		go func() {
+			defer close(done)
+			procErr = newProc.Run(ctx)
+		}()
+
+		newProc.WaitForReady()
+		newProc.Stop()
+
+		<-done
+		require.NoError(t, procErr)
 	})
 }
 
@@ -352,14 +414,9 @@ func TestProcessor_Stop(t *testing.T) {
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
 		)
 		require.NoError(t, err)
-		var (
-			procErr error
-			done    = make(chan struct{})
-		)
 
 		go func() {
-			defer close(done)
-			procErr = newProc.Run(ctx)
+			newProc.Run(ctx)
 		}()
 
 		newProc.WaitForReady()
@@ -367,8 +424,8 @@ func TestProcessor_Stop(t *testing.T) {
 		// if there was an error during startup, no point in continuing
 		// and waiting for the processor to be stopped
 		select {
-		case <-done:
-			require.NoError(t, procErr)
+		case <-newProc.Done():
+			require.NoError(t, newProc.Error())
 		default:
 		}
 
@@ -376,12 +433,12 @@ func TestProcessor_Stop(t *testing.T) {
 
 		// shutdown
 		newProc.Stop()
-		<-done
+		<-newProc.Done()
 
 		select {
-		case <-done:
+		case <-newProc.Done():
 			require.Equal(t, ProcStateStopped, newProc.StateReader().State())
-			require.NoError(t, procErr)
+			require.NoError(t, newProc.Error())
 		case <-time.After(10 * time.Second):
 			t.Errorf("processor did not shut down as expected")
 		}
