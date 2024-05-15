@@ -351,7 +351,7 @@ func TestProcessor_Run(t *testing.T) {
 		consBuilder, _ := createTestConsumerBuilder(t)
 
 		graph := DefineGroup("test",
-			// not really used, we're failing anyway
+			// not really used, we're stopping before the processor before producing
 			Input("input", new(codec.Int64), accumulate),
 		)
 
