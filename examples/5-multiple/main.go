@@ -118,8 +118,8 @@ func process(ctx goka.Context, msg interface{}) {
 func runProcessor(ctx context.Context,
 	monitor *monitor.Server,
 	query *query.Server,
-	groupInitialized chan struct{}) error {
-
+	groupInitialized chan struct{},
+) error {
 	tmc := goka.NewTopicManagerConfig()
 	tm, err := goka.NewTopicManager(brokers, goka.DefaultConfig(), tmc)
 	if err != nil {
@@ -161,8 +161,8 @@ func runView(ctx context.Context,
 	errg *multierr.ErrGroup,
 	root *mux.Router,
 	monitor *monitor.Server,
-	groupInitialized chan struct{}) error {
-
+	groupInitialized chan struct{},
+) error {
 	<-groupInitialized
 
 	view, err := goka.NewView(brokers,
@@ -183,7 +183,6 @@ func runView(ctx context.Context,
 
 	server := &http.Server{Addr: ":0", Handler: root}
 	errg.Go(func() error {
-
 		root.HandleFunc("/{key}", func(w http.ResponseWriter, r *http.Request) {
 			value, _ := view.Get(mux.Vars(r)["key"])
 			data, _ := json.Marshal(value)
@@ -225,7 +224,6 @@ func pprofInit(root *mux.Router) {
 }
 
 func main() {
-
 	cfg := goka.DefaultConfig()
 	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 	cfg.Version = sarama.V2_4_0_0
