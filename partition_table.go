@@ -462,7 +462,7 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 			}
 
 			lastMessage = time.Now()
-			if err := p.storeEvent(string(msg.Key), msg.Value, msg.Offset, msg.Headers); err != nil {
+			if err := p.storeEvent(string(msg.Key), msg.Value, msg.Offset, msg.Headers, msg.Timestamp); err != nil {
 				return fmt.Errorf("load: error updating storage: %v", err)
 			}
 
@@ -534,12 +534,13 @@ func (p *PartitionTable) TrackMessageWrite(ctx context.Context, length int) {
 	})
 }
 
-func (p *PartitionTable) storeEvent(key string, value []byte, offset int64, headers []*sarama.RecordHeader) error {
+func (p *PartitionTable) storeEvent(key string, value []byte, offset int64, headers []*sarama.RecordHeader, timestamp time.Time) error {
 	err := p.st.Update(&DefaultUpdateContext{
 		topic:     p.st.topic,
 		partition: p.st.partition,
 		offset:    offset,
 		headers:   headers,
+		timestamp: timestamp,
 	}, key, value)
 	if err != nil {
 		return fmt.Errorf("Error from the update callback while recovering from the log: %v", err)

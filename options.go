@@ -28,6 +28,9 @@ type UpdateContext interface {
 	// It is recommended to lazily evaluate the headers to reduce overhead per message
 	// when headers are not used.
 	Headers() Headers
+
+	// Timestamp returns the timestamp of the input message.
+	Timestamp() time.Time
 }
 
 // UpdateCallback is invoked upon arrival of a message for a table partition.
@@ -95,6 +98,7 @@ type DefaultUpdateContext struct {
 	partition int32
 	offset    int64
 	headers   []*sarama.RecordHeader
+	timestamp time.Time
 }
 
 // Topic returns the topic of input message.
@@ -115,6 +119,11 @@ func (ctx DefaultUpdateContext) Offset() int64 {
 // Headers returns the headers of the input message.
 func (ctx DefaultUpdateContext) Headers() Headers {
 	return HeadersFromSarama(ctx.headers)
+}
+
+// Timestamp returns the timestamp of the input message.
+func (ctx DefaultUpdateContext) Timestamp() time.Time {
+	return ctx.timestamp
 }
 
 ///////////////////////////////////////////////////////////////////////////////
