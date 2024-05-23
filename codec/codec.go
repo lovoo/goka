@@ -1,3 +1,7 @@
+/*
+Package codec provides a set of codecs to encode and decode various data types to and from
+byte slices([]byte).
+*/
 package codec
 
 import (
@@ -5,7 +9,7 @@ import (
 	"strconv"
 )
 
-// Bytes codec is
+// Bytes is a commonly used codec to encode and decode string <-> []byte
 type Bytes struct{}
 
 // Encode does a type conversion into []byte
