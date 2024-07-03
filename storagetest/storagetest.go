@@ -9,25 +9,28 @@ import (
 	"github.com/lovoo/goka/storage"
 )
 
-// TeardownFunc cleans up state after tests.
-type TeardownFunc func() error
+// TeardownFn cleans up state after tests.
+type TeardownFn func() error
+
+// StorageBuilderFn creates a storage and the teardown function.
+type StorageBuilderFn func(t *testing.T) (storage.Storage, TeardownFn)
 
 type StorageTestSuite struct {
 	suite.Suite
 
-	storageBuilder func(t *testing.T) (storage.Storage, TeardownFunc)
-	storage        storage.Storage
-	teardownFn     TeardownFunc
+	storageBuilderFn StorageBuilderFn
+	teardownFn       TeardownFn
+	storage          storage.Storage
 }
 
-func NewStorageTestSuite(storageBuilder func(t *testing.T) (storage.Storage, TeardownFunc)) *StorageTestSuite {
+func NewStorageTestSuite(storageBuilderFn StorageBuilderFn) *StorageTestSuite {
 	return &StorageTestSuite{
-		storageBuilder: storageBuilder,
+		storageBuilderFn: storageBuilderFn,
 	}
 }
 
 func (s *StorageTestSuite) SetupTest() {
-	storage, teardownFn := s.storageBuilder(s.T())
+	storage, teardownFn := s.storageBuilderFn(s.T())
 	s.storage = storage
 	s.teardownFn = teardownFn
 }
