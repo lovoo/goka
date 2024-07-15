@@ -401,17 +401,26 @@ func WithRebalanceCallback(cb RebalanceCallback) ProcessorOption {
 // view options
 ///////////////////////////////////////////////////////////////////////////////
 
+type viewPartitionerCompat int
+
+const (
+	// Interpret the bytes of the key digest as an unsigned integer to match
+	// librdkafka's partitioning behavior.
+	librdkafkaCompat viewPartitionerCompat = iota + 1
+)
+
 // ViewOption defines a configuration option to be used when creating a view.
 type ViewOption func(*voptions, Table, Codec)
 
 type voptions struct {
-	log              logger
-	clientID         string
-	tableCodec       Codec
-	updateCallback   UpdateCallback
-	hasher           func() hash.Hash32
-	autoreconnect    bool
-	backoffResetTime time.Duration
+	log               logger
+	clientID          string
+	tableCodec        Codec
+	updateCallback    UpdateCallback
+	hasher            func() hash.Hash32
+	partitionerCompat viewPartitionerCompat
+	autoreconnect     bool
+	backoffResetTime  time.Duration
 
 	builders struct {
 		storage        storage.Builder
@@ -473,6 +482,15 @@ func WithViewBackoffBuilder(bb BackoffBuilder) ViewOption {
 func WithViewHasher(hasher func() hash.Hash32) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
 		o.hasher = hasher
+	}
+}
+
+// WithViewHashUnsigned instructs the partitioner to interpret the key digest
+// as an unsigned integer when partitioning. Combine this option with the
+// CRC-32 hash algorithm for compatibility with librdkafka.
+func WithViewHashUnsigned() ViewOption {
+	return func(o *voptions, table Table, codec Codec) {
+		o.partitionerCompat = librdkafkaCompat
 	}
 }
 
