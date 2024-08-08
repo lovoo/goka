@@ -182,7 +182,7 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 
 		// (or not)
 		if m.topicManagerConfig.NoCreate {
-			return fmt.Errorf("topic does not exist but the manager is configured with NoCreate, so it will not attempt to create it")
+			return fmt.Errorf("topic %s does not exist but the manager is configured with NoCreate, so it will not attempt to create it", topic)
 		}
 
 		return m.createTopic(topic,
