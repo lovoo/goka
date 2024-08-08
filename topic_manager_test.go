@@ -249,6 +249,28 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 		err := tm.EnsureStreamExists(topic, npar)
 		require.NoError(t, err)
 	})
+	t.Run("no-create", func(t *testing.T) {
+		tm, bm, ctrl := createTopicManager(t)
+		defer ctrl.Finish()
+		var (
+			topic   = "some-topic"
+			npar    = 1
+			rfactor = 1
+		)
+
+		tm.topicManagerConfig.Stream.Replication = rfactor
+		tm.topicManagerConfig.Stream.Retention = time.Second
+		tm.topicManagerConfig.NoCreate = true
+
+		bm.client.EXPECT().RefreshMetadata().Return(nil).AnyTimes()
+
+		gomock.InOrder(
+			bm.client.EXPECT().Topics().Return(nil, nil),
+		)
+
+		err := tm.EnsureStreamExists(topic, npar)
+		require.ErrorContains(t, err, "will not attempt to create it")
+	})
 	t.Run("fail", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
 		defer ctrl.Finish()
