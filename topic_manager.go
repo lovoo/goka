@@ -179,6 +179,12 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 	}
 	// no topic yet, let's create it
 	if len(partitions) == 0 {
+
+		// (or not)
+		if m.topicManagerConfig.NoCreate {
+			return fmt.Errorf("topic does not exist but the manager is configured with NoCreate, so it will not attempt to create it")
+		}
+
 		return m.createTopic(topic,
 			npar,
 			rfactor,
@@ -361,6 +367,10 @@ type TopicManagerConfig struct {
 	// TMConfigMismatchBehavior configures how configuration mismatches of a topic (replication, num partitions, compaction) should be
 	// treated
 	MismatchBehavior TMConfigMismatchBehavior
+
+	// If set to true, the topic manager will not attempt to create the topic.
+	// This can be used if topic creation should be done externally.
+	NoCreate bool
 }
 
 func (tmc *TopicManagerConfig) streamCleanupPolicy() string {
