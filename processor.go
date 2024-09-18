@@ -328,6 +328,11 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 		return fmt.Errorf("error waiting for start up tables: %w", err)
 	}
 
+	if ctx.Err() != nil {
+		g.log.Printf("Shutting down processor before it starts, context was cancelled")
+		return nil
+	}
+
 	// run the main rebalance-consume-loop
 	errg.Go(func() error {
 		return g.rebalanceLoop(ctx)
@@ -471,17 +476,22 @@ func (g *Processor) waitForStartupTables(ctx context.Context) error {
 	}
 	g.mTables.RUnlock()
 
-	// If we recover ahead, we'll also start all partition processors once in recover-only-mode
+	// If we recover ahead (or forever), we'll also start all partition processors once in recover-only-mode (or recover-forever-mode)
 	// and do the same boilerplate to keep the waitmap up to date.
-	if g.opts.recoverAhead {
+	if g.opts.recoverAhead || g.opts.recoverForever {
+
+		mode := runModeRecoverOnly
+		if g.opts.recoverForever {
+			mode = runModeRecoverForever
+		}
 		partitions, err := g.findStatefulPartitions()
 		if err != nil {
 			return fmt.Errorf("error finding dependent partitions: %w", err)
 		}
 		for _, part := range partitions {
 			part := part
-			pproc, err := g.createPartitionProcessor(ctx, part, runModeRecoverOnly, func(msg *message, meta string) {
-				panic("a partition processor in recover-only-mode never commits a message")
+			pproc, err := g.createPartitionProcessor(ctx, part, mode, func(msg *message, meta string) {
+				panic("a partition processor in recover-only-mode/recover-forever-mode never commits a message")
 			})
 			if err != nil {
 				return fmt.Errorf("Error creating partition processor for recover-ahead %s/%d: %v", g.Graph().Group(), part, err)
@@ -522,7 +532,13 @@ func (g *Processor) waitForStartupTables(ctx context.Context) error {
 		select {
 		// the context has closed, no point in waiting
 		case <-ctx.Done():
-			g.log.Debugf("Stopping to wait for views to get up, context closed")
+			g.log.Debugf("Stopping to wait for tables to get up, context closed")
+
+			// if we're in recover-forever-mode, this is the normal way of shutdown, so no error here.
+			if g.opts.recoverForever {
+				return nil
+			}
+
 			return fmt.Errorf("context closed while waiting for startup tables to become ready")
 
 			// the error group is done, which means

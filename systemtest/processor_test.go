@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -241,9 +242,7 @@ func TestRecoverAhead(t *testing.T) {
 		return proc2.Run(ctx)
 	})
 
-	pollTimed(t, "procs 1&2 recovered", func() bool {
-		return true
-	}, proc1.Recovered, proc2.Recovered)
+	pollTimed(t, "procs 1&2 recovered", proc1.Recovered, proc2.Recovered)
 
 	// check the storages that were initalized by the processors:
 	// both have each 2 storages, because all tables only have 1 partition
@@ -259,9 +258,6 @@ func TestRecoverAhead(t *testing.T) {
 	// wait until the keys are present
 	pollTimed(t, "key-values are present",
 
-		func() bool {
-			return true
-		},
 		func() bool {
 			has, _ := tableStorage1.Has("key1")
 			return has
@@ -291,6 +287,141 @@ func TestRecoverAhead(t *testing.T) {
 	joinval2, _ := joinStorage2.Get("key1")
 	require.Equal(t, "joinval1", string(joinval1))
 	require.Equal(t, "joinval1", string(joinval2))
+
+	// stop everything and wait until it's shut down
+	cancel()
+	require.NoError(t, errg.Wait().ErrorOrNil())
+}
+
+func TestRecoverForever(t *testing.T) {
+	brokers := initSystemTest(t)
+	var (
+		group       = goka.Group(fmt.Sprintf("goka-systemtest-recoverforever-%d", time.Now().Unix()))
+		inputStream = fmt.Sprintf("%s-input", group)
+		table       = string(goka.GroupTable(group))
+	)
+
+	tmc := goka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+	cfg := goka.DefaultConfig()
+	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
+	goka.ReplaceGlobalConfig(cfg)
+
+	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
+	require.NoError(t, err)
+
+	err = tm.EnsureStreamExists(inputStream, 1)
+	require.NoError(t, err)
+	err = tm.EnsureTableExists(string(table), 1)
+	require.NoError(t, err)
+
+	// emit something into the state table (like simulating a processor ctx.SetValue()).
+	// Our test processors should update their value in the join-table
+	tableEmitter, err := goka.NewEmitter(brokers, goka.Stream(table), new(codec.String))
+	require.NoError(t, err)
+	require.NoError(t, tableEmitter.EmitSync("key1", "tableval1"))
+	require.NoError(t, tableEmitter.Finish())
+
+	// emit an input-message
+	inputEmitter, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.String))
+	require.NoError(t, err)
+	require.NoError(t, inputEmitter.EmitSync("key1", "input-value"))
+	require.NoError(t, inputEmitter.Finish())
+
+	storageTracker := newStorageTracker()
+
+	var (
+		processed      atomic.Int64
+		itemsRecovered atomic.Int64
+	)
+
+	createProc := func(recoverForever bool) *goka.Processor {
+		opts := []goka.ProcessorOption{
+
+			goka.WithUpdateCallback(func(ctx goka.UpdateContext, s storage.Storage, key string, value []byte) error {
+				itemsRecovered.Add(1)
+				return goka.DefaultUpdate(ctx, s, key, value)
+			}),
+			goka.WithStorageBuilder(storageTracker.Build),
+		}
+		if recoverForever {
+			opts = append(opts, goka.WithRecoverForever())
+		}
+		proc, err := goka.NewProcessor(brokers,
+			goka.DefineGroup(
+				group,
+				goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg interface{}) {
+					processed.Add(1)
+				}),
+				goka.Persist(new(codec.String)),
+			),
+			opts...,
+		)
+		require.NoError(t, err)
+		return proc
+	}
+
+	proc1 := createProc(true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errg, ctx := multierr.NewErrGroup(ctx)
+
+	errg.Go(func() error {
+		return proc1.Run(ctx)
+	})
+
+	pollTimed(t, "procs 1 storage initialized", func() bool {
+		return len(storageTracker.storages) == 1
+	})
+
+	// get the corresponding storages for both table and join-partitions
+	tableStorage1 := storageTracker.storages[storageTracker.key(string(table), 0)]
+
+	// wait until the keys are present
+	pollTimed(t, "key-values are present",
+		func() bool {
+			has, _ := tableStorage1.Has("key1")
+			return has
+		},
+	)
+
+	// check the table-values
+	val1, _ := tableStorage1.Get("key1")
+	require.Equal(t, "tableval1", string(val1))
+
+	// stop everything and wait until it's shut down
+	cancel()
+	require.NoError(t, errg.Wait().ErrorOrNil())
+
+	require.EqualValues(t, 0, processed.Load())
+	require.EqualValues(t, 1, itemsRecovered.Load())
+
+	// run processor a second time, without recover forever
+	itemsRecovered.Store(0)
+	proc2 := createProc(false)
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	errg, ctx = multierr.NewErrGroup(ctx)
+	errg.Go(func() error {
+		return proc2.Run(ctx)
+	})
+
+	pollTimed(t, "procs 2 storage initialized", func() bool {
+		return len(storageTracker.storages) == 1
+	})
+
+	pollTimed(t, "procs recovered", proc2.Recovered)
+
+	// wait until the input is actually processed
+	pollTimed(t, "input processed", func() bool {
+		return processed.Load() == 1
+	})
+
+	// at this point we know the processor started, recovered, and consumed the one message in the input-table.
+	// Now make sure the processor did not recover again (because it did already in the first run)
+	require.EqualValues(t, 0, itemsRecovered.Load())
 
 	// stop everything and wait until it's shut down
 	cancel()
