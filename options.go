@@ -147,6 +147,7 @@ type poptions struct {
 	backoffResetTime       time.Duration
 	hotStandby             bool
 	recoverAhead           bool
+	recoverForever         bool
 	producerDefaultHeaders Headers
 
 	builders struct {
@@ -271,6 +272,16 @@ func WithHotStandby() ProcessorOption {
 func WithRecoverAhead() ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.recoverAhead = true
+	}
+}
+
+// WithRecoverForever configures the processor to recover joins and the processor table forever, without ever joining a group.
+// Using this option is highly experimental and is typically used for cluster-migration-scenarios where mirror-maker cannot synchronize
+// the consumer-group-offsets.
+// If this option is passed, the processor will never actually recover, so `proc.Recovered()` will always return `false`
+func WithRecoverForever() ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.recoverForever = true
 	}
 }
 
