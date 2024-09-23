@@ -502,6 +502,74 @@ func TestRebalance(t *testing.T) {
 	require.NoError(t, errg.Wait().ErrorOrNil())
 }
 
+func TestRecoverForeverStateless(t *testing.T) {
+	brokers := initSystemTest(t)
+	var (
+		group       = goka.Group(fmt.Sprintf("goka-systemtest-recoverforever-%d", time.Now().Unix()))
+		inputStream = fmt.Sprintf("%s-input", group)
+	)
+
+	tmc := goka.NewTopicManagerConfig()
+	tmc.Table.Replication = 1
+	tmc.Stream.Replication = 1
+	cfg := goka.DefaultConfig()
+	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
+	goka.ReplaceGlobalConfig(cfg)
+
+	tm, err := goka.TopicManagerBuilderWithConfig(cfg, tmc)(brokers)
+	require.NoError(t, err)
+
+	err = tm.EnsureStreamExists(inputStream, 1)
+	require.NoError(t, err)
+
+	// emit an input-message
+	inputEmitter, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.String))
+	require.NoError(t, err)
+	require.NoError(t, inputEmitter.EmitSync("key1", "input-value"))
+	require.NoError(t, inputEmitter.Finish())
+
+	var (
+		processed atomic.Int64
+	)
+
+	proc, err := goka.NewProcessor(brokers,
+		goka.DefineGroup(
+			group,
+			goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg interface{}) {
+				processed.Add(1)
+			}),
+		),
+		goka.WithRecoverForever(),
+	)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errg, ctx := multierr.NewErrGroup(ctx)
+
+	errg.Go(func() error {
+		return proc.Run(ctx)
+	})
+
+	// wait until it's starting
+	select {
+	case <-proc.StateReader().WaitForState(goka.ProcStateStarting):
+	case <-time.After(10 * time.Second):
+	}
+
+	// wait some more, at least rebalance-timeout
+	<-time.After(5 * time.Second)
+
+	// it should never recover
+	require.False(t, proc.Recovered())
+	// nor process any message
+	require.EqualValues(t, 0, processed.Load())
+
+	// stop everything and wait until it's shut down
+	cancel()
+	require.NoError(t, errg.Wait().ErrorOrNil())
+}
+
 // TestRebalanceSharePartitions runs two processors one after each other
 // and asserts that they rebalance partitions appropriately
 func TestRebalanceSharePartitions(t *testing.T) {

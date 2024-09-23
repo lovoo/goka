@@ -333,6 +333,12 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 		return nil
 	}
 
+	// never enter the rebalance loop, just stop here until the context is closed
+	if g.opts.recoverForever {
+		<-ctx.Done()
+		return nil
+	}
+
 	// run the main rebalance-consume-loop
 	errg.Go(func() error {
 		return g.rebalanceLoop(ctx)
