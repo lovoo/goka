@@ -5,11 +5,11 @@ go 1.20
 require (
 	github.com/IBM/sarama v1.41.3
 	github.com/go-stack/stack v1.8.1
-	github.com/golang/mock v1.6.0
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/stretchr/testify v1.8.4
 	github.com/syndtr/goleveldb v1.0.0
+	go.uber.org/mock v0.4.0
 	golang.org/x/sync v0.4.0
 	gopkg.in/redis.v5 v5.2.9
 	gopkg.in/yaml.v2 v2.4.0
