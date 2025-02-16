@@ -288,6 +288,11 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	if err != nil {
 		return fmt.Errorf("Error creating topic manager for brokers [%s]: %v", strings.Join(g.brokers, ","), err)
 	}
+	defer func() {
+		if err := g.tmgr.Close(); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("error closing topic manager: %w", err))
+		}
+	}()
 
 	// create kafka producer
 	g.log.Debugf("creating producer")

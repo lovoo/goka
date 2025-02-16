@@ -220,7 +220,7 @@ func TestProcessor_Run(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
 
-		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Close().Times(2)
 		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
 		bm.producer.EXPECT().Close().Times(1)
 
@@ -263,7 +263,7 @@ func TestProcessor_Run(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
 
-		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Close().Times(2)
 		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
 		bm.producer.EXPECT().Close().Times(1)
 
@@ -300,7 +300,7 @@ func TestProcessor_Run(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
 
-		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Close().Times(2)
 		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
 		bm.producer.EXPECT().Close().Times(1)
 
@@ -343,7 +343,7 @@ func TestProcessor_Run(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
 
-		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Close().Times(2)
 		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
 		bm.producer.EXPECT().Close().Times(1)
 
@@ -394,7 +394,7 @@ func TestProcessor_Stop(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
 
-		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Close().Times(2)
 		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
 		bm.producer.EXPECT().Close().Times(1)
 
@@ -448,7 +448,7 @@ func TestProcessor_Stop(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
 
-		bm.tmgr.EXPECT().Close().Times(1)
+		bm.tmgr.EXPECT().Close().Times(2)
 		bm.tmgr.EXPECT().Partitions(gomock.Any()).Return([]int32{0}, nil).Times(1)
 		bm.producer.EXPECT().Close().Times(1)
 
