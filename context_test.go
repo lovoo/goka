@@ -10,10 +10,9 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
-
 	"github.com/lovoo/goka/codec"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 func newEmitter(err error, done func(err error)) emitter {

@@ -3,7 +3,7 @@ package goka
 import (
 	"fmt"
 
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 )
 
 type gomockPanicker struct {
