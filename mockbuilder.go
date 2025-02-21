@@ -11,9 +11,7 @@ import (
 	"github.com/lovoo/goka/storage"
 )
 
-var (
-	errProducerBuilder error = errors.New("building producer failed on purpose")
-)
+var errProducerBuilder error = errors.New("building producer failed on purpose")
 
 type builderMock struct {
 	ctrl          *gomock.Controller

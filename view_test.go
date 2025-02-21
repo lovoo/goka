@@ -69,7 +69,7 @@ func createTestView(t *testing.T, consumer sarama.Consumer) (*View, *builderMock
 	viewTestRecoveredMessages = 0
 	opts := &voptions{
 		log:        defaultLogger,
-		tableCodec: new(codec.String),
+		tableCodec: convertOrFakeCodec(&codec.String{}),
 		updateCallback: func(ctx UpdateContext, s storage.Storage, key string, value []byte) error {
 			if err := DefaultUpdate(ctx, s, key, value); err != nil {
 				return err
@@ -189,10 +189,10 @@ func TestView_Get(t *testing.T) {
 				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
 		}
-		view.opts.tableCodec = &codec.Int64{}
+		view.opts.tableCodec = convertOrFakeCodec(&codec.Int64{})
 		view.state.SetState(State(ViewStateRunning))
 
-		bm.mst.EXPECT().Get(key).Return([]byte(strconv.FormatInt(value, 10)), nil)
+		bm.mst.EXPECT().GetP(key).Return([]byte(strconv.FormatInt(value, 10)), codec.NoopCloser, nil)
 
 		ret, err := view.Get(key)
 		require.NoError(t, err)
@@ -216,9 +216,9 @@ func TestView_Get(t *testing.T) {
 				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
 		}
-		view.opts.tableCodec = &codec.Int64{}
+		view.opts.tableCodec = convertOrFakeCodec(&codec.Int64{})
 		view.state.SetState(State(ViewStateRunning))
-		bm.mst.EXPECT().Get(key).Return(nil, nil)
+		bm.mst.EXPECT().GetP(key).Return(nil, codec.NoopCloser, nil)
 
 		ret, err := view.Get(key)
 		require.NoError(t, err)
@@ -243,9 +243,9 @@ func TestView_Get(t *testing.T) {
 				state: newPartitionTableState().SetState(State(PartitionRunning)),
 			},
 		}
-		view.opts.tableCodec = &codec.Int64{}
+		view.opts.tableCodec = convertOrFakeCodec(&codec.Int64{})
 		view.state.SetState(State(ViewStateRunning))
-		bm.mst.EXPECT().Get(key).Return(nil, errRet)
+		bm.mst.EXPECT().GetP(key).Return(nil, codec.NoopCloser, errRet)
 
 		_, err := view.Get(key)
 		require.Error(t, err)

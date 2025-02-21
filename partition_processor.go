@@ -3,6 +3,7 @@ package goka
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -579,8 +580,9 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	}
 
 	var (
-		m   interface{}
-		err error
+		m            interface{}
+		err          error
+		decodeCloser io.Closer
 	)
 
 	// decide whether to decode or ignore message
@@ -602,10 +604,11 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 		}
 
 		// decode message
-		m, err = codec.Decode(msg.value)
+		m, decodeCloser, err = codec.DecodeP(msg.value)
 		if err != nil {
 			return fmt.Errorf("error decoding message for key %s from %s/%d: %v", msg.key, msg.topic, msg.partition, err)
 		}
+		msgContext.addDeferred(decodeCloser.Close)
 	}
 
 	cb := pp.callbacks[msg.topic]
