@@ -40,6 +40,7 @@ jobs:
         shell: bash
         working-directory: examples
         run: |
+          sudo apt update -y && sudo apt install -y netcat docker-compose
           make start
 
       - name: Run example 1
