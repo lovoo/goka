@@ -37,7 +37,7 @@ jobs:
       - name: Services
         shell: bash
         run: |
-          sudo apt update -y && sudo apt install -y netcat
+          sudo apt update -y && sudo apt install -y netcat docker-compose
           cd examples && make start && cd ..
 
       - name: Test
