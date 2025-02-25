@@ -18,6 +18,7 @@ func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
 	brokers := initSystemTest(t)
 	var (
 		topic = goka.Stream(fmt.Sprintf("goka_systemtest_proc_shutdown_disconnect-%d", time.Now().Unix()))
+		join  = goka.Stream(fmt.Sprintf("goka_systemtest_proc_shutdown_disconnect-%d-join", time.Now().Unix()))
 		group = goka.Group(topic)
 	)
 
@@ -29,6 +30,7 @@ func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
 	tmgr, err := goka.DefaultTopicManagerBuilder(brokers)
 	require.NoError(t, err)
 	require.NoError(t, tmgr.EnsureStreamExists(string(topic), 10))
+	require.NoError(t, tmgr.EnsureTableExists(string(join), 10))
 
 	// emit values
 	errg.Go(func() error {
@@ -69,6 +71,7 @@ func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
 					ctx.SetValue(msg)
 				}
 			}),
+			goka.Join(goka.Table(join), new(codec.String)),
 			goka.Persist(new(codec.Int64)),
 		),
 		goka.WithConsumerGroupBuilder(goka.ConsumerGroupBuilderWithConfig(cfg)),
