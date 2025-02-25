@@ -421,11 +421,11 @@ func (g *Processor) handleSessionErrors(ctx, sessionCtx context.Context, session
 			)
 
 			if errors.As(err, &errProc) {
-				g.log.Debugf("error processing message (non-transient), shutting down processor: %v", err)
+				g.log.Printf("error processing message (non-transient), shutting down processor: %v", err)
 				sessionCtxCancel()
 			}
 			if errors.As(err, &errSetup) {
-				g.log.Debugf("setup error (non-transient), shutting down processor: %v", err)
+				g.log.Printf("setup error (non-transient), shutting down processor: %v", err)
 				sessionCtxCancel()
 			}
 		}

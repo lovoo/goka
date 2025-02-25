@@ -257,7 +257,7 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 		join := join
 		pp.runnerGroup.Go(func() error {
 			defer pp.state.SetState(PPStateStopping)
-			return join.CatchupForever(runnerCtx, false)
+			return join.CatchupForever(runnerCtx, true)
 		})
 	}
 
@@ -274,7 +274,7 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 			// (b) run the processor table in catchup mode so it keeps updating it's state.
 		case runModePassive:
 			if pp.table != nil {
-				err = pp.table.CatchupForever(runnerCtx, false)
+				err = pp.table.CatchupForever(runnerCtx, true)
 			}
 		default:
 			err = fmt.Errorf("processor has invalid run mode")
@@ -298,15 +298,15 @@ func (pp *PartitionProcessor) Stop() error {
 	pp.state.SetState(PPStateStopping)
 	defer pp.state.SetState(PPStateStopped)
 
-	close(pp.input)
-	close(pp.visitInput)
-
 	if pp.cancelRunnerGroup != nil {
 		pp.cancelRunnerGroup()
 	}
 
 	// wait for the runner to be done
 	runningErrs := multierror.Append(pp.runnerGroup.Wait().ErrorOrNil())
+
+	close(pp.input)
+	close(pp.visitInput)
 
 	// close all the tables
 	stopErrg, _ := multierr.NewErrGroup(context.Background())
@@ -637,15 +637,6 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 
 	var wg sync.WaitGroup
 
-	// drains the channel and drops out when closed.
-	// This is done when the processor shuts down during visit
-	// and makes sure the waitgroup is fully counted down.
-	drainUntilClose := func() {
-		for range pp.visitInput {
-			wg.Done()
-		}
-	}
-
 	// drains the input channel until there are no more items.
 	// does not wait for close, because the channel stays open for the next visit
 	drainUntilEmpty := func() {
@@ -662,6 +653,17 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 		}
 	}
 
+	// register a channel that will close once the visitor itself is done.
+	visitDone := make(chan struct{})
+	defer close(visitDone)
+
+	// start a goroutine in the processor's runner-errgroup that prevents the broker from shutting down
+	// while the visitor is running.
+	pp.runnerGroup.Go(func() error {
+		<-visitDone
+		return nil
+	})
+
 	defer it.Release()
 
 	stopping, doneWaitingForStop := pp.stopping()
@@ -673,7 +675,7 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 		wg.Add(1)
 		select {
 		case <-stopping:
-			drainUntilClose()
+			drainUntilEmpty()
 			wg.Done()
 			return ErrVisitAborted
 		case <-ctx.Done():
@@ -703,7 +705,7 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 	}()
 	select {
 	case <-stopping:
-		drainUntilClose()
+		drainUntilEmpty()
 		return ErrVisitAborted
 	case <-ctx.Done():
 		drainUntilEmpty()

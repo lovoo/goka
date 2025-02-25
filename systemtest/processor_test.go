@@ -305,6 +305,7 @@ func TestRebalance(t *testing.T) {
 	var (
 		group              = goka.Group(fmt.Sprintf("goka-systemtest-rebalance-%d", time.Now().Unix()))
 		inputStream string = string(group) + "-input"
+		joinTable   string = string(group) + "-join"
 		basepath           = "/tmp/goka-rebalance-test"
 	)
 
@@ -318,6 +319,9 @@ func TestRebalance(t *testing.T) {
 	require.NoError(t, err)
 
 	err = tm.EnsureStreamExists(inputStream, 20)
+	require.NoError(t, err)
+
+	err = tm.EnsureTableExists(joinTable, 20)
 	require.NoError(t, err)
 
 	em, err := goka.NewEmitter(brokers, goka.Stream(inputStream), new(codec.String))
@@ -338,6 +342,7 @@ func TestRebalance(t *testing.T) {
 			goka.DefineGroup(
 				group,
 				goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg interface{}) { ctx.SetValue(msg) }),
+				goka.Join(goka.Table(joinTable), new(codec.String)),
 				goka.Persist(new(codec.String)),
 			),
 			goka.WithRecoverAhead(),

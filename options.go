@@ -363,7 +363,7 @@ func (opt *poptions) applyOptions(gg *GroupGraph, opts ...ProcessorOption) error
 	}
 
 	if globalConfig.Producer.RequiredAcks == sarama.NoResponse {
-		return fmt.Errorf("Processors do not work with `Config.Producer.RequiredAcks==sarama.NoResponse`, as it uses the response's offset to store the value")
+		return fmt.Errorf("processors do not work with `Config.Producer.RequiredAcks==sarama.NoResponse`, as it uses the response's offset to store the value")
 	}
 
 	if opt.builders.producer == nil {

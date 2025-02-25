@@ -89,7 +89,7 @@ func checkBroker(broker Broker, config *sarama.Config) error {
 	}
 
 	err := broker.Open(config)
-	if err != nil {
+	if err != nil && !errors.Is(err, sarama.ErrAlreadyConnected) {
 		return fmt.Errorf("error opening broker connection: %v", err)
 	}
 	connected, err := broker.Connected()
