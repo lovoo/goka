@@ -46,10 +46,10 @@ func NewTopicManager(brokers []string, saramaConfig *sarama.Config, topicManager
 	if err != nil {
 		return nil, fmt.Errorf("Error creating the kafka client: %v", err)
 	}
-	return newTopicManager(saramaConfig, topicManagerConfig, client, checkBroker)
+	return newTopicManager(brokers, saramaConfig, topicManagerConfig, client, checkBroker)
 }
 
-func newTopicManager(saramaConfig *sarama.Config, topicManagerConfig *TopicManagerConfig, client sarama.Client, check checkFunc) (*topicManager, error) {
+func newTopicManager(brokers []string, saramaConfig *sarama.Config, topicManagerConfig *TopicManagerConfig, client sarama.Client, check checkFunc) (*topicManager, error) {
 	if client == nil {
 		return nil, errors.New("cannot create topic manager with nil client")
 	}
