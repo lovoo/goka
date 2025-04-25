@@ -15,6 +15,12 @@ var (
 	errBuildProducer = "error creating Kafka producer: %v"
 	errApplyOptions  = "error applying options: %v"
 	errTopicNotFound = errors.New("requested topic was not found")
+	errTopicNoCreate = func(topic string) error {
+		return fmt.Errorf("topic '%s' does not exist but the manager is configured with NoCreate, so it will not attempt to create it", topic)
+	}
+	errTopicChecking = func(topic string, err error) error {
+		return fmt.Errorf("error checking topic '%s': %w", topic, err)
+	}
 )
 
 // this regex matches the package name + some hash info, if we're in gomod but not subpackages
