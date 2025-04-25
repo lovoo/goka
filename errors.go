@@ -17,6 +17,12 @@ var (
 	errTopicNotFound = errors.New("requested topic was not found")
 )
 
+type topicNoCreateError string
+
+func (e topicNoCreateError) Error() string {
+	return fmt.Sprintf("topic '%s' does not exist but the manager is configured with NoCreate, so it will not attempt to create it", string(e))
+}
+
 // this regex matches the package name + some hash info, if we're in gomod but not subpackages
 // examples which match
 // * github.com/lovoo/goka/processor.go

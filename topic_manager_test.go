@@ -269,7 +269,7 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 		)
 
 		err := tm.EnsureStreamExists(topic, npar)
-		require.Equal(t, err.Error(), "topic `some-topic` does not exist but the manager is configured with NoCreate, so it will not attempt to create it")
+		require.ErrorIs(t, err, topicNoCreateError(topic))
 	})
 	t.Run("fail", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)
