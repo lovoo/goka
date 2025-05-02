@@ -20,6 +20,7 @@ import (
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
+	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
@@ -40,18 +41,18 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Broker mocks base method.
-func (m *MockClient) Broker(arg0 int32) (*sarama.Broker, error) {
+func (m *MockClient) Broker(brokerID int32) (*sarama.Broker, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Broker", arg0)
+	ret := m.ctrl.Call(m, "Broker", brokerID)
 	ret0, _ := ret[0].(*sarama.Broker)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Broker indicates an expected call of Broker.
-func (mr *MockClientMockRecorder) Broker(arg0 any) *gomock.Call {
+func (mr *MockClientMockRecorder) Broker(brokerID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broker", reflect.TypeOf((*MockClient)(nil).Broker), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broker", reflect.TypeOf((*MockClient)(nil).Broker), brokerID)
 }
 
 // Brokers mocks base method.
@@ -126,48 +127,48 @@ func (mr *MockClientMockRecorder) Controller() *gomock.Call {
 }
 
 // Coordinator mocks base method.
-func (m *MockClient) Coordinator(arg0 string) (*sarama.Broker, error) {
+func (m *MockClient) Coordinator(consumerGroup string) (*sarama.Broker, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Coordinator", arg0)
+	ret := m.ctrl.Call(m, "Coordinator", consumerGroup)
 	ret0, _ := ret[0].(*sarama.Broker)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Coordinator indicates an expected call of Coordinator.
-func (mr *MockClientMockRecorder) Coordinator(arg0 any) *gomock.Call {
+func (mr *MockClientMockRecorder) Coordinator(consumerGroup any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Coordinator", reflect.TypeOf((*MockClient)(nil).Coordinator), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Coordinator", reflect.TypeOf((*MockClient)(nil).Coordinator), consumerGroup)
 }
 
 // GetOffset mocks base method.
-func (m *MockClient) GetOffset(arg0 string, arg1 int32, arg2 int64) (int64, error) {
+func (m *MockClient) GetOffset(topic string, partitionID int32, time int64) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOffset", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "GetOffset", topic, partitionID, time)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetOffset indicates an expected call of GetOffset.
-func (mr *MockClientMockRecorder) GetOffset(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockClientMockRecorder) GetOffset(topic, partitionID, time any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOffset", reflect.TypeOf((*MockClient)(nil).GetOffset), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOffset", reflect.TypeOf((*MockClient)(nil).GetOffset), topic, partitionID, time)
 }
 
 // InSyncReplicas mocks base method.
-func (m *MockClient) InSyncReplicas(arg0 string, arg1 int32) ([]int32, error) {
+func (m *MockClient) InSyncReplicas(topic string, partitionID int32) ([]int32, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InSyncReplicas", arg0, arg1)
+	ret := m.ctrl.Call(m, "InSyncReplicas", topic, partitionID)
 	ret0, _ := ret[0].([]int32)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // InSyncReplicas indicates an expected call of InSyncReplicas.
-func (mr *MockClientMockRecorder) InSyncReplicas(arg0, arg1 any) *gomock.Call {
+func (mr *MockClientMockRecorder) InSyncReplicas(topic, partitionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InSyncReplicas", reflect.TypeOf((*MockClient)(nil).InSyncReplicas), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InSyncReplicas", reflect.TypeOf((*MockClient)(nil).InSyncReplicas), topic, partitionID)
 }
 
 // InitProducerID mocks base method.
@@ -186,24 +187,24 @@ func (mr *MockClientMockRecorder) InitProducerID() *gomock.Call {
 }
 
 // Leader mocks base method.
-func (m *MockClient) Leader(arg0 string, arg1 int32) (*sarama.Broker, error) {
+func (m *MockClient) Leader(topic string, partitionID int32) (*sarama.Broker, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Leader", arg0, arg1)
+	ret := m.ctrl.Call(m, "Leader", topic, partitionID)
 	ret0, _ := ret[0].(*sarama.Broker)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Leader indicates an expected call of Leader.
-func (mr *MockClientMockRecorder) Leader(arg0, arg1 any) *gomock.Call {
+func (mr *MockClientMockRecorder) Leader(topic, partitionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Leader", reflect.TypeOf((*MockClient)(nil).Leader), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Leader", reflect.TypeOf((*MockClient)(nil).Leader), topic, partitionID)
 }
 
 // LeaderAndEpoch mocks base method.
-func (m *MockClient) LeaderAndEpoch(arg0 string, arg1 int32) (*sarama.Broker, int32, error) {
+func (m *MockClient) LeaderAndEpoch(topic string, partitionID int32) (*sarama.Broker, int32, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LeaderAndEpoch", arg0, arg1)
+	ret := m.ctrl.Call(m, "LeaderAndEpoch", topic, partitionID)
 	ret0, _ := ret[0].(*sarama.Broker)
 	ret1, _ := ret[1].(int32)
 	ret2, _ := ret[2].(error)
@@ -211,9 +212,9 @@ func (m *MockClient) LeaderAndEpoch(arg0 string, arg1 int32) (*sarama.Broker, in
 }
 
 // LeaderAndEpoch indicates an expected call of LeaderAndEpoch.
-func (mr *MockClientMockRecorder) LeaderAndEpoch(arg0, arg1 any) *gomock.Call {
+func (mr *MockClientMockRecorder) LeaderAndEpoch(topic, partitionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LeaderAndEpoch", reflect.TypeOf((*MockClient)(nil).LeaderAndEpoch), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LeaderAndEpoch", reflect.TypeOf((*MockClient)(nil).LeaderAndEpoch), topic, partitionID)
 }
 
 // LeastLoadedBroker mocks base method.
@@ -231,47 +232,61 @@ func (mr *MockClientMockRecorder) LeastLoadedBroker() *gomock.Call {
 }
 
 // OfflineReplicas mocks base method.
-func (m *MockClient) OfflineReplicas(arg0 string, arg1 int32) ([]int32, error) {
+func (m *MockClient) OfflineReplicas(topic string, partitionID int32) ([]int32, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OfflineReplicas", arg0, arg1)
+	ret := m.ctrl.Call(m, "OfflineReplicas", topic, partitionID)
 	ret0, _ := ret[0].([]int32)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // OfflineReplicas indicates an expected call of OfflineReplicas.
-func (mr *MockClientMockRecorder) OfflineReplicas(arg0, arg1 any) *gomock.Call {
+func (mr *MockClientMockRecorder) OfflineReplicas(topic, partitionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OfflineReplicas", reflect.TypeOf((*MockClient)(nil).OfflineReplicas), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OfflineReplicas", reflect.TypeOf((*MockClient)(nil).OfflineReplicas), topic, partitionID)
+}
+
+// PartitionNotReadable mocks base method.
+func (m *MockClient) PartitionNotReadable(topic string, partition int32) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PartitionNotReadable", topic, partition)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// PartitionNotReadable indicates an expected call of PartitionNotReadable.
+func (mr *MockClientMockRecorder) PartitionNotReadable(topic, partition any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartitionNotReadable", reflect.TypeOf((*MockClient)(nil).PartitionNotReadable), topic, partition)
 }
 
 // Partitions mocks base method.
-func (m *MockClient) Partitions(arg0 string) ([]int32, error) {
+func (m *MockClient) Partitions(topic string) ([]int32, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Partitions", arg0)
+	ret := m.ctrl.Call(m, "Partitions", topic)
 	ret0, _ := ret[0].([]int32)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Partitions indicates an expected call of Partitions.
-func (mr *MockClientMockRecorder) Partitions(arg0 any) *gomock.Call {
+func (mr *MockClientMockRecorder) Partitions(topic any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Partitions", reflect.TypeOf((*MockClient)(nil).Partitions), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Partitions", reflect.TypeOf((*MockClient)(nil).Partitions), topic)
 }
 
 // RefreshBrokers mocks base method.
-func (m *MockClient) RefreshBrokers(arg0 []string) error {
+func (m *MockClient) RefreshBrokers(addrs []string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshBrokers", arg0)
+	ret := m.ctrl.Call(m, "RefreshBrokers", addrs)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RefreshBrokers indicates an expected call of RefreshBrokers.
-func (mr *MockClientMockRecorder) RefreshBrokers(arg0 any) *gomock.Call {
+func (mr *MockClientMockRecorder) RefreshBrokers(addrs any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshBrokers", reflect.TypeOf((*MockClient)(nil).RefreshBrokers), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshBrokers", reflect.TypeOf((*MockClient)(nil).RefreshBrokers), addrs)
 }
 
 // RefreshController mocks base method.
@@ -290,24 +305,24 @@ func (mr *MockClientMockRecorder) RefreshController() *gomock.Call {
 }
 
 // RefreshCoordinator mocks base method.
-func (m *MockClient) RefreshCoordinator(arg0 string) error {
+func (m *MockClient) RefreshCoordinator(consumerGroup string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshCoordinator", arg0)
+	ret := m.ctrl.Call(m, "RefreshCoordinator", consumerGroup)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RefreshCoordinator indicates an expected call of RefreshCoordinator.
-func (mr *MockClientMockRecorder) RefreshCoordinator(arg0 any) *gomock.Call {
+func (mr *MockClientMockRecorder) RefreshCoordinator(consumerGroup any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshCoordinator", reflect.TypeOf((*MockClient)(nil).RefreshCoordinator), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshCoordinator", reflect.TypeOf((*MockClient)(nil).RefreshCoordinator), consumerGroup)
 }
 
 // RefreshMetadata mocks base method.
-func (m *MockClient) RefreshMetadata(arg0 ...string) error {
+func (m *MockClient) RefreshMetadata(topics ...string) error {
 	m.ctrl.T.Helper()
 	varargs := []any{}
-	for _, a := range arg0 {
+	for _, a := range topics {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RefreshMetadata", varargs...)
@@ -316,38 +331,38 @@ func (m *MockClient) RefreshMetadata(arg0 ...string) error {
 }
 
 // RefreshMetadata indicates an expected call of RefreshMetadata.
-func (mr *MockClientMockRecorder) RefreshMetadata(arg0 ...any) *gomock.Call {
+func (mr *MockClientMockRecorder) RefreshMetadata(topics ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshMetadata", reflect.TypeOf((*MockClient)(nil).RefreshMetadata), arg0...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshMetadata", reflect.TypeOf((*MockClient)(nil).RefreshMetadata), topics...)
 }
 
 // RefreshTransactionCoordinator mocks base method.
-func (m *MockClient) RefreshTransactionCoordinator(arg0 string) error {
+func (m *MockClient) RefreshTransactionCoordinator(transactionID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshTransactionCoordinator", arg0)
+	ret := m.ctrl.Call(m, "RefreshTransactionCoordinator", transactionID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RefreshTransactionCoordinator indicates an expected call of RefreshTransactionCoordinator.
-func (mr *MockClientMockRecorder) RefreshTransactionCoordinator(arg0 any) *gomock.Call {
+func (mr *MockClientMockRecorder) RefreshTransactionCoordinator(transactionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTransactionCoordinator", reflect.TypeOf((*MockClient)(nil).RefreshTransactionCoordinator), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTransactionCoordinator", reflect.TypeOf((*MockClient)(nil).RefreshTransactionCoordinator), transactionID)
 }
 
 // Replicas mocks base method.
-func (m *MockClient) Replicas(arg0 string, arg1 int32) ([]int32, error) {
+func (m *MockClient) Replicas(topic string, partitionID int32) ([]int32, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Replicas", arg0, arg1)
+	ret := m.ctrl.Call(m, "Replicas", topic, partitionID)
 	ret0, _ := ret[0].([]int32)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Replicas indicates an expected call of Replicas.
-func (mr *MockClientMockRecorder) Replicas(arg0, arg1 any) *gomock.Call {
+func (mr *MockClientMockRecorder) Replicas(topic, partitionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicas", reflect.TypeOf((*MockClient)(nil).Replicas), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicas", reflect.TypeOf((*MockClient)(nil).Replicas), topic, partitionID)
 }
 
 // Topics mocks base method.
@@ -366,39 +381,40 @@ func (mr *MockClientMockRecorder) Topics() *gomock.Call {
 }
 
 // TransactionCoordinator mocks base method.
-func (m *MockClient) TransactionCoordinator(arg0 string) (*sarama.Broker, error) {
+func (m *MockClient) TransactionCoordinator(transactionID string) (*sarama.Broker, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TransactionCoordinator", arg0)
+	ret := m.ctrl.Call(m, "TransactionCoordinator", transactionID)
 	ret0, _ := ret[0].(*sarama.Broker)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // TransactionCoordinator indicates an expected call of TransactionCoordinator.
-func (mr *MockClientMockRecorder) TransactionCoordinator(arg0 any) *gomock.Call {
+func (mr *MockClientMockRecorder) TransactionCoordinator(transactionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TransactionCoordinator", reflect.TypeOf((*MockClient)(nil).TransactionCoordinator), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TransactionCoordinator", reflect.TypeOf((*MockClient)(nil).TransactionCoordinator), transactionID)
 }
 
 // WritablePartitions mocks base method.
-func (m *MockClient) WritablePartitions(arg0 string) ([]int32, error) {
+func (m *MockClient) WritablePartitions(topic string) ([]int32, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WritablePartitions", arg0)
+	ret := m.ctrl.Call(m, "WritablePartitions", topic)
 	ret0, _ := ret[0].([]int32)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // WritablePartitions indicates an expected call of WritablePartitions.
-func (mr *MockClientMockRecorder) WritablePartitions(arg0 any) *gomock.Call {
+func (mr *MockClientMockRecorder) WritablePartitions(topic any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WritablePartitions", reflect.TypeOf((*MockClient)(nil).WritablePartitions), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WritablePartitions", reflect.TypeOf((*MockClient)(nil).WritablePartitions), topic)
 }
 
 // MockClusterAdmin is a mock of ClusterAdmin interface.
 type MockClusterAdmin struct {
 	ctrl     *gomock.Controller
 	recorder *MockClusterAdminMockRecorder
+	isgomock struct{}
 }
 
 // MockClusterAdminMockRecorder is the mock recorder for MockClusterAdmin.
@@ -419,45 +435,45 @@ func (m *MockClusterAdmin) EXPECT() *MockClusterAdminMockRecorder {
 }
 
 // AlterClientQuotas mocks base method.
-func (m *MockClusterAdmin) AlterClientQuotas(arg0 []sarama.QuotaEntityComponent, arg1 sarama.ClientQuotasOp, arg2 bool) error {
+func (m *MockClusterAdmin) AlterClientQuotas(entity []sarama.QuotaEntityComponent, op sarama.ClientQuotasOp, validateOnly bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AlterClientQuotas", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "AlterClientQuotas", entity, op, validateOnly)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AlterClientQuotas indicates an expected call of AlterClientQuotas.
-func (mr *MockClusterAdminMockRecorder) AlterClientQuotas(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) AlterClientQuotas(entity, op, validateOnly any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AlterClientQuotas", reflect.TypeOf((*MockClusterAdmin)(nil).AlterClientQuotas), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AlterClientQuotas", reflect.TypeOf((*MockClusterAdmin)(nil).AlterClientQuotas), entity, op, validateOnly)
 }
 
 // AlterConfig mocks base method.
-func (m *MockClusterAdmin) AlterConfig(arg0 sarama.ConfigResourceType, arg1 string, arg2 map[string]*string, arg3 bool) error {
+func (m *MockClusterAdmin) AlterConfig(resourceType sarama.ConfigResourceType, name string, entries map[string]*string, validateOnly bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AlterConfig", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "AlterConfig", resourceType, name, entries, validateOnly)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AlterConfig indicates an expected call of AlterConfig.
-func (mr *MockClusterAdminMockRecorder) AlterConfig(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) AlterConfig(resourceType, name, entries, validateOnly any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AlterConfig", reflect.TypeOf((*MockClusterAdmin)(nil).AlterConfig), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AlterConfig", reflect.TypeOf((*MockClusterAdmin)(nil).AlterConfig), resourceType, name, entries, validateOnly)
 }
 
 // AlterPartitionReassignments mocks base method.
-func (m *MockClusterAdmin) AlterPartitionReassignments(arg0 string, arg1 [][]int32) error {
+func (m *MockClusterAdmin) AlterPartitionReassignments(topic string, assignment [][]int32) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AlterPartitionReassignments", arg0, arg1)
+	ret := m.ctrl.Call(m, "AlterPartitionReassignments", topic, assignment)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AlterPartitionReassignments indicates an expected call of AlterPartitionReassignments.
-func (mr *MockClusterAdminMockRecorder) AlterPartitionReassignments(arg0, arg1 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) AlterPartitionReassignments(topic, assignment any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AlterPartitionReassignments", reflect.TypeOf((*MockClusterAdmin)(nil).AlterPartitionReassignments), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AlterPartitionReassignments", reflect.TypeOf((*MockClusterAdmin)(nil).AlterPartitionReassignments), topic, assignment)
 }
 
 // Close mocks base method.
@@ -489,18 +505,33 @@ func (mr *MockClusterAdminMockRecorder) Controller() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Controller", reflect.TypeOf((*MockClusterAdmin)(nil).Controller))
 }
 
-// CreateACL mocks base method.
-func (m *MockClusterAdmin) CreateACL(arg0 sarama.Resource, arg1 sarama.Acl) error {
+// Coordinator mocks base method.
+func (m *MockClusterAdmin) Coordinator(group string) (*sarama.Broker, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateACL", arg0, arg1)
+	ret := m.ctrl.Call(m, "Coordinator", group)
+	ret0, _ := ret[0].(*sarama.Broker)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Coordinator indicates an expected call of Coordinator.
+func (mr *MockClusterAdminMockRecorder) Coordinator(group any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Coordinator", reflect.TypeOf((*MockClusterAdmin)(nil).Coordinator), group)
+}
+
+// CreateACL mocks base method.
+func (m *MockClusterAdmin) CreateACL(resource sarama.Resource, acl sarama.Acl) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateACL", resource, acl)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreateACL indicates an expected call of CreateACL.
-func (mr *MockClusterAdminMockRecorder) CreateACL(arg0, arg1 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) CreateACL(resource, acl any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateACL", reflect.TypeOf((*MockClusterAdmin)(nil).CreateACL), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateACL", reflect.TypeOf((*MockClusterAdmin)(nil).CreateACL), resource, acl)
 }
 
 // CreateACLs mocks base method.
@@ -518,132 +549,132 @@ func (mr *MockClusterAdminMockRecorder) CreateACLs(arg0 any) *gomock.Call {
 }
 
 // CreatePartitions mocks base method.
-func (m *MockClusterAdmin) CreatePartitions(arg0 string, arg1 int32, arg2 [][]int32, arg3 bool) error {
+func (m *MockClusterAdmin) CreatePartitions(topic string, count int32, assignment [][]int32, validateOnly bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreatePartitions", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "CreatePartitions", topic, count, assignment, validateOnly)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreatePartitions indicates an expected call of CreatePartitions.
-func (mr *MockClusterAdminMockRecorder) CreatePartitions(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) CreatePartitions(topic, count, assignment, validateOnly any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePartitions", reflect.TypeOf((*MockClusterAdmin)(nil).CreatePartitions), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePartitions", reflect.TypeOf((*MockClusterAdmin)(nil).CreatePartitions), topic, count, assignment, validateOnly)
 }
 
 // CreateTopic mocks base method.
-func (m *MockClusterAdmin) CreateTopic(arg0 string, arg1 *sarama.TopicDetail, arg2 bool) error {
+func (m *MockClusterAdmin) CreateTopic(topic string, detail *sarama.TopicDetail, validateOnly bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTopic", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "CreateTopic", topic, detail, validateOnly)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreateTopic indicates an expected call of CreateTopic.
-func (mr *MockClusterAdminMockRecorder) CreateTopic(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) CreateTopic(topic, detail, validateOnly any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTopic", reflect.TypeOf((*MockClusterAdmin)(nil).CreateTopic), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTopic", reflect.TypeOf((*MockClusterAdmin)(nil).CreateTopic), topic, detail, validateOnly)
 }
 
 // DeleteACL mocks base method.
-func (m *MockClusterAdmin) DeleteACL(arg0 sarama.AclFilter, arg1 bool) ([]sarama.MatchingAcl, error) {
+func (m *MockClusterAdmin) DeleteACL(filter sarama.AclFilter, validateOnly bool) ([]sarama.MatchingAcl, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteACL", arg0, arg1)
+	ret := m.ctrl.Call(m, "DeleteACL", filter, validateOnly)
 	ret0, _ := ret[0].([]sarama.MatchingAcl)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DeleteACL indicates an expected call of DeleteACL.
-func (mr *MockClusterAdminMockRecorder) DeleteACL(arg0, arg1 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DeleteACL(filter, validateOnly any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteACL", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteACL), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteACL", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteACL), filter, validateOnly)
 }
 
 // DeleteConsumerGroup mocks base method.
-func (m *MockClusterAdmin) DeleteConsumerGroup(arg0 string) error {
+func (m *MockClusterAdmin) DeleteConsumerGroup(group string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteConsumerGroup", arg0)
+	ret := m.ctrl.Call(m, "DeleteConsumerGroup", group)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteConsumerGroup indicates an expected call of DeleteConsumerGroup.
-func (mr *MockClusterAdminMockRecorder) DeleteConsumerGroup(arg0 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DeleteConsumerGroup(group any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteConsumerGroup", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteConsumerGroup), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteConsumerGroup", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteConsumerGroup), group)
 }
 
 // DeleteConsumerGroupOffset mocks base method.
-func (m *MockClusterAdmin) DeleteConsumerGroupOffset(arg0, arg1 string, arg2 int32) error {
+func (m *MockClusterAdmin) DeleteConsumerGroupOffset(group, topic string, partition int32) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteConsumerGroupOffset", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "DeleteConsumerGroupOffset", group, topic, partition)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteConsumerGroupOffset indicates an expected call of DeleteConsumerGroupOffset.
-func (mr *MockClusterAdminMockRecorder) DeleteConsumerGroupOffset(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DeleteConsumerGroupOffset(group, topic, partition any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteConsumerGroupOffset", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteConsumerGroupOffset), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteConsumerGroupOffset", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteConsumerGroupOffset), group, topic, partition)
 }
 
 // DeleteRecords mocks base method.
-func (m *MockClusterAdmin) DeleteRecords(arg0 string, arg1 map[int32]int64) error {
+func (m *MockClusterAdmin) DeleteRecords(topic string, partitionOffsets map[int32]int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteRecords", arg0, arg1)
+	ret := m.ctrl.Call(m, "DeleteRecords", topic, partitionOffsets)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteRecords indicates an expected call of DeleteRecords.
-func (mr *MockClusterAdminMockRecorder) DeleteRecords(arg0, arg1 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DeleteRecords(topic, partitionOffsets any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteRecords", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteRecords), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteRecords", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteRecords), topic, partitionOffsets)
 }
 
 // DeleteTopic mocks base method.
-func (m *MockClusterAdmin) DeleteTopic(arg0 string) error {
+func (m *MockClusterAdmin) DeleteTopic(topic string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteTopic", arg0)
+	ret := m.ctrl.Call(m, "DeleteTopic", topic)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteTopic indicates an expected call of DeleteTopic.
-func (mr *MockClusterAdminMockRecorder) DeleteTopic(arg0 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DeleteTopic(topic any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTopic", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteTopic), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTopic", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteTopic), topic)
 }
 
 // DeleteUserScramCredentials mocks base method.
-func (m *MockClusterAdmin) DeleteUserScramCredentials(arg0 []sarama.AlterUserScramCredentialsDelete) ([]*sarama.AlterUserScramCredentialsResult, error) {
+func (m *MockClusterAdmin) DeleteUserScramCredentials(delete []sarama.AlterUserScramCredentialsDelete) ([]*sarama.AlterUserScramCredentialsResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteUserScramCredentials", arg0)
+	ret := m.ctrl.Call(m, "DeleteUserScramCredentials", delete)
 	ret0, _ := ret[0].([]*sarama.AlterUserScramCredentialsResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DeleteUserScramCredentials indicates an expected call of DeleteUserScramCredentials.
-func (mr *MockClusterAdminMockRecorder) DeleteUserScramCredentials(arg0 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DeleteUserScramCredentials(delete any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUserScramCredentials", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteUserScramCredentials), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUserScramCredentials", reflect.TypeOf((*MockClusterAdmin)(nil).DeleteUserScramCredentials), delete)
 }
 
 // DescribeClientQuotas mocks base method.
-func (m *MockClusterAdmin) DescribeClientQuotas(arg0 []sarama.QuotaFilterComponent, arg1 bool) ([]sarama.DescribeClientQuotasEntry, error) {
+func (m *MockClusterAdmin) DescribeClientQuotas(components []sarama.QuotaFilterComponent, strict bool) ([]sarama.DescribeClientQuotasEntry, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeClientQuotas", arg0, arg1)
+	ret := m.ctrl.Call(m, "DescribeClientQuotas", components, strict)
 	ret0, _ := ret[0].([]sarama.DescribeClientQuotasEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeClientQuotas indicates an expected call of DescribeClientQuotas.
-func (mr *MockClusterAdminMockRecorder) DescribeClientQuotas(arg0, arg1 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DescribeClientQuotas(components, strict any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeClientQuotas", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeClientQuotas), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeClientQuotas", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeClientQuotas), components, strict)
 }
 
 // DescribeCluster mocks base method.
@@ -663,122 +694,137 @@ func (mr *MockClusterAdminMockRecorder) DescribeCluster() *gomock.Call {
 }
 
 // DescribeConfig mocks base method.
-func (m *MockClusterAdmin) DescribeConfig(arg0 sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
+func (m *MockClusterAdmin) DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeConfig", arg0)
+	ret := m.ctrl.Call(m, "DescribeConfig", resource)
 	ret0, _ := ret[0].([]sarama.ConfigEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeConfig indicates an expected call of DescribeConfig.
-func (mr *MockClusterAdminMockRecorder) DescribeConfig(arg0 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DescribeConfig(resource any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeConfig", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeConfig), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeConfig", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeConfig), resource)
 }
 
 // DescribeConsumerGroups mocks base method.
-func (m *MockClusterAdmin) DescribeConsumerGroups(arg0 []string) ([]*sarama.GroupDescription, error) {
+func (m *MockClusterAdmin) DescribeConsumerGroups(groups []string) ([]*sarama.GroupDescription, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeConsumerGroups", arg0)
+	ret := m.ctrl.Call(m, "DescribeConsumerGroups", groups)
 	ret0, _ := ret[0].([]*sarama.GroupDescription)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeConsumerGroups indicates an expected call of DescribeConsumerGroups.
-func (mr *MockClusterAdminMockRecorder) DescribeConsumerGroups(arg0 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DescribeConsumerGroups(groups any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeConsumerGroups", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeConsumerGroups), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeConsumerGroups", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeConsumerGroups), groups)
 }
 
 // DescribeLogDirs mocks base method.
-func (m *MockClusterAdmin) DescribeLogDirs(arg0 []int32) (map[int32][]sarama.DescribeLogDirsResponseDirMetadata, error) {
+func (m *MockClusterAdmin) DescribeLogDirs(brokers []int32) (map[int32][]sarama.DescribeLogDirsResponseDirMetadata, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeLogDirs", arg0)
+	ret := m.ctrl.Call(m, "DescribeLogDirs", brokers)
 	ret0, _ := ret[0].(map[int32][]sarama.DescribeLogDirsResponseDirMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeLogDirs indicates an expected call of DescribeLogDirs.
-func (mr *MockClusterAdminMockRecorder) DescribeLogDirs(arg0 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DescribeLogDirs(brokers any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeLogDirs", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeLogDirs), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeLogDirs", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeLogDirs), brokers)
 }
 
 // DescribeTopics mocks base method.
-func (m *MockClusterAdmin) DescribeTopics(arg0 []string) ([]*sarama.TopicMetadata, error) {
+func (m *MockClusterAdmin) DescribeTopics(topics []string) ([]*sarama.TopicMetadata, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeTopics", arg0)
+	ret := m.ctrl.Call(m, "DescribeTopics", topics)
 	ret0, _ := ret[0].([]*sarama.TopicMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeTopics indicates an expected call of DescribeTopics.
-func (mr *MockClusterAdminMockRecorder) DescribeTopics(arg0 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DescribeTopics(topics any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTopics", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeTopics), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTopics", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeTopics), topics)
 }
 
 // DescribeUserScramCredentials mocks base method.
-func (m *MockClusterAdmin) DescribeUserScramCredentials(arg0 []string) ([]*sarama.DescribeUserScramCredentialsResult, error) {
+func (m *MockClusterAdmin) DescribeUserScramCredentials(users []string) ([]*sarama.DescribeUserScramCredentialsResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeUserScramCredentials", arg0)
+	ret := m.ctrl.Call(m, "DescribeUserScramCredentials", users)
 	ret0, _ := ret[0].([]*sarama.DescribeUserScramCredentialsResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeUserScramCredentials indicates an expected call of DescribeUserScramCredentials.
-func (mr *MockClusterAdminMockRecorder) DescribeUserScramCredentials(arg0 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) DescribeUserScramCredentials(users any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeUserScramCredentials", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeUserScramCredentials), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeUserScramCredentials", reflect.TypeOf((*MockClusterAdmin)(nil).DescribeUserScramCredentials), users)
+}
+
+// ElectLeaders mocks base method.
+func (m *MockClusterAdmin) ElectLeaders(arg0 sarama.ElectionType, arg1 map[string][]int32) (map[string]map[int32]*sarama.PartitionResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ElectLeaders", arg0, arg1)
+	ret0, _ := ret[0].(map[string]map[int32]*sarama.PartitionResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ElectLeaders indicates an expected call of ElectLeaders.
+func (mr *MockClusterAdminMockRecorder) ElectLeaders(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ElectLeaders", reflect.TypeOf((*MockClusterAdmin)(nil).ElectLeaders), arg0, arg1)
 }
 
 // IncrementalAlterConfig mocks base method.
-func (m *MockClusterAdmin) IncrementalAlterConfig(arg0 sarama.ConfigResourceType, arg1 string, arg2 map[string]sarama.IncrementalAlterConfigsEntry, arg3 bool) error {
+func (m *MockClusterAdmin) IncrementalAlterConfig(resourceType sarama.ConfigResourceType, name string, entries map[string]sarama.IncrementalAlterConfigsEntry, validateOnly bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IncrementalAlterConfig", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "IncrementalAlterConfig", resourceType, name, entries, validateOnly)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // IncrementalAlterConfig indicates an expected call of IncrementalAlterConfig.
-func (mr *MockClusterAdminMockRecorder) IncrementalAlterConfig(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) IncrementalAlterConfig(resourceType, name, entries, validateOnly any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementalAlterConfig", reflect.TypeOf((*MockClusterAdmin)(nil).IncrementalAlterConfig), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementalAlterConfig", reflect.TypeOf((*MockClusterAdmin)(nil).IncrementalAlterConfig), resourceType, name, entries, validateOnly)
 }
 
 // ListAcls mocks base method.
-func (m *MockClusterAdmin) ListAcls(arg0 sarama.AclFilter) ([]sarama.ResourceAcls, error) {
+func (m *MockClusterAdmin) ListAcls(filter sarama.AclFilter) ([]sarama.ResourceAcls, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListAcls", arg0)
+	ret := m.ctrl.Call(m, "ListAcls", filter)
 	ret0, _ := ret[0].([]sarama.ResourceAcls)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListAcls indicates an expected call of ListAcls.
-func (mr *MockClusterAdminMockRecorder) ListAcls(arg0 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) ListAcls(filter any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAcls", reflect.TypeOf((*MockClusterAdmin)(nil).ListAcls), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAcls", reflect.TypeOf((*MockClusterAdmin)(nil).ListAcls), filter)
 }
 
 // ListConsumerGroupOffsets mocks base method.
-func (m *MockClusterAdmin) ListConsumerGroupOffsets(arg0 string, arg1 map[string][]int32) (*sarama.OffsetFetchResponse, error) {
+func (m *MockClusterAdmin) ListConsumerGroupOffsets(group string, topicPartitions map[string][]int32) (*sarama.OffsetFetchResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListConsumerGroupOffsets", arg0, arg1)
+	ret := m.ctrl.Call(m, "ListConsumerGroupOffsets", group, topicPartitions)
 	ret0, _ := ret[0].(*sarama.OffsetFetchResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListConsumerGroupOffsets indicates an expected call of ListConsumerGroupOffsets.
-func (mr *MockClusterAdminMockRecorder) ListConsumerGroupOffsets(arg0, arg1 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) ListConsumerGroupOffsets(group, topicPartitions any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConsumerGroupOffsets", reflect.TypeOf((*MockClusterAdmin)(nil).ListConsumerGroupOffsets), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConsumerGroupOffsets", reflect.TypeOf((*MockClusterAdmin)(nil).ListConsumerGroupOffsets), group, topicPartitions)
 }
 
 // ListConsumerGroups mocks base method.
@@ -797,18 +843,18 @@ func (mr *MockClusterAdminMockRecorder) ListConsumerGroups() *gomock.Call {
 }
 
 // ListPartitionReassignments mocks base method.
-func (m *MockClusterAdmin) ListPartitionReassignments(arg0 string, arg1 []int32) (map[string]map[int32]*sarama.PartitionReplicaReassignmentsStatus, error) {
+func (m *MockClusterAdmin) ListPartitionReassignments(topics string, partitions []int32) (map[string]map[int32]*sarama.PartitionReplicaReassignmentsStatus, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListPartitionReassignments", arg0, arg1)
+	ret := m.ctrl.Call(m, "ListPartitionReassignments", topics, partitions)
 	ret0, _ := ret[0].(map[string]map[int32]*sarama.PartitionReplicaReassignmentsStatus)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListPartitionReassignments indicates an expected call of ListPartitionReassignments.
-func (mr *MockClusterAdminMockRecorder) ListPartitionReassignments(arg0, arg1 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) ListPartitionReassignments(topics, partitions any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPartitionReassignments", reflect.TypeOf((*MockClusterAdmin)(nil).ListPartitionReassignments), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPartitionReassignments", reflect.TypeOf((*MockClusterAdmin)(nil).ListPartitionReassignments), topics, partitions)
 }
 
 // ListTopics mocks base method.
@@ -827,31 +873,31 @@ func (mr *MockClusterAdminMockRecorder) ListTopics() *gomock.Call {
 }
 
 // RemoveMemberFromConsumerGroup mocks base method.
-func (m *MockClusterAdmin) RemoveMemberFromConsumerGroup(arg0 string, arg1 []string) (*sarama.LeaveGroupResponse, error) {
+func (m *MockClusterAdmin) RemoveMemberFromConsumerGroup(groupId string, groupInstanceIds []string) (*sarama.LeaveGroupResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveMemberFromConsumerGroup", arg0, arg1)
+	ret := m.ctrl.Call(m, "RemoveMemberFromConsumerGroup", groupId, groupInstanceIds)
 	ret0, _ := ret[0].(*sarama.LeaveGroupResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RemoveMemberFromConsumerGroup indicates an expected call of RemoveMemberFromConsumerGroup.
-func (mr *MockClusterAdminMockRecorder) RemoveMemberFromConsumerGroup(arg0, arg1 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) RemoveMemberFromConsumerGroup(groupId, groupInstanceIds any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveMemberFromConsumerGroup", reflect.TypeOf((*MockClusterAdmin)(nil).RemoveMemberFromConsumerGroup), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveMemberFromConsumerGroup", reflect.TypeOf((*MockClusterAdmin)(nil).RemoveMemberFromConsumerGroup), groupId, groupInstanceIds)
 }
 
 // UpsertUserScramCredentials mocks base method.
-func (m *MockClusterAdmin) UpsertUserScramCredentials(arg0 []sarama.AlterUserScramCredentialsUpsert) ([]*sarama.AlterUserScramCredentialsResult, error) {
+func (m *MockClusterAdmin) UpsertUserScramCredentials(upsert []sarama.AlterUserScramCredentialsUpsert) ([]*sarama.AlterUserScramCredentialsResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpsertUserScramCredentials", arg0)
+	ret := m.ctrl.Call(m, "UpsertUserScramCredentials", upsert)
 	ret0, _ := ret[0].([]*sarama.AlterUserScramCredentialsResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpsertUserScramCredentials indicates an expected call of UpsertUserScramCredentials.
-func (mr *MockClusterAdminMockRecorder) UpsertUserScramCredentials(arg0 any) *gomock.Call {
+func (mr *MockClusterAdminMockRecorder) UpsertUserScramCredentials(upsert any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertUserScramCredentials", reflect.TypeOf((*MockClusterAdmin)(nil).UpsertUserScramCredentials), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertUserScramCredentials", reflect.TypeOf((*MockClusterAdmin)(nil).UpsertUserScramCredentials), upsert)
 }
