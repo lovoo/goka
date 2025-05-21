@@ -20,6 +20,7 @@ import (
 type MockStorage struct {
 	ctrl     *gomock.Controller
 	recorder *MockStorageMockRecorder
+	isgomock struct{}
 }
 
 // MockStorageMockRecorder is the mock recorder for MockStorage.
@@ -54,62 +55,62 @@ func (mr *MockStorageMockRecorder) Close() *gomock.Call {
 }
 
 // Delete mocks base method.
-func (m *MockStorage) Delete(arg0 string) error {
+func (m *MockStorage) Delete(key string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", arg0)
+	ret := m.ctrl.Call(m, "Delete", key)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *MockStorageMockRecorder) Delete(arg0 any) *gomock.Call {
+func (mr *MockStorageMockRecorder) Delete(key any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockStorage)(nil).Delete), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockStorage)(nil).Delete), key)
 }
 
 // Get mocks base method.
-func (m *MockStorage) Get(arg0 string) ([]byte, error) {
+func (m *MockStorage) Get(key string) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", arg0)
+	ret := m.ctrl.Call(m, "Get", key)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockStorageMockRecorder) Get(arg0 any) *gomock.Call {
+func (mr *MockStorageMockRecorder) Get(key any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockStorage)(nil).Get), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockStorage)(nil).Get), key)
 }
 
 // GetOffset mocks base method.
-func (m *MockStorage) GetOffset(arg0 int64) (int64, error) {
+func (m *MockStorage) GetOffset(def int64) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOffset", arg0)
+	ret := m.ctrl.Call(m, "GetOffset", def)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetOffset indicates an expected call of GetOffset.
-func (mr *MockStorageMockRecorder) GetOffset(arg0 any) *gomock.Call {
+func (mr *MockStorageMockRecorder) GetOffset(def any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOffset", reflect.TypeOf((*MockStorage)(nil).GetOffset), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOffset", reflect.TypeOf((*MockStorage)(nil).GetOffset), def)
 }
 
 // Has mocks base method.
-func (m *MockStorage) Has(arg0 string) (bool, error) {
+func (m *MockStorage) Has(key string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Has", arg0)
+	ret := m.ctrl.Call(m, "Has", key)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Has indicates an expected call of Has.
-func (mr *MockStorageMockRecorder) Has(arg0 any) *gomock.Call {
+func (mr *MockStorageMockRecorder) Has(key any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Has", reflect.TypeOf((*MockStorage)(nil).Has), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Has", reflect.TypeOf((*MockStorage)(nil).Has), key)
 }
 
 // Iterator mocks base method.
@@ -128,18 +129,18 @@ func (mr *MockStorageMockRecorder) Iterator() *gomock.Call {
 }
 
 // IteratorWithRange mocks base method.
-func (m *MockStorage) IteratorWithRange(arg0, arg1 []byte) (storage.Iterator, error) {
+func (m *MockStorage) IteratorWithRange(start, limit []byte) (storage.Iterator, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IteratorWithRange", arg0, arg1)
+	ret := m.ctrl.Call(m, "IteratorWithRange", start, limit)
 	ret0, _ := ret[0].(storage.Iterator)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // IteratorWithRange indicates an expected call of IteratorWithRange.
-func (mr *MockStorageMockRecorder) IteratorWithRange(arg0, arg1 any) *gomock.Call {
+func (mr *MockStorageMockRecorder) IteratorWithRange(start, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IteratorWithRange", reflect.TypeOf((*MockStorage)(nil).IteratorWithRange), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IteratorWithRange", reflect.TypeOf((*MockStorage)(nil).IteratorWithRange), start, limit)
 }
 
 // MarkRecovered mocks base method.
@@ -171,29 +172,29 @@ func (mr *MockStorageMockRecorder) Open() *gomock.Call {
 }
 
 // Set mocks base method.
-func (m *MockStorage) Set(arg0 string, arg1 []byte) error {
+func (m *MockStorage) Set(key string, value []byte) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Set", arg0, arg1)
+	ret := m.ctrl.Call(m, "Set", key, value)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Set indicates an expected call of Set.
-func (mr *MockStorageMockRecorder) Set(arg0, arg1 any) *gomock.Call {
+func (mr *MockStorageMockRecorder) Set(key, value any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockStorage)(nil).Set), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockStorage)(nil).Set), key, value)
 }
 
 // SetOffset mocks base method.
-func (m *MockStorage) SetOffset(arg0 int64) error {
+func (m *MockStorage) SetOffset(offset int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetOffset", arg0)
+	ret := m.ctrl.Call(m, "SetOffset", offset)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetOffset indicates an expected call of SetOffset.
-func (mr *MockStorageMockRecorder) SetOffset(arg0 any) *gomock.Call {
+func (mr *MockStorageMockRecorder) SetOffset(offset any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetOffset", reflect.TypeOf((*MockStorage)(nil).SetOffset), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetOffset", reflect.TypeOf((*MockStorage)(nil).SetOffset), offset)
 }
