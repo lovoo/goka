@@ -107,7 +107,7 @@ func TestTM_newTopicManager(t *testing.T) {
 		bm.client.EXPECT().Brokers().Return([]*sarama.Broker{
 			new(sarama.Broker),
 		})
-		tm, err := newTopicManager(tmTestBrokers, DefaultConfig(), NewTopicManagerConfig(), bm.client, trueCheckFunc)
+		tm, err := newTopicManager(DefaultConfig(), NewTopicManagerConfig(), bm.client, trueCheckFunc)
 		require.NoError(t, err)
 		require.Equal(t, tm.client, bm.client)
 		require.NotNil(t, tm.admin)
@@ -117,10 +117,10 @@ func TestTM_newTopicManager(t *testing.T) {
 		defer ctrl.Finish()
 		bm := newBuilderMock(ctrl)
 
-		_, err := newTopicManager(tmTestBrokers, nil, nil, bm.client, trueCheckFunc)
+		_, err := newTopicManager(nil, nil, bm.client, trueCheckFunc)
 		require.Error(t, err)
 
-		_, err = newTopicManager(tmTestBrokers, nil, NewTopicManagerConfig(), nil, trueCheckFunc)
+		_, err = newTopicManager(nil, NewTopicManagerConfig(), nil, trueCheckFunc)
 		require.Error(t, err)
 	})
 	t.Run("fail_check", func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestTM_newTopicManager(t *testing.T) {
 			new(sarama.Broker),
 		})
 
-		_, err := newTopicManager(tmTestBrokers, DefaultConfig(), NewTopicManagerConfig(), bm.client, falseCheckFunc)
+		_, err := newTopicManager(DefaultConfig(), NewTopicManagerConfig(), bm.client, falseCheckFunc)
 		require.Equal(t, err.Error(), "broker check error")
 	})
 }
@@ -269,7 +269,7 @@ func TestTM_EnsureStreamExists(t *testing.T) {
 		)
 
 		err := tm.EnsureStreamExists(topic, npar)
-		require.ErrorContains(t, err, "will not attempt to create it")
+		require.ErrorIs(t, err, topicNoCreateError(topic))
 	})
 	t.Run("fail", func(t *testing.T) {
 		tm, bm, ctrl := createTopicManager(t)

@@ -46,10 +46,10 @@ func NewTopicManager(brokers []string, saramaConfig *sarama.Config, topicManager
 	if err != nil {
 		return nil, fmt.Errorf("Error creating the kafka client: %v", err)
 	}
-	return newTopicManager(brokers, saramaConfig, topicManagerConfig, client, checkBroker)
+	return newTopicManager(saramaConfig, topicManagerConfig, client, checkBroker)
 }
 
-func newTopicManager(brokers []string, saramaConfig *sarama.Config, topicManagerConfig *TopicManagerConfig, client sarama.Client, check checkFunc) (*topicManager, error) {
+func newTopicManager(saramaConfig *sarama.Config, topicManagerConfig *TopicManagerConfig, client sarama.Client, check checkFunc) (*topicManager, error) {
 	if client == nil {
 		return nil, errors.New("cannot create topic manager with nil client")
 	}
@@ -172,17 +172,15 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 
 	partitions, err := m.Partitions(topic)
 
-	if err != nil {
-		if err != errTopicNotFound {
-			return fmt.Errorf("error checking topic: %v", err)
-		}
+	if err != nil && err != errTopicNotFound {
+		return fmt.Errorf("error checking topic: %v", err)
 	}
 	// no topic yet, let's create it
 	if len(partitions) == 0 {
 
 		// (or not)
 		if m.topicManagerConfig.NoCreate {
-			return fmt.Errorf("topic %s does not exist but the manager is configured with NoCreate, so it will not attempt to create it", topic)
+			return topicNoCreateError(topic)
 		}
 
 		return m.createTopic(topic,
@@ -195,7 +193,7 @@ func (m *topicManager) ensureExists(topic string, npar, rfactor int, config map[
 
 	// partitions do not match
 	if len(partitions) != npar {
-		return m.handleConfigMismatch(fmt.Sprintf("partition count mismatch for topic %s. Need %d, but existing topic has %d", topic, npar, len(partitions)))
+		return m.handleConfigMismatch(fmt.Sprintf("partition count mismatch for topic '%s'. Need %d, but existing topic has %d", topic, npar, len(partitions)))
 	}
 
 	// check additional config values via the cluster admin if our current version supports it
