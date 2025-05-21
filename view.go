@@ -295,6 +295,11 @@ func (v *View) close() error {
 }
 
 func (v *View) hash(key string) (int32, error) {
+	numPartitions := len(v.partitions)
+	if numPartitions < 1 {
+		return 0, errors.New("no partitions found")
+	}
+
 	// create a new hasher every time. Alternative would be to store the hash in
 	// view and every time reset the hasher (ie, hasher.Reset()). But that would
 	// also require us to protect the access of the hasher with a mutex.
@@ -304,14 +309,20 @@ func (v *View) hash(key string) (int32, error) {
 	if err != nil {
 		return -1, err
 	}
-	hash := int32(hasher.Sum32())
-	if hash < 0 {
-		hash = -hash
+
+	var partition int32
+	hash := hasher.Sum32()
+	if v.opts.partitionerCompat == librdkafkaCompat {
+		partition = int32(hash % uint32(numPartitions))
+	} else {
+		partition = int32(hash) % int32(numPartitions)
+
+		if partition < 0 {
+			partition = -partition
+		}
 	}
-	if len(v.partitions) == 0 {
-		return 0, errors.New("no partitions found")
-	}
-	return hash % int32(len(v.partitions)), nil
+
+	return partition, nil
 }
 
 func (v *View) find(key string) (*PartitionTable, error) {
