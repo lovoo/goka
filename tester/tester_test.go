@@ -70,7 +70,7 @@ func TestTesterConsume(t *testing.T) {
 	require.EqualValues(t, "some-key", key)
 	require.EqualValues(t, "value", value)
 	// the test should not take longer than 1 second
-	require.Truef(t, time.Since(timestamp).Seconds() < 1, "expected roughly %v, got %v", time.Now(), timestamp)
+	require.True(t, timestamp.IsZero())
 
 	// consume with timestamp option
 	gkt.Consume("input", "anotherkey", "value", WithTime(time.Unix(123, 0)))
