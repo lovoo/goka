@@ -5,6 +5,7 @@ import (
 	"hash"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/storage"
@@ -14,6 +15,7 @@ import (
 
 type emitOption struct {
 	headers goka.Headers
+	time    time.Time
 }
 
 // EmitOption defines a configuration option for emitting messages
@@ -23,6 +25,14 @@ type EmitOption func(*emitOption)
 func WithHeaders(headers goka.Headers) EmitOption {
 	return func(opts *emitOption) {
 		opts.headers = opts.headers.Merged(headers)
+	}
+}
+
+// WithTime causes the tester to emit the message with passed timestamp.
+// default is time.Now()
+func WithTime(time time.Time) EmitOption {
+	return func(opts *emitOption) {
+		opts.time = time
 	}
 }
 
@@ -38,7 +48,9 @@ type debugLogger interface {
 
 type nilLogger int
 
-func (*nilLogger) Printf(s string, args ...interface{}) {}
+func (*nilLogger) Printf(s string, args ...interface{}) {
+	// nil logger doesn't log anything
+}
 
 var logger debugLogger = new(nilLogger)
 
@@ -148,15 +160,18 @@ func (tt *Tester) EmitterProducerBuilder() goka.ProducerBuilder {
 // This takes care of queueing calls
 // to handled topics or putting the emitted messages in the emitted-messages-list
 func (tt *Tester) handleEmit(topic string, key string, value []byte, options ...EmitOption) *goka.Promise {
-	opts := new(emitOption)
+	opts := &emitOption{
+		time: time.Now(),
+	}
 	opts.applyOptions(options...)
 	_, finisher := goka.NewPromiseWithFinisher()
-	offset := tt.pushMessage(topic, key, value, opts.headers)
+
+	offset := tt.pushMessage(topic, key, value, opts.time, opts.headers)
 	return finisher(&sarama.ProducerMessage{Offset: offset}, nil)
 }
 
-func (tt *Tester) pushMessage(topic string, key string, data []byte, headers goka.Headers) int64 {
-	return tt.getOrCreateQueue(topic).push(key, data, headers)
+func (tt *Tester) pushMessage(topic string, key string, data []byte, time time.Time, headers goka.Headers) int64 {
+	return tt.getOrCreateQueue(topic).push(key, data, time, headers)
 }
 
 func (tt *Tester) ProducerBuilder() goka.ProducerBuilder {
@@ -403,17 +418,19 @@ func (tt *Tester) GetTableKeys(table goka.Table) []string {
 func (tt *Tester) Consume(topic string, key string, msg interface{}, options ...EmitOption) {
 	tt.waitStartup()
 
-	opts := new(emitOption)
+	opts := &emitOption{
+		time: time.Now(),
+	}
 	opts.applyOptions(options...)
 	value := reflect.ValueOf(msg)
 	if msg == nil || (value.Kind() == reflect.Ptr && value.IsNil()) {
-		tt.pushMessage(topic, key, nil, opts.headers)
+		tt.pushMessage(topic, key, nil, opts.time, opts.headers)
 	} else {
 		data, err := tt.codecForTopic(topic).Encode(msg)
 		if err != nil {
 			panic(fmt.Errorf("Error encoding value %v: %v", msg, err))
 		}
-		tt.pushMessage(topic, key, data, opts.headers)
+		tt.pushMessage(topic, key, data, opts.time, opts.headers)
 	}
 
 	tt.waitForClients()

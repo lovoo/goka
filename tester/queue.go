@@ -2,6 +2,7 @@ package tester
 
 import (
 	"sync"
+	"time"
 
 	"github.com/lovoo/goka"
 )
@@ -11,6 +12,7 @@ type message struct {
 	key     string
 	value   []byte
 	headers goka.Headers
+	time    time.Time
 }
 
 type queue struct {
@@ -35,7 +37,7 @@ func (q *queue) Hwm() int64 {
 	return hwm
 }
 
-func (q *queue) push(key string, value []byte, headers goka.Headers) int64 {
+func (q *queue) push(key string, value []byte, time time.Time, headers goka.Headers) int64 {
 	q.Lock()
 	defer q.Unlock()
 	offset := q.hwm
@@ -44,6 +46,7 @@ func (q *queue) push(key string, value []byte, headers goka.Headers) int64 {
 		key:     key,
 		value:   value,
 		headers: headers,
+		time:    time,
 	})
 	q.hwm++
 	return offset

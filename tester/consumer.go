@@ -130,6 +130,7 @@ func (pcm *partConsumerMock) catchup() int {
 			Topic:     pcm.queue.topic,
 			Partition: 0,
 			Offset:    msg.offset,
+			Timestamp: msg.time,
 		}
 
 		// we'll send a nil that is being ignored by the partition_table to make sure the other message
