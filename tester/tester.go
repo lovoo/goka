@@ -29,7 +29,7 @@ func WithHeaders(headers goka.Headers) EmitOption {
 }
 
 // WithTime causes the tester to emit the message with passed timestamp.
-// default is time.Now()
+// default is a zero timestamp
 func WithTime(time time.Time) EmitOption {
 	return func(opts *emitOption) {
 		opts.time = time
@@ -160,9 +160,7 @@ func (tt *Tester) EmitterProducerBuilder() goka.ProducerBuilder {
 // This takes care of queueing calls
 // to handled topics or putting the emitted messages in the emitted-messages-list
 func (tt *Tester) handleEmit(topic string, key string, value []byte, options ...EmitOption) *goka.Promise {
-	opts := &emitOption{
-		time: time.Now(),
-	}
+	opts := new(emitOption)
 	opts.applyOptions(options...)
 	_, finisher := goka.NewPromiseWithFinisher()
 
@@ -418,9 +416,7 @@ func (tt *Tester) GetTableKeys(table goka.Table) []string {
 func (tt *Tester) Consume(topic string, key string, msg interface{}, options ...EmitOption) {
 	tt.waitStartup()
 
-	opts := &emitOption{
-		time: time.Now(),
-	}
+	opts := new(emitOption)
 	opts.applyOptions(options...)
 	value := reflect.ValueOf(msg)
 	if msg == nil || (value.Kind() == reflect.Ptr && value.IsNil()) {
