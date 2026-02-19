@@ -26,6 +26,25 @@ func ProducerBuilderWithConfig(config *sarama.Config) ProducerBuilder {
 	}
 }
 
+// ProducerBuilderWithHashPartitionerOptions creates a Kafka producer using the
+// Sarama library. It can be used to configure the partitioner. If both
+// sarama.WithCustomHashFunction and goka.WithHasher are used to set the hasher,
+// the former will take precedence.
+func ProducerBuilderWithHashPartitionerOptions(opts ...sarama.HashPartitionerOption) ProducerBuilder {
+	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
+		config := globalConfig
+		defaults := []sarama.HashPartitionerOption{
+			// hasher may be goka.DefaultHasher or it may have been modified by
+			// goka.WithHasher. It may be overridden by opts.
+			sarama.WithCustomHashFunction(hasher),
+		}
+		opts = append(defaults, opts...)
+		config.ClientID = clientID
+		config.Producer.Partitioner = sarama.NewCustomPartitioner(opts...)
+		return NewProducer(brokers, &config)
+	}
+}
+
 // TopicManagerBuilder creates a TopicManager to check partition counts and
 // create tables.
 type TopicManagerBuilder func(brokers []string) (TopicManager, error)
