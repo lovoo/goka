@@ -36,6 +36,9 @@ const (
 	runModePassive
 	// the processor only recovers once and then stops. This is used for recover-ahead-option
 	runModeRecoverOnly
+	// the processor only recovers forever, never stops. This is used for the RecoverForever option to keep the processor tables up to date
+	// without actcually processing anything.
+	runModeRecoverForever
 )
 
 type visit struct {
@@ -211,7 +214,15 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 		setupErrg.Go(func() error {
 			pp.log.Debugf("catching up table")
 			defer pp.log.Debugf("catching up table done")
-			return pp.table.SetupAndRecover(setupCtx, false)
+
+			err := pp.table.SetupAndRecover(setupCtx, false)
+			if err != nil {
+				return err
+			}
+			if pp.runMode == runModeRecoverForever {
+				return pp.table.CatchupForever(setupCtx, false)
+			}
+			return nil
 		})
 	}
 
@@ -229,7 +240,15 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 		pp.joins[join.Topic()] = table
 
 		setupErrg.Go(func() error {
-			return table.SetupAndRecover(setupCtx, false)
+			err := table.SetupAndRecover(setupCtx, false)
+			if err != nil {
+				return err
+			}
+
+			if pp.runMode == runModeRecoverForever {
+				return table.CatchupForever(setupCtx, false)
+			}
+			return nil
 		})
 	}
 
