@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"fmt"
 	"hash"
 
 	"github.com/IBM/sarama"
@@ -17,12 +18,30 @@ func DefaultProducerBuilder(brokers []string, clientID string, hasher func() has
 	return NewProducer(brokers, &config)
 }
 
-// ProducerBuilderWithConfig creates a Kafka consumer using the Sarama library.
+// ProducerBuilderWithConfig creates a Kafka producer using the Sarama library.
 func ProducerBuilderWithConfig(config *sarama.Config) ProducerBuilder {
+	return ProducerBuilderWithAsyncProducerWrapper(config, nil)
+}
+
+// AsyncProducerWrapper wraps a newly created sarama.AsyncProducer before goka
+// attaches its Promise completion loop.
+type AsyncProducerWrapper func(producer sarama.AsyncProducer, config *sarama.Config) sarama.AsyncProducer
+
+// ProducerBuilderWithAsyncProducerWrapper creates a producer builder that
+// constructs a sarama.AsyncProducer, applies wrap, then returns a goka Producer
+// via NewProducerFromAsyncProducer. A nil wrap is equivalent to ProducerBuilderWithConfig.
+func ProducerBuilderWithAsyncProducerWrapper(config *sarama.Config, wrap AsyncProducerWrapper) ProducerBuilder {
 	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
 		config.ClientID = clientID
 		config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
-		return NewProducer(brokers, config)
+		aprod, err := sarama.NewAsyncProducer(brokers, config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start Sarama producer: %w", err)
+		}
+		if wrap != nil {
+			aprod = wrap(aprod, config)
+		}
+		return NewProducerFromAsyncProducer(aprod), nil
 	}
 }
 

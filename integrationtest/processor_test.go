@@ -293,6 +293,43 @@ func TestProcessorContextWrapper(t *testing.T) {
 	<-done
 }
 
+func TestProcessorProcessMiddleware(t *testing.T) {
+	gkt := tester.New(t)
+	var order []string
+
+	proc, err := goka.NewProcessor([]string{}, goka.DefineGroup("proc",
+		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			order = append(order, "handler")
+			ctx.SetValue(msg)
+		}),
+		goka.Persist(new(codec.Int64)),
+	),
+		goka.WithTester(gkt),
+		goka.WithProcessMiddleware(func(next goka.ProcessCallback) goka.ProcessCallback {
+			return func(ctx goka.Context, msg interface{}) {
+				order = append(order, "mw-before")
+				next(ctx, msg)
+				order = append(order, "mw-after")
+			}
+		}),
+	)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		require.NoError(t, proc.Run(ctx))
+	}()
+
+	gkt.Consume("input", "key", int64(23))
+	require.Equal(t, []string{"mw-before", "handler", "mw-after"}, order)
+	require.EqualValues(t, 23, gkt.TableValue("proc-table", "key"))
+
+	cancel()
+	<-done
+}
+
 /*
 import (
 	"context"

@@ -87,3 +87,54 @@ func allEmpty(headersList ...Headers) bool {
 	}
 	return true
 }
+
+// TextMapHeaders adapts Headers for text-map propagation carriers.
+// It implements OpenTelemetry's TextMapCarrier (Get/Set/Keys) and Datadog's
+// TextMapWriter/TextMapReader (Set/ForeachKey). Set mutates the underlying map;
+// callers should start from a non-nil Headers (or a copy) when injecting onto
+// outgoing messages.
+type TextMapHeaders Headers
+
+// Get returns the value associated with the given key, or the empty string if
+// the key is missing.
+func (h TextMapHeaders) Get(key string) string {
+	if h == nil {
+		return ""
+	}
+	v, ok := h[key]
+	if !ok {
+		return ""
+	}
+	return string(v)
+}
+
+// Set stores the key-value pair. If the receiver is nil, Set is a no-op.
+func (h TextMapHeaders) Set(key, value string) {
+	if h == nil {
+		return
+	}
+	h[key] = []byte(value)
+}
+
+// Keys lists the keys stored in the carrier.
+func (h TextMapHeaders) Keys() []string {
+	if len(h) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// ForeachKey calls handler for each key/value pair. It returns the first error
+// returned by handler.
+func (h TextMapHeaders) ForeachKey(handler func(key, val string) error) error {
+	for k, v := range h {
+		if err := handler(k, string(v)); err != nil {
+			return err
+		}
+	}
+	return nil
+}

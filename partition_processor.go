@@ -555,6 +555,7 @@ func (pp *PartitionProcessor) processVisit(ctx context.Context, wg *sync.WaitGro
 	}()
 
 	// now call cb, wrap the context
+	cb = pp.applyProcessMiddlewares(cb)
 	cb(pp.opts.contextWrapper(msgContext), v.meta)
 	msgContext.finish(nil)
 	return
@@ -617,9 +618,17 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	msgContext.start()
 
 	// now call cb
+	cb = pp.applyProcessMiddlewares(cb)
 	cb(pp.opts.contextWrapper(msgContext), m)
 	msgContext.finish(nil)
 	return nil
+}
+
+func (pp *PartitionProcessor) applyProcessMiddlewares(cb ProcessCallback) ProcessCallback {
+	for i := len(pp.opts.processMiddlewares) - 1; i >= 0; i-- {
+		cb = pp.opts.processMiddlewares[i](cb)
+	}
+	return cb
 }
 
 // VisitValues iterates over all values in the table and calls the "visit"-callback for the passed name.
