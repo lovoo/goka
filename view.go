@@ -2,7 +2,6 @@ package goka
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -295,23 +294,7 @@ func (v *View) close() error {
 }
 
 func (v *View) hash(key string) (int32, error) {
-	// create a new hasher every time. Alternative would be to store the hash in
-	// view and every time reset the hasher (ie, hasher.Reset()). But that would
-	// also require us to protect the access of the hasher with a mutex.
-	hasher := v.opts.hasher()
-
-	_, err := hasher.Write([]byte(key))
-	if err != nil {
-		return -1, err
-	}
-	hash := int32(hasher.Sum32())
-	if hash < 0 {
-		hash = -hash
-	}
-	if len(v.partitions) == 0 {
-		return 0, errors.New("no partitions found")
-	}
-	return hash % int32(len(v.partitions)), nil
+	return PartitionForKey([]byte(key), int32(len(v.partitions)), v.opts.hasher)
 }
 
 func (v *View) find(key string) (*PartitionTable, error) {
