@@ -18,20 +18,20 @@ import (
 // representation.
 type Humanizer interface {
 	// Humanize returns a human readable representation of the supplied value.
-	Humanize(interface{}) (string, error)
+	Humanize(any) (string, error)
 }
 
 // HumanizerFunc is an adapter to make conforming functions into Humanizers.
-type HumanizerFunc func(interface{}) (string, error)
+type HumanizerFunc func(any) (string, error)
 
 // Humanize returns the human readable representation of val.
-func (fn HumanizerFunc) Humanize(val interface{}) (string, error) {
+func (fn HumanizerFunc) Humanize(val any) (string, error) {
 	return fn(val)
 }
 
 // DefaultHumanizer returns the JSON representation of val.
 func DefaultHumanizer() Humanizer {
-	return HumanizerFunc(func(val interface{}) (string, error) {
+	return HumanizerFunc(func(val any) (string, error) {
 		h, err := json.MarshalIndent(val, "", "  ")
 		if err != nil {
 			return "", err
@@ -110,7 +110,7 @@ func (s *Server) AttachSource(name string, getter goka.Getter) error {
 	return nil
 }
 
-func (s *Server) executeQueryTemplate(w http.ResponseWriter, params map[string]interface{}) {
+func (s *Server) executeQueryTemplate(w http.ResponseWriter, params map[string]any) {
 	tmpl, err := templates.LoadTemplates(append(templates.BaseTemplates, "web/templates/query/index.go.html")...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -126,7 +126,7 @@ func (s *Server) executeQueryTemplate(w http.ResponseWriter, params map[string]i
 }
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
-	params := map[string]interface{}{
+	params := map[string]any{
 		"page_title": "Overview",
 	}
 
@@ -143,7 +143,7 @@ func (s *Server) source(w http.ResponseWriter, r *http.Request) {
 	name := vars["name"]
 	names := s.sourceNames()
 
-	params := map[string]interface{}{
+	params := map[string]any{
 		"page_title": "Overview",
 	}
 
@@ -168,7 +168,7 @@ func (s *Server) key(w http.ResponseWriter, r *http.Request) {
 	name := vars["name"]
 	names := s.sourceNames()
 
-	params := map[string]interface{}{
+	params := map[string]any{
 		"page_title": "Overview",
 	}
 

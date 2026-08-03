@@ -59,7 +59,7 @@ type Context interface {
 	// This method might panic to initiate an immediate shutdown of the processor
 	// to maintain data integrity. Do not recover from that panic or
 	// the processor might deadlock.
-	Value() interface{}
+	Value() any
 
 	// Headers returns the headers of the input message
 	Headers() Headers
@@ -71,7 +71,7 @@ type Context interface {
 	// This method might panic to initiate an immediate shutdown of the processor
 	// to maintain data integrity. Do not recover from that panic or
 	// the processor might deadlock.
-	SetValue(value interface{}, options ...ContextOption)
+	SetValue(value any, options ...ContextOption)
 
 	// Delete deletes a value from the group table. IMPORTANT: this deletes the
 	// value associated with the key from both the local cache and the persisted
@@ -91,21 +91,21 @@ type Context interface {
 	// This method might panic to initiate an immediate shutdown of the processor
 	// to maintain data integrity. Do not recover from that panic or
 	// the processor might deadlock.
-	Join(topic Table) interface{}
+	Join(topic Table) any
 
 	// Lookup returns the value of key in the view of table.
 	//
 	// This method might panic to initiate an immediate shutdown of the processor
 	// to maintain data integrity. Do not recover from that panic or
 	// the processor might deadlock.
-	Lookup(topic Table, key string) interface{}
+	Lookup(topic Table, key string) any
 
 	// Emit asynchronously writes a message into a topic.
 	//
 	// This method might panic to initiate an immediate shutdown of the processor
 	// to maintain data integrity. Do not recover from that panic or
 	// the processor might deadlock.
-	Emit(topic Stream, key string, value interface{}, options ...ContextOption)
+	Emit(topic Stream, key string, value any, options ...ContextOption)
 
 	// Loopback asynchronously sends a message to another key of the group
 	// table. Value passed to loopback is encoded via the codec given in the
@@ -114,7 +114,7 @@ type Context interface {
 	// This method might panic to initiate an immediate shutdown of the processor
 	// to maintain data integrity. Do not recover from that panic or
 	// the processor might deadlock.
-	Loopback(key string, value interface{}, options ...ContextOption)
+	Loopback(key string, value any, options ...ContextOption)
 
 	// Fail stops execution and shuts down the processor
 	// The callback is stopped immediately by panicking. Do not recover from that panic or
@@ -183,7 +183,7 @@ type cbContext struct {
 }
 
 // Emit sends a message asynchronously to a topic.
-func (ctx *cbContext) Emit(topic Stream, key string, value interface{}, options ...ContextOption) {
+func (ctx *cbContext) Emit(topic Stream, key string, value any, options ...ContextOption) {
 	opts := new(ctxOptions)
 	opts.applyOptions(options...)
 	if topic == "" {
@@ -217,7 +217,7 @@ func (ctx *cbContext) Emit(topic Stream, key string, value interface{}, options 
 }
 
 // Loopback sends a message to another key of the processor.
-func (ctx *cbContext) Loopback(key string, value interface{}, options ...ContextOption) {
+func (ctx *cbContext) Loopback(key string, value any, options ...ContextOption) {
 	opts := new(ctxOptions)
 	opts.applyOptions(options...)
 	l := ctx.graph.LoopStream()
@@ -253,7 +253,7 @@ func (ctx *cbContext) Delete(options ...ContextOption) {
 }
 
 // Value returns the value of the key in the group table.
-func (ctx *cbContext) Value() interface{} {
+func (ctx *cbContext) Value() any {
 	val, err := ctx.valueForKey(ctx.Key())
 	if err != nil {
 		ctx.Fail(err)
@@ -262,7 +262,7 @@ func (ctx *cbContext) Value() interface{} {
 }
 
 // SetValue updates the value of the key in the group table.
-func (ctx *cbContext) SetValue(value interface{}, options ...ContextOption) {
+func (ctx *cbContext) SetValue(value any, options ...ContextOption) {
 	opts := new(ctxOptions)
 	opts.applyOptions(options...)
 	if err := ctx.setValueForKey(ctx.Key(), value, opts.emitHeaders); err != nil {
@@ -302,7 +302,7 @@ func (ctx *cbContext) Headers() Headers {
 	return ctx.headers
 }
 
-func (ctx *cbContext) Join(topic Table) interface{} {
+func (ctx *cbContext) Join(topic Table) any {
 	if ctx.pviews == nil {
 		ctx.Fail(fmt.Errorf("table %s not subscribed", topic))
 	}
@@ -324,7 +324,7 @@ func (ctx *cbContext) Join(topic Table) interface{} {
 	return value
 }
 
-func (ctx *cbContext) Lookup(topic Table, key string) interface{} {
+func (ctx *cbContext) Lookup(topic Table, key string) any {
 	if ctx.views == nil {
 		ctx.Fail(fmt.Errorf("topic %s not subscribed", topic))
 	}
@@ -340,7 +340,7 @@ func (ctx *cbContext) Lookup(topic Table, key string) interface{} {
 }
 
 // valueForKey returns the value of key in the processor state.
-func (ctx *cbContext) valueForKey(key string) (interface{}, error) {
+func (ctx *cbContext) valueForKey(key string) (any, error) {
 	if ctx.table == nil {
 		return nil, fmt.Errorf("Cannot access state in stateless processor")
 	}
@@ -378,7 +378,7 @@ func (ctx *cbContext) deleteKey(key string, headers Headers) error {
 }
 
 // setValueForKey sets a value for a key in the processor state.
-func (ctx *cbContext) setValueForKey(key string, value interface{}, headers Headers) error {
+func (ctx *cbContext) setValueForKey(key string, value any, headers Headers) error {
 	if ctx.graph.GroupTable() == nil {
 		return fmt.Errorf("Cannot access state in stateless processor")
 	}

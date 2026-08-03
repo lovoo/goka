@@ -394,7 +394,7 @@ func TestPT_load(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil)
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, anyOffset)
 		partConsumer.ExpectMessagesDrainedOnClose()
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 			bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
 		}
@@ -542,7 +542,7 @@ func TestPT_loadMessages(t *testing.T) {
 		err := pt.setup(ctx)
 		require.NoError(t, err)
 		go func(ctx context.Context) {
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
 				partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 			}
@@ -607,7 +607,7 @@ func TestPT_loadMessages(t *testing.T) {
 				partConsumer.AsyncClose()
 				open = false
 			}()
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				select {
 				case <-ctx.Done():
 					return
@@ -899,7 +899,7 @@ func TestPT_SetupAndCatchupToHwm(t *testing.T) {
 		partConsumer.ExpectMessagesDrainedOnClose()
 
 		msgsToRecover := newest - local
-		for i := int64(0); i < msgsToRecover; i++ {
+		for range msgsToRecover {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 			bm.mst.EXPECT().SetOffset(gomock.Any()).Return(nil)
 		}
@@ -964,7 +964,7 @@ func TestPT_SetupAndCatchupForever(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil).AnyTimes()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil).AnyTimes()
 		partConsumer := consumer.ExpectConsumePartition(topic, partition, anyOffset)
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 		}
 

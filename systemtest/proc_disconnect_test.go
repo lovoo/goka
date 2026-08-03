@@ -1,7 +1,6 @@
 package systemtest
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -22,8 +21,7 @@ func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
 		group = goka.Group(topic)
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	errg, ctx := multierr.NewErrGroup(ctx)
 
@@ -64,7 +62,7 @@ func TestProcessorShutdown_KafkaDisconnect(t *testing.T) {
 	proc, err := goka.NewProcessor(brokers,
 		goka.DefineGroup(
 			group,
-			goka.Input(topic, new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			goka.Input(topic, new(codec.Int64), func(ctx goka.Context, msg any) {
 				if val := ctx.Value(); val != nil {
 					ctx.SetValue(val.(int64) + msg.(int64))
 				} else {

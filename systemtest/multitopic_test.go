@@ -25,7 +25,7 @@ func TestMultiTopics(t *testing.T) {
 		inputStreams []goka.Stream
 	)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		inputStreams = append(inputStreams, goka.Stream(fmt.Sprintf("%s-input-%d", string(group), i)))
 	}
 
@@ -46,7 +46,7 @@ func TestMultiTopics(t *testing.T) {
 	proc, err := goka.NewProcessor(brokers,
 		goka.DefineGroup(
 			group,
-			goka.Inputs(inputStreams, new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			goka.Inputs(inputStreams, new(codec.Int64), func(ctx goka.Context, msg any) {
 				var oldVal int64
 
 				if val := ctx.Value(); val != nil {
@@ -89,7 +89,7 @@ func TestMultiTopics(t *testing.T) {
 	log.Printf("...done")
 
 	var sum int64
-	for i := int64(0); i < 100; i++ {
+	for range int64(100) {
 		value := rand.Int63n(100)
 		// emit to random emitters in sync
 		err := emitters[rand.Intn(len(emitters))].EmitSync("key", value)

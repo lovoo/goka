@@ -126,7 +126,7 @@ func (s *Server) AttachFuncAction(name string, description string, actor func(ct
 	return s.AttachAction(name, FuncActor(description, actor))
 }
 
-func (s *Server) executeTemplate(w http.ResponseWriter, params map[string]interface{}) {
+func (s *Server) executeTemplate(w http.ResponseWriter, params map[string]any) {
 	tmpl, err := templates.LoadTemplates(append(templates.BaseTemplates, "web/templates/actions/index.go.html")...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -142,7 +142,7 @@ func (s *Server) executeTemplate(w http.ResponseWriter, params map[string]interf
 }
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
-	params := map[string]interface{}{
+	params := map[string]any{
 		"page_title": "Actions",
 		"actions":    s.sortedActions(),
 		"error":      r.URL.Query()["error"],

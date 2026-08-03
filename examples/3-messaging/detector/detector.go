@@ -25,11 +25,11 @@ type Counters struct {
 
 type CountersCodec struct{}
 
-func (c *CountersCodec) Encode(value interface{}) ([]byte, error) {
+func (c *CountersCodec) Encode(value any) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-func (c *CountersCodec) Decode(data []byte) (interface{}, error) {
+func (c *CountersCodec) Decode(data []byte) (any, error) {
 	var m Counters
 	return &m, json.Unmarshal(data, &m)
 }
@@ -56,7 +56,7 @@ func PrepareTopics(brokers []string) {
 func Run(ctx context.Context, brokers []string) func() error {
 	return func() error {
 		g := goka.DefineGroup(group,
-			goka.Input(messaging.SentStream, new(messaging.MessageCodec), func(ctx goka.Context, msg interface{}) {
+			goka.Input(messaging.SentStream, new(messaging.MessageCodec), func(ctx goka.Context, msg any) {
 				c := getValue(ctx)
 				c.Sent++
 				ctx.SetValue(c)
@@ -70,7 +70,7 @@ func Run(ctx context.Context, brokers []string) func() error {
 				m := msg.(*messaging.Message)
 				ctx.Loopback(m.To, m)
 			}),
-			goka.Loop(new(messaging.MessageCodec), func(ctx goka.Context, msg interface{}) {
+			goka.Loop(new(messaging.MessageCodec), func(ctx goka.Context, msg any) {
 				c := getValue(ctx)
 				c.Received++
 				ctx.SetValue(c)

@@ -43,12 +43,12 @@ func (opt *emitOption) applyOptions(opts ...EmitOption) {
 }
 
 type debugLogger interface {
-	Printf(s string, args ...interface{})
+	Printf(s string, args ...any)
 }
 
 type nilLogger int
 
-func (*nilLogger) Printf(s string, args ...interface{}) {
+func (*nilLogger) Printf(s string, args ...any) {
 	// nil logger doesn't log anything
 }
 
@@ -57,9 +57,9 @@ var logger debugLogger = new(nilLogger)
 // T abstracts the interface we assume from the test case.
 // Will most likely be T
 type T interface {
-	Errorf(format string, args ...interface{})
-	Fatalf(format string, args ...interface{})
-	Fatal(a ...interface{})
+	Errorf(format string, args ...any)
+	Fatalf(format string, args ...any)
+	Fatal(a ...any)
 }
 
 // Tester mimicks kafka for complex highlevel testing of single or multiple processors/views/emitters
@@ -279,7 +279,7 @@ func (tt *Tester) registerCodec(topic string, codec goka.Codec) {
 }
 
 // TableValue attempts to get a value from any table that is used in the tester
-func (tt *Tester) TableValue(table goka.Table, key string) interface{} {
+func (tt *Tester) TableValue(table goka.Table, key string) any {
 	tt.waitStartup()
 
 	topic := string(table)
@@ -306,7 +306,7 @@ func (tt *Tester) TableValue(table goka.Table, key string) interface{} {
 // SetTableValue sets a value in a processor's or view's table direcly via storage
 // This method blocks until all expected clients are running, so make sure
 // to call it *after* you have started all processors/views, otherwise it'll deadlock.
-func (tt *Tester) SetTableValue(table goka.Table, key string, value interface{}) {
+func (tt *Tester) SetTableValue(table goka.Table, key string, value any) {
 	tt.waitStartup()
 
 	topic := string(table)
@@ -413,13 +413,13 @@ func (tt *Tester) GetTableKeys(table goka.Table) []string {
 
 // Consume pushes a message for topic/key to be consumed by all processors/views
 // whoever is using it being registered to the Tester
-func (tt *Tester) Consume(topic string, key string, msg interface{}, options ...EmitOption) {
+func (tt *Tester) Consume(topic string, key string, msg any, options ...EmitOption) {
 	tt.waitStartup()
 
 	opts := new(emitOption)
 	opts.applyOptions(options...)
 	value := reflect.ValueOf(msg)
-	if msg == nil || (value.Kind() == reflect.Ptr && value.IsNil()) {
+	if msg == nil || (value.Kind() == reflect.Pointer && value.IsNil()) {
 		tt.pushMessage(topic, key, nil, opts.time, opts.headers)
 	} else {
 		data, err := tt.codecForTopic(topic).Encode(msg)

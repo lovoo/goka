@@ -1,6 +1,8 @@
 package goka
 
 import (
+	"maps"
+
 	"github.com/IBM/sarama"
 )
 
@@ -26,14 +28,10 @@ func (h Headers) Merged(headersList ...Headers) Headers {
 	}
 
 	merged := Headers{}
-	for k, v := range h {
-		merged[k] = v
-	}
+	maps.Copy(merged, h)
 
 	for _, headers := range headersList {
-		for k, v := range headers {
-			merged[k] = v
-		}
+		maps.Copy(merged, headers)
 	}
 
 	if len(merged) == 0 {

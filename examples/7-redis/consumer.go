@@ -31,7 +31,7 @@ func Consume(pub Publisher, brokers []string, group string, stream string, store
 		log.Printf("Error creating kafka topic %s: %v", stream, err)
 	}
 
-	input := goka.Input(goka.Stream(stream), codec, func(ctx goka.Context, msg interface{}) {
+	input := goka.Input(goka.Stream(stream), codec, func(ctx goka.Context, msg any) {
 		event, ok := msg.(*Event)
 		if ok {
 			pub.Publish(context.Background(), ctx.Key(), event)

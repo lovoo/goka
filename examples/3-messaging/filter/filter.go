@@ -19,7 +19,7 @@ func shouldDrop(ctx goka.Context) bool {
 	return v != nil && v.(*blocker.BlockValue).Blocked
 }
 
-func filter(ctx goka.Context, msg interface{}) {
+func filter(ctx goka.Context, msg any) {
 	if shouldDrop(ctx) {
 		return
 	}

@@ -47,7 +47,7 @@ type user struct {
 type userCodec struct{}
 
 // Encodes a user into []byte
-func (jc *userCodec) Encode(value interface{}) ([]byte, error) {
+func (jc *userCodec) Encode(value any) ([]byte, error) {
 	if _, isUser := value.(*user); !isUser {
 		return nil, fmt.Errorf("Codec requires value *user, got %T", value)
 	}
@@ -55,7 +55,7 @@ func (jc *userCodec) Encode(value interface{}) ([]byte, error) {
 }
 
 // Decodes a user from []byte to it's go representation.
-func (jc *userCodec) Decode(data []byte) (interface{}, error) {
+func (jc *userCodec) Decode(data []byte) (any, error) {
 	var (
 		c   user
 		err error
@@ -103,7 +103,7 @@ func runEmitter(ctx context.Context) (rerr error) {
 	}
 }
 
-func process(ctx goka.Context, msg interface{}) {
+func process(ctx goka.Context, msg any) {
 	var u *user
 	if val := ctx.Value(); val != nil {
 		u = val.(*user)

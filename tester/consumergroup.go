@@ -76,7 +76,6 @@ func (cg *consumerGroup) Consume(ctx context.Context, topics []string, handler s
 	}
 	errg, innerCtx := multierr.NewErrGroup(session.ctx)
 	for _, claim := range session.claims {
-		claim := claim
 		errg.Go(func() error {
 			select {
 			case <-innerCtx.Done():

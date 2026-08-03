@@ -17,17 +17,17 @@ var (
 
 type MessageListCodec struct{}
 
-func (c *MessageListCodec) Encode(value interface{}) ([]byte, error) {
+func (c *MessageListCodec) Encode(value any) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-func (c *MessageListCodec) Decode(data []byte) (interface{}, error) {
+func (c *MessageListCodec) Decode(data []byte) (any, error) {
 	var m []messaging.Message
 	err := json.Unmarshal(data, &m)
 	return m, err
 }
 
-func collect(ctx goka.Context, msg interface{}) {
+func collect(ctx goka.Context, msg any) {
 	var ml []messaging.Message
 	if v := ctx.Value(); v != nil {
 		ml = v.([]messaging.Message)

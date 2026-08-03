@@ -16,7 +16,7 @@ type Iterator interface {
 	Key() string
 	// Return the value of the current item
 	// This value is already decoded with the view's codec (or nil, if it's nil)
-	Value() (interface{}, error)
+	Value() (any, error)
 	// Release the iterator. After release, the iterator is not usable anymore
 	Release()
 	// Seek moves the iterator to the begining of a key-value pair sequence that
@@ -43,7 +43,7 @@ func (i *iterator) Key() string {
 }
 
 // Value returns the current value decoded by the codec of the storage.
-func (i *iterator) Value() (interface{}, error) {
+func (i *iterator) Value() (any, error) {
 	data, err := i.iter.Value()
 	if err != nil {
 		return nil, err

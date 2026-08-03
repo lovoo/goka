@@ -209,7 +209,7 @@ func TestEmitter_Finish(t *testing.T) {
 		bm.producer.EXPECT().Close().Return(nil)
 
 		go func() {
-			for i := 0; i < msgCount; i++ {
+			for range msgCount {
 				_, err := emitter.Emit(key, intVal)
 				require.NoError(t, err)
 				// promise errors are not checked here since they are expected

@@ -36,7 +36,7 @@ func TestEmitterOffset(t *testing.T) {
 		t.Fatalf("error creating emitter: %v", err)
 	}
 
-	for i := 0; i < 100000; i++ {
+	for i := range 100000 {
 		prom, err := emitter.Emit(fmt.Sprintf("%d", i), int64(i))
 		if err != nil {
 			log.Fatalf("error emitting: %v", err)

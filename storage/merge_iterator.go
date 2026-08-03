@@ -19,11 +19,11 @@ func (h iterHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *iterHeap) Push(x interface{}) {
+func (h *iterHeap) Push(x any) {
 	*h = append(*h, x.(Iterator))
 }
 
-func (h *iterHeap) Pop() interface{} {
+func (h *iterHeap) Pop() any {
 	dref := *h
 	x := dref[len(dref)-1]
 	*h = dref[:len(dref)-1]

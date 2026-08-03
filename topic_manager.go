@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -119,11 +120,8 @@ func (m *topicManager) Partitions(topic string) ([]int32, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, tpc := range topics {
-		// topic exists, let's list the partitions.
-		if tpc == topic {
-			return m.client.Partitions(topic)
-		}
+	if slices.Contains(topics, topic) {
+		return m.client.Partitions(topic)
 	}
 	return nil, errTopicNotFound
 }

@@ -10,10 +10,10 @@ type gomockPanicker struct {
 	reporter gomock.TestReporter
 }
 
-func (gm *gomockPanicker) Errorf(format string, args ...interface{}) {
+func (gm *gomockPanicker) Errorf(format string, args ...any) {
 	gm.reporter.Errorf(format, args...)
 }
-func (gm *gomockPanicker) Fatalf(format string, args ...interface{}) {
+func (gm *gomockPanicker) Fatalf(format string, args ...any) {
 	defer panic(fmt.Sprintf(format, args...))
 	gm.reporter.Fatalf(format, args...)
 }

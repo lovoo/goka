@@ -49,7 +49,7 @@ func TestHotStandby(t *testing.T) {
 	proc1, err := goka.NewProcessor(brokers,
 		goka.DefineGroup(
 			group,
-			goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg interface{}) { ctx.SetValue(msg) }),
+			goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg any) { ctx.SetValue(msg) }),
 			goka.Join(joinTable, new(codec.String)),
 			goka.Persist(new(codec.String)),
 		),
@@ -62,7 +62,7 @@ func TestHotStandby(t *testing.T) {
 	proc2, err := goka.NewProcessor(brokers,
 		goka.DefineGroup(
 			group,
-			goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg interface{}) { ctx.SetValue(msg) }),
+			goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg any) { ctx.SetValue(msg) }),
 			goka.Join(joinTable, new(codec.String)),
 			goka.Persist(new(codec.String)),
 		),
@@ -204,7 +204,7 @@ func TestRecoverAhead(t *testing.T) {
 	proc1, err := goka.NewProcessor(brokers,
 		goka.DefineGroup(
 			group,
-			goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg interface{}) { ctx.SetValue(msg) }),
+			goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg any) { ctx.SetValue(msg) }),
 			goka.Join(joinTable, new(codec.String)),
 			goka.Persist(new(codec.String)),
 		),
@@ -218,7 +218,7 @@ func TestRecoverAhead(t *testing.T) {
 	proc2, err := goka.NewProcessor(brokers,
 		goka.DefineGroup(
 			group,
-			goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg interface{}) { ctx.SetValue(msg) }),
+			goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg any) { ctx.SetValue(msg) }),
 			goka.Join(joinTable, new(codec.String)),
 			goka.Persist(new(codec.String)),
 		),
@@ -341,7 +341,7 @@ func TestRebalance(t *testing.T) {
 		proc, err := goka.NewProcessor(brokers,
 			goka.DefineGroup(
 				group,
-				goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg interface{}) { ctx.SetValue(msg) }),
+				goka.Input(goka.Stream(inputStream), new(codec.String), func(ctx goka.Context, msg any) { ctx.SetValue(msg) }),
 				goka.Join(goka.Table(joinTable), new(codec.String)),
 				goka.Persist(new(codec.String)),
 			),
@@ -357,7 +357,7 @@ func TestRebalance(t *testing.T) {
 
 	errg, ctx := multierr.NewErrGroup(context.Background())
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		i := i
 		errg.Go(func() error {
 			p := createProc(i)
@@ -416,7 +416,7 @@ func TestRebalanceSharePartitions(t *testing.T) {
 		proc, err := goka.NewProcessor(brokers,
 			goka.DefineGroup(
 				group,
-				goka.Input(goka.Stream(inputStream), new(codec.Int64), func(ctx goka.Context, msg interface{}) { ctx.SetValue(msg) }),
+				goka.Input(goka.Stream(inputStream), new(codec.Int64), func(ctx goka.Context, msg any) { ctx.SetValue(msg) }),
 				goka.Persist(new(codec.Int64)),
 			),
 			goka.WithRecoverAhead(),
@@ -507,7 +507,7 @@ func TestCallbackFail(t *testing.T) {
 	proc, err := goka.NewProcessor(brokers,
 		goka.DefineGroup(
 			group,
-			goka.Input(goka.Stream(inputStream), new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			goka.Input(goka.Stream(inputStream), new(codec.Int64), func(ctx goka.Context, msg any) {
 				if ctx.Key() == "key-9995" {
 					ctx.Emit("some-invalid-emit", "", nil)
 				}
@@ -523,7 +523,7 @@ func TestCallbackFail(t *testing.T) {
 	pollTimed(t, "recovered", proc.Recovered)
 
 	go func() {
-		for i := 0; i < 10000; i++ {
+		for i := range 10000 {
 			em.Emit(fmt.Sprintf("key-%d", i), int64(1))
 		}
 	}()
@@ -571,7 +571,7 @@ func TestProcessorSlowStuck(t *testing.T) {
 	proc, err := goka.NewProcessor(brokers,
 		goka.DefineGroup(
 			group,
-			goka.Input(goka.Stream(inputStream), new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			goka.Input(goka.Stream(inputStream), new(codec.Int64), func(ctx goka.Context, msg any) {
 				val := msg.(int64)
 				time.Sleep(500 * time.Microsecond)
 				if ctx.Partition() == 0 && val > 10 {
@@ -643,7 +643,7 @@ func TestMessageCommit(t *testing.T) {
 
 	tm.EnsureStreamExists(string(inputStream), 10)
 
-	for i := 0; i < numMessages; i++ {
+	for range numMessages {
 		emitter.EmitSync("1", int64(1))
 	}
 	// close emitter
@@ -652,13 +652,13 @@ func TestMessageCommit(t *testing.T) {
 	// Start a processor a couple of times that accumulates the emitted value.
 	// It always end up with a state of "10", but only consume the messages the first time.
 	// The second and third time it will just start as there are no new message in the topic.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		done := make(chan struct{})
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		proc, err := goka.NewProcessor(brokers, goka.DefineGroup(group,
-			goka.Input(inputStream, new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			goka.Input(inputStream, new(codec.Int64), func(ctx goka.Context, msg any) {
 				if val := ctx.Value(); val == nil {
 					ctx.SetValue(msg)
 				} else {
@@ -731,7 +731,7 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 
 	createProc := func() *goka.Processor {
 		proc, err := goka.NewProcessor(brokers, goka.DefineGroup(group,
-			goka.Input(inputStream, new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			goka.Input(inputStream, new(codec.Int64), func(ctx goka.Context, msg any) {
 				if val := ctx.Value(); val == nil {
 					ctx.SetValue(msg)
 				} else {
@@ -760,7 +760,7 @@ func TestProcessorGracefulShutdownContinue(t *testing.T) {
 	require.Error(t, <-procDone)
 
 	// start it 10 more times in a row and stop it
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		log.Printf("creating proc round %d", i)
 		proc, cancelProc, procDone := runProc(createProc())
 		pollTimed(t, "proc-running", proc.Recovered)

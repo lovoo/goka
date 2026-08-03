@@ -41,7 +41,7 @@ const (
 type visit struct {
 	key  string
 	name string
-	meta interface{}
+	meta any
 	done func()
 }
 
@@ -254,7 +254,6 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 	}
 
 	for _, join := range pp.joins {
-		join := join
 		pp.runnerGroup.Go(func() error {
 			defer pp.state.SetState(PPStateStopping)
 			return join.CatchupForever(runnerCtx, true)
@@ -311,7 +310,6 @@ func (pp *PartitionProcessor) Stop() error {
 	// close all the tables
 	stopErrg, _ := multierr.NewErrGroup(context.Background())
 	for _, join := range pp.joins {
-		join := join
 		stopErrg.Go(func() error {
 			return join.Close()
 		})
@@ -474,7 +472,6 @@ func (pp *PartitionProcessor) fetchStats(ctx context.Context) *PartitionProcStat
 
 	// fetch join table stats
 	for topic, join := range pp.joins {
-		topic, join := topic, join
 		errg.Go(func() error {
 			joinStats := join.fetchStats(ctx)
 			if joinStats != nil {
@@ -579,7 +576,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	}
 
 	var (
-		m   interface{}
+		m   any
 		err error
 	)
 
@@ -625,7 +622,7 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 // VisitValues iterates over all values in the table and calls the "visit"-callback for the passed name.
 // Optional parameter value can be set, which will just be forwarded to the visitor-function
 // the function returns after all items of the table have been added to the channel.
-func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta interface{}, visited *int64) error {
+func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta any, visited *int64) error {
 	if _, ok := pp.visitCallbacks[name]; !ok {
 		return fmt.Errorf("unconfigured visit callback. Did you initialize the processor with DefineGroup(..., Visit(%s, ...), ...)?", name)
 	}

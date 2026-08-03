@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func assertNil(t *testing.T, actual interface{}) {
+func assertNil(t *testing.T, actual any) {
 	value := reflect.ValueOf(actual)
 	if value.IsValid() {
 		if !value.IsNil() {
@@ -17,7 +17,7 @@ func assertNil(t *testing.T, actual interface{}) {
 	}
 }
 
-func assertNotNil(t *testing.T, actual interface{}) {
+func assertNotNil(t *testing.T, actual any) {
 	value := reflect.ValueOf(actual)
 	if !value.IsValid() || value.IsNil() {
 		t.Fatalf("Expected value to be not nil, but was nil in %s", string(debug.Stack()))
@@ -35,13 +35,13 @@ func assertFalse(t *testing.T, value bool) {
 	}
 }
 
-func assertEqual(t *testing.T, actual, expected interface{}) {
+func assertEqual(t *testing.T, actual, expected any) {
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("Expected values were not equal.\nactual=%#v\nexpected=%#v in %s", actual, expected, string(debug.Stack()))
 	}
 }
 
-func panicAssertEqual(t *testing.T, expected interface{}) {
+func panicAssertEqual(t *testing.T, expected any) {
 	if expected == nil {
 		panic("can't pass nil to panicAssertEqual")
 	}
@@ -56,13 +56,13 @@ func panicAssertEqual(t *testing.T, expected interface{}) {
 
 }
 
-func assertNotEqual(t *testing.T, actual, expected interface{}) {
+func assertNotEqual(t *testing.T, actual, expected any) {
 	if reflect.DeepEqual(actual, expected) {
 		t.Fatalf("Expected values were equal.\nactual=%#v\nexpected=%#v in %s", actual, expected, string(debug.Stack()))
 	}
 }
 
-func assertFuncEqual(t *testing.T, actual, expected interface{}) {
+func assertFuncEqual(t *testing.T, actual, expected any) {
 	if !(reflect.ValueOf(actual).Pointer() == reflect.ValueOf(expected).Pointer()) {
 		t.Fatalf("Expected functions were equal.\nactual=%#v\nexpected=%#v in %s", actual, expected, string(debug.Stack()))
 	}

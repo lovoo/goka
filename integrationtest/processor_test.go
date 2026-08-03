@@ -18,11 +18,11 @@ type failingDecode struct {
 	codec goka.Codec
 }
 
-func (fc *failingDecode) Decode(_ []byte) (interface{}, error) {
+func (fc *failingDecode) Decode(_ []byte) (any, error) {
 	return nil, fmt.Errorf("Error decoding")
 }
 
-func (fc *failingDecode) Encode(msg interface{}) ([]byte, error) {
+func (fc *failingDecode) Encode(msg any) ([]byte, error) {
 	return fc.codec.Encode(msg)
 }
 
@@ -30,19 +30,19 @@ func (fc *failingDecode) Encode(msg interface{}) ([]byte, error) {
 func TestErrorCallback(t *testing.T) {
 	for _, tcase := range []struct {
 		name    string
-		consume func(ctx goka.Context, msg interface{})
+		consume func(ctx goka.Context, msg any)
 		codec   goka.Codec
 	}{
 		{
 			name: "panic",
-			consume: func(ctx goka.Context, msg interface{}) {
+			consume: func(ctx goka.Context, msg any) {
 				panic("failing")
 			},
 			codec: new(codec.Int64),
 		},
 		{
 			name: "decode",
-			consume: func(ctx goka.Context, msg interface{}) {
+			consume: func(ctx goka.Context, msg any) {
 			},
 			codec: &failingDecode{
 				codec: new(codec.Int64),
@@ -50,7 +50,7 @@ func TestErrorCallback(t *testing.T) {
 		},
 		{
 			name: "invalid-context-op",
-			consume: func(ctx goka.Context, msg interface{}) {
+			consume: func(ctx goka.Context, msg any) {
 				ctx.SetValue(0)
 			},
 			codec: new(codec.Int64),
@@ -67,8 +67,7 @@ func TestErrorCallback(t *testing.T) {
 				goka.WithTester(gkt),
 			)
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			var (
 				err  error
 				done = make(chan struct{})
@@ -101,7 +100,7 @@ func TestHeaders(t *testing.T) {
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
-		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+		goka.Input("input", new(codec.String), func(ctx goka.Context, msg any) {
 			processorHeaders = ctx.Headers()
 			ctx.Emit("output", ctx.Key(), fmt.Sprintf("forwarded: %v", msg),
 				goka.WithCtxEmitHeaders(goka.Headers{
@@ -174,12 +173,12 @@ func TestProcessorVisit(t *testing.T) {
 	proc, _ := goka.NewProcessor(nil,
 		goka.DefineGroup(
 			"test",
-			goka.Input("input-topic", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			goka.Input("input-topic", new(codec.Int64), func(ctx goka.Context, msg any) {
 				ctx.SetValue(msg)
 			}),
 			goka.Persist(new(codec.Int64)),
 			goka.Output("output", new(codec.Int64)),
-			goka.Visitor("reset", func(ctx goka.Context, msg interface{}) {
+			goka.Visitor("reset", func(ctx goka.Context, msg any) {
 				ctx.Emit("output", ctx.Key(), msg)
 				ctx.SetValue(msg)
 			}),
@@ -231,7 +230,7 @@ type (
 	}
 )
 
-func (w *wrapper) SetValue(value interface{}, options ...goka.ContextOption) {
+func (w *wrapper) SetValue(value any, options ...goka.ContextOption) {
 	val := value.(int64)
 	w.value = val
 	w.gokaCtx.SetValue(val + 1)
@@ -245,10 +244,10 @@ func TestProcessorContextWrapper(t *testing.T) {
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("proc",
-		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg any) {
 			ctx.SetValue(msg)
 		}),
-		goka.Visitor("visit", func(ctx goka.Context, msg interface{}) {
+		goka.Visitor("visit", func(ctx goka.Context, msg any) {
 			ctx.SetValue(msg.(int64))
 		}),
 		goka.Persist(new(codec.Int64)),
