@@ -16,7 +16,7 @@ cfg.Version = sarama.V0_11_0_0 // or newer
 | API | Role |
 |-----|------|
 | `WithConsumerGroupHandlerWrapper` | Wraps the processor's `sarama.ConsumerGroupHandler` before `ConsumerGroup.Consume`. Pass the result of `WrapConsumerGroupHandler` (or equivalent). |
-| `WithProducerBuilder` + `ProducerBuilderWithAsyncProducerWrapper` | Builds a `sarama.AsyncProducer`, applies your wrap function (e.g. `WrapAsyncProducer`), then hands it to goka. |
+| `WithProducerBuilder` + `ProducerBuilderWithConfig` | Builds a `sarama.AsyncProducer` and optionally wraps it (e.g. `WithAsyncProducerWrapper`), then hands it to goka. |
 | `NewProducerFromAsyncProducer` | Same idea for custom `ProducerBuilder` implementations: wrap first, then construct goka's `Producer`. |
 | `WithProcessMiddleware` | Wraps each `ProcessCallback` (input topics and visits). Use this to start and finish a span around handler logic. |
 | `TextMapHeaders` | Adapts `goka.Headers` for OpenTelemetry (`Get`/`Set`/`Keys`) and Datadog (`Set`/`ForeachKey`) text-map carriers. |
@@ -91,10 +91,8 @@ func Apply(group goka.Group, cfg *sarama.Config) []goka.ProcessorOption {
 				next(&tracingContext{Context: ctx, span: span}, msg)
 			}
 		}),
-		goka.WithProducerBuilder(goka.ProducerBuilderWithAsyncProducerWrapper(cfg,
-			func(p sarama.AsyncProducer, c *sarama.Config) sarama.AsyncProducer {
-				return saramatrace.WrapAsyncProducer(c, p)
-			},
+		goka.WithProducerBuilder(goka.ProducerBuilderWithConfig(cfg,
+			goka.WithAsyncProducerWrapper(saramatrace.WrapAsyncProducer),
 		)),
 	}
 }

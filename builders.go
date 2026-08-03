@@ -19,18 +19,10 @@ func DefaultProducerBuilder(brokers []string, clientID string, hasher func() has
 }
 
 // ProducerBuilderWithConfig creates a Kafka producer using the Sarama library.
-func ProducerBuilderWithConfig(config *sarama.Config) ProducerBuilder {
-	return ProducerBuilderWithAsyncProducerWrapper(config, nil)
-}
+func ProducerBuilderWithConfig(config *sarama.Config, opts ...ProducerBuilderOption) ProducerBuilder {
+	pbOpts := new(producerBuilderOptions)
+	pbOpts.applyOptions(opts...)
 
-// AsyncProducerWrapper wraps a newly created sarama.AsyncProducer before goka
-// attaches its Promise completion loop.
-type AsyncProducerWrapper func(producer sarama.AsyncProducer, config *sarama.Config) sarama.AsyncProducer
-
-// ProducerBuilderWithAsyncProducerWrapper creates a producer builder that
-// constructs a sarama.AsyncProducer, applies wrap, then returns a goka Producer
-// via NewProducerFromAsyncProducer. A nil wrap is equivalent to ProducerBuilderWithConfig.
-func ProducerBuilderWithAsyncProducerWrapper(config *sarama.Config, wrap AsyncProducerWrapper) ProducerBuilder {
 	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
 		config.ClientID = clientID
 		config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
@@ -38,10 +30,35 @@ func ProducerBuilderWithAsyncProducerWrapper(config *sarama.Config, wrap AsyncPr
 		if err != nil {
 			return nil, fmt.Errorf("failed to start Sarama producer: %w", err)
 		}
-		if wrap != nil {
-			aprod = wrap(aprod, config)
+		if pbOpts.asyncProducerWrapper != nil {
+			aprod = pbOpts.asyncProducerWrapper(config, aprod)
 		}
 		return NewProducerFromAsyncProducer(aprod), nil
+	}
+}
+
+// ProducerBuilderOption configures ProducerBuilderWithConfig.
+type ProducerBuilderOption func(*producerBuilderOptions)
+
+type producerBuilderOptions struct {
+	asyncProducerWrapper AsyncProducerWrapper
+}
+
+func (o *producerBuilderOptions) applyOptions(opts ...ProducerBuilderOption) {
+	for _, opt := range opts {
+		opt(o)
+	}
+}
+
+// AsyncProducerWrapper wraps a newly created sarama.AsyncProducer before goka
+// attaches its Promise completion loop.
+type AsyncProducerWrapper func(config *sarama.Config, producer sarama.AsyncProducer) sarama.AsyncProducer
+
+// WithAsyncProducerWrapper applies wrap to the sarama.AsyncProducer before
+// goka attaches its Promise completion loop.
+func WithAsyncProducerWrapper(wrap AsyncProducerWrapper) ProducerBuilderOption {
+	return func(o *producerBuilderOptions) {
+		o.asyncProducerWrapper = wrap
 	}
 }
 

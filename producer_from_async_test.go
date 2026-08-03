@@ -90,13 +90,13 @@ func TestNewProducerFromAsyncProducer_UsesWrappedProducer(t *testing.T) {
 	ap := newMockAsyncProducer()
 	cfg := DefaultConfig()
 	var wrapped bool
-	wrap := AsyncProducerWrapper(func(p sarama.AsyncProducer, c *sarama.Config) sarama.AsyncProducer {
+	wrap := AsyncProducerWrapper(func(c *sarama.Config, p sarama.AsyncProducer) sarama.AsyncProducer {
 		wrapped = true
 		require.Equal(t, cfg, c)
 		return p
 	})
 
-	prod := NewProducerFromAsyncProducer(wrap(ap, cfg))
+	prod := NewProducerFromAsyncProducer(wrap(cfg, ap))
 	require.True(t, wrapped)
 	require.NotNil(t, prod)
 
@@ -105,8 +105,24 @@ func TestNewProducerFromAsyncProducer_UsesWrappedProducer(t *testing.T) {
 	require.NoError(t, prod.Close())
 }
 
-func TestProducerBuilderWithAsyncProducerWrapper_NilWrap(t *testing.T) {
+func TestWithAsyncProducerWrapper(t *testing.T) {
+	opts := &producerBuilderOptions{}
+	ap := newMockAsyncProducer()
 	cfg := DefaultConfig()
-	builder := ProducerBuilderWithAsyncProducerWrapper(cfg, nil)
+	var called bool
+	WithAsyncProducerWrapper(func(c *sarama.Config, p sarama.AsyncProducer) sarama.AsyncProducer {
+		called = true
+		require.Equal(t, cfg, c)
+		return p
+	})(opts)
+
+	require.NotNil(t, opts.asyncProducerWrapper)
+	result := opts.asyncProducerWrapper(cfg, ap)
+	require.True(t, called)
+	require.Equal(t, ap, result)
+}
+
+func TestProducerBuilderWithConfig_NoOptions(t *testing.T) {
+	builder := ProducerBuilderWithConfig(DefaultConfig())
 	require.NotNil(t, builder)
 }
