@@ -163,7 +163,7 @@ type poptions struct {
 
 // ConsumerGroupHandlerWrapper wraps the processor's ConsumerGroupHandler before
 // it is passed to ConsumerGroup.Consume.
-type ConsumerGroupHandlerWrapper func(sarama.ConsumerGroupHandler) sarama.ConsumerGroupHandler
+type ConsumerGroupHandlerWrapper func(handler sarama.ConsumerGroupHandler, group, clientID string) sarama.ConsumerGroupHandler
 
 // ProcessMiddleware wraps ProcessCallback for input and visit handling.
 // Middlewares are composed so the first registered is outermost.

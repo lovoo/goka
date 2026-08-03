@@ -400,7 +400,7 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 func (g *Processor) consumerGroupHandler() sarama.ConsumerGroupHandler {
 	var handler sarama.ConsumerGroupHandler = g
 	if g.opts.consumerGroupHandlerWrapper != nil {
-		handler = g.opts.consumerGroupHandlerWrapper(handler)
+		handler = g.opts.consumerGroupHandlerWrapper(handler, string(g.graph.Group()), g.opts.clientID)
 	}
 	return handler
 }

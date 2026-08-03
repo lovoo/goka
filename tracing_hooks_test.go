@@ -44,23 +44,25 @@ func TestWithProcessMiddleware_CompositionOrder(t *testing.T) {
 }
 
 func TestWithConsumerGroupHandlerWrapper(t *testing.T) {
-	opts := &poptions{}
-	gg := new(GroupGraph)
-	var called bool
+	opts := &poptions{clientID: "test-client"}
+	gg := DefineGroup("test-group")
+	var gotGroup, gotClientID string
 
-	WithConsumerGroupHandlerWrapper(func(h sarama.ConsumerGroupHandler) sarama.ConsumerGroupHandler {
-		called = true
+	WithConsumerGroupHandlerWrapper(func(h sarama.ConsumerGroupHandler, group, clientID string) sarama.ConsumerGroupHandler {
+		gotGroup = group
+		gotClientID = clientID
 		require.NotNil(t, h)
 		return h
 	})(opts, gg)
 
-	g := &Processor{opts: opts}
+	g := &Processor{opts: opts, graph: gg}
 	handler := g.consumerGroupHandler()
-	require.True(t, called)
+	require.Equal(t, "test-group", gotGroup)
+	require.Equal(t, "test-client", gotClientID)
 	require.Equal(t, g, handler)
 }
 
 func TestWithConsumerGroupHandlerWrapper_Nil(t *testing.T) {
-	g := &Processor{opts: &poptions{}}
+	g := &Processor{opts: &poptions{}, graph: DefineGroup("test-group")}
 	require.Equal(t, g, g.consumerGroupHandler())
 }

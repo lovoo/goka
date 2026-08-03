@@ -15,7 +15,7 @@ cfg.Version = sarama.V0_11_0_0 // or newer
 
 | API | Role |
 |-----|------|
-| `WithConsumerGroupHandlerWrapper` | Wraps the processor's `sarama.ConsumerGroupHandler` before `ConsumerGroup.Consume`. Pass the result of `WrapConsumerGroupHandler` (or equivalent). |
+| `WithConsumerGroupHandlerWrapper` | Wraps the processor's `sarama.ConsumerGroupHandler` before `ConsumerGroup.Consume`, passing `group` and `clientID` (same as `ConsumerGroupBuilder`). |
 | `WithProducerBuilder` + `ProducerBuilderWithConfig` | Builds a `sarama.AsyncProducer` and optionally wraps it (e.g. `WithAsyncProducerWrapper`), then hands it to goka. |
 | `NewProducerFromAsyncProducer` | Same idea for custom `ProducerBuilder` implementations: wrap first, then construct goka's `Producer`. |
 | `WithProcessMiddleware` | Wraps each `ProcessCallback` (input topics and visits). Use this to start and finish a span around handler logic. |
@@ -68,10 +68,10 @@ import (
 
 // Apply returns processor options that wire Datadog's Sarama instrumentation
 // into a goka processor.
-func Apply(group goka.Group, cfg *sarama.Config) []goka.ProcessorOption {
+func Apply(cfg *sarama.Config) []goka.ProcessorOption {
 	return []goka.ProcessorOption{
-		goka.WithConsumerGroupHandlerWrapper(func(h sarama.ConsumerGroupHandler) sarama.ConsumerGroupHandler {
-			return saramatrace.WrapConsumerGroupHandler(h, saramatrace.WithGroupID(string(group)))
+		goka.WithConsumerGroupHandlerWrapper(func(h sarama.ConsumerGroupHandler, group, _ string) sarama.ConsumerGroupHandler {
+			return saramatrace.WrapConsumerGroupHandler(h, saramatrace.WithGroupID(group))
 		}),
 		goka.WithProcessMiddleware(func(next goka.ProcessCallback) goka.ProcessCallback {
 			return func(ctx goka.Context, msg interface{}) {
@@ -158,7 +158,7 @@ func (c *tracingContext) withProduceSpan(
 cfg := goka.DefaultConfig()
 cfg.Version = sarama.V0_11_0_0
 
-proc, err := goka.NewProcessor(brokers, graph, tracing.Apply(group, cfg)...)
+proc, err := goka.NewProcessor(brokers, graph, tracing.Apply(cfg)...)
 ```
 
 Example trace for a callback that updates state and emits downstream:
