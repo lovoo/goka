@@ -457,7 +457,7 @@ func (p *PartitionTable) loadMessages(ctx context.Context, cons sarama.Partition
 			if p.state.IsState(State(PartitionRunning)) && stopAfterCatchup {
 				// TODO: should we really ignore the message?
 				// Shouldn't we instead break here to avoid losing messages or fail or just consume it?
-				p.log.Printf("received message in topic %s, partition %s after catchup. Another processor is still producing messages. Ignoring message.", p.topic, p.partition)
+				p.log.Printf("received message in topic %s, partition %d after catchup. Another processor is still producing messages. Ignoring message.", p.topic, p.partition)
 				continue
 			}
 
