@@ -17,8 +17,8 @@ stop: compose-down
 
 compose-up:
 	@echo start docker compose
-	@docker-compose up -d
+	@docker compose up -d
 
 compose-down:
 	@echo stop docker compose
-	@docker-compose down
+	@docker compose down

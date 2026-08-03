@@ -9,7 +9,7 @@ env:
     GO_VERSION: '1.20'
 jobs:
   run-examples:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v3
 
@@ -40,7 +40,7 @@ jobs:
         shell: bash
         working-directory: examples
         run: |
-          sudo apt update -y && sudo apt install -y netcat docker-compose
+          sudo apt update -y && sudo apt install -y netcat-openbsd
           make start
 
       - name: Run example 1

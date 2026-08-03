@@ -10,7 +10,7 @@ env:
 
 jobs:
   unit:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v3
 
@@ -25,7 +25,7 @@ jobs:
           go test -v -race ./...
 
   system-test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v3
 
@@ -37,7 +37,7 @@ jobs:
       - name: Services
         shell: bash
         run: |
-          sudo apt update -y && sudo apt install -y netcat docker-compose
+          sudo apt update -y && sudo apt install -y netcat-openbsd
           cd examples && make start && cd ..
 
       - name: Test
@@ -45,4 +45,4 @@ jobs:
         run: |
           GOKA_SYSTEMTEST=y go test -v github.com/lovoo/goka/systemtest
 
-          
+
