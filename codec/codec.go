@@ -13,7 +13,7 @@ import (
 type Bytes struct{}
 
 // Encode does a type conversion into []byte
-func (d *Bytes) Encode(value interface{}) ([]byte, error) {
+func (d *Bytes) Encode(value any) ([]byte, error) {
 	var err error
 	data, isByte := value.([]byte)
 	if !isByte {
@@ -23,7 +23,7 @@ func (d *Bytes) Encode(value interface{}) ([]byte, error) {
 }
 
 // Decode of defaultCodec simply returns the data
-func (d *Bytes) Decode(data []byte) (interface{}, error) {
+func (d *Bytes) Decode(data []byte) (any, error) {
 	return data, nil
 }
 
@@ -31,7 +31,7 @@ func (d *Bytes) Decode(data []byte) (interface{}, error) {
 type String struct{}
 
 // Encode encodes from string to []byte
-func (c *String) Encode(value interface{}) ([]byte, error) {
+func (c *String) Encode(value any) ([]byte, error) {
 	stringVal, isString := value.(string)
 	if !isString {
 		return nil, fmt.Errorf("String: value to encode is not of type string but %T", value)
@@ -40,7 +40,7 @@ func (c *String) Encode(value interface{}) ([]byte, error) {
 }
 
 // Decode decodes from []byte to string
-func (c *String) Decode(data []byte) (interface{}, error) {
+func (c *String) Decode(data []byte) (any, error) {
 	return string(data), nil
 }
 
@@ -48,7 +48,7 @@ func (c *String) Decode(data []byte) (interface{}, error) {
 type Int64 struct{}
 
 // Encode encodes from string to []byte
-func (c *Int64) Encode(value interface{}) ([]byte, error) {
+func (c *Int64) Encode(value any) ([]byte, error) {
 	intVal, isInt := value.(int64)
 	if !isInt {
 		return nil, fmt.Errorf("Int64: value to encode is not of type int64")
@@ -57,7 +57,7 @@ func (c *Int64) Encode(value interface{}) ([]byte, error) {
 }
 
 // Decode decodes from []byte to string
-func (c *Int64) Decode(data []byte) (interface{}, error) {
+func (c *Int64) Decode(data []byte) (any, error) {
 	intVal, err := strconv.ParseInt(string(data), 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("Error parsing data from string %d: %v", intVal, err)

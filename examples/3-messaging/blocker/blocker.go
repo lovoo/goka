@@ -19,11 +19,11 @@ type BlockEvent struct {
 
 type BlockEventCodec struct{}
 
-func (c *BlockEventCodec) Encode(value interface{}) ([]byte, error) {
+func (c *BlockEventCodec) Encode(value any) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-func (c *BlockEventCodec) Decode(data []byte) (interface{}, error) {
+func (c *BlockEventCodec) Decode(data []byte) (any, error) {
 	var m BlockEvent
 	return &m, json.Unmarshal(data, &m)
 }
@@ -33,16 +33,16 @@ type BlockValue struct {
 }
 type BlockValueCodec struct{}
 
-func (c *BlockValueCodec) Encode(value interface{}) ([]byte, error) {
+func (c *BlockValueCodec) Encode(value any) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-func (c *BlockValueCodec) Decode(data []byte) (interface{}, error) {
+func (c *BlockValueCodec) Decode(data []byte) (any, error) {
 	var m BlockValue
 	return &m, json.Unmarshal(data, &m)
 }
 
-func block(ctx goka.Context, msg interface{}) {
+func block(ctx goka.Context, msg any) {
 	var s *BlockValue
 	if v := ctx.Value(); v == nil {
 		s = new(BlockValue)

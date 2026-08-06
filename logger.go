@@ -16,21 +16,21 @@ var defaultLogger = &std{
 // Logger is the interface Goka and its subpackages use for logging.
 type Logger interface {
 	// Print will simply print the params
-	Print(...interface{})
+	Print(...any)
 
 	// Print will simply print the params
-	Println(...interface{})
+	Println(...any)
 
 	// Printf will be used for informational messages. These can be thought of
 	// having an 'Info'-level in a structured logger.
-	Printf(string, ...interface{})
+	Printf(string, ...any)
 }
 
 type logger interface {
 	Logger
 	// Debugf is used for debugging messages, mostly for debugging goka itself.
 	// It is turned off unless goka is initialized
-	Debugf(string, ...interface{})
+	Debugf(string, ...any)
 	// PrefixedLogger returns a logger that prefixes all messages with passed prefix
 	Prefix(string) logger
 
@@ -47,19 +47,19 @@ type std struct {
 	prefix     string
 }
 
-func (s *std) Print(msgs ...interface{}) {
+func (s *std) Print(msgs ...any) {
 	s.log.Print(msgs...)
 }
 
-func (s *std) Println(msgs ...interface{}) {
+func (s *std) Println(msgs ...any) {
 	s.log.Print(msgs...)
 }
 
-func (s *std) Printf(msg string, args ...interface{}) {
+func (s *std) Printf(msg string, args ...any) {
 	s.log.Printf(fmt.Sprintf("%s%s", s.prefix, msg), args...)
 }
 
-func (s *std) Debugf(msg string, args ...interface{}) {
+func (s *std) Debugf(msg string, args ...any) {
 	if s.debug {
 		s.log.Printf(fmt.Sprintf("%s%s", s.prefix, msg), args...)
 	}

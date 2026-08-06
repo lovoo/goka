@@ -17,7 +17,7 @@ type ValueCodec struct {
 	codec.String
 }
 
-func translate(ctx goka.Context, msg interface{}) {
+func translate(ctx goka.Context, msg any) {
 	ctx.SetValue(msg.(string))
 }
 

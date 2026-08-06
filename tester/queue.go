@@ -91,7 +91,7 @@ func newQueueTracker(tester *Tester, t T, topic string) *QueueTracker {
 // Next returns the next message since the last time this
 // function was called (or MoveToEnd)
 // It uses the known codec for the topic to decode the message
-func (mt *QueueTracker) Next() (string, interface{}, bool) {
+func (mt *QueueTracker) Next() (string, any, bool) {
 	_, key, msg, hasNext := mt.NextWithHeaders()
 	return key, msg, hasNext
 }
@@ -99,7 +99,7 @@ func (mt *QueueTracker) Next() (string, interface{}, bool) {
 // NextWithHeaders returns the next message since the last time this
 // function was called (or MoveToEnd).  This includes headers
 // It uses the known codec for the topic to decode the message
-func (mt *QueueTracker) NextWithHeaders() (goka.Headers, string, interface{}, bool) {
+func (mt *QueueTracker) NextWithHeaders() (goka.Headers, string, any, bool) {
 	headers, key, msgRaw, hasNext := mt.NextRawWithHeaders()
 
 	if !hasNext {

@@ -37,7 +37,7 @@ func newViewSignal() *Signal {
 }
 
 // Getter functions return a value for a key or an error. If no value exists for the key, nil is returned without errors.
-type Getter func(string) (interface{}, error)
+type Getter func(string) (any, error)
 
 // View is a materialized (i.e. persistent) cache of a group table.
 type View struct {
@@ -195,8 +195,6 @@ func (v *View) runStateMerger(ctx context.Context) {
 
 	// get a state change observer for all partitions
 	for idx, partition := range v.partitions {
-		idx := idx
-		partition := partition
 
 		observer := partition.observeStateChanges()
 		// create a goroutine that updates the view state based all partition states
@@ -247,7 +245,6 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 	recoverErrg, recoverCtx := multierr.NewErrGroup(ctx)
 
 	for _, partition := range v.partitions {
-		partition := partition
 		recoverErrg.Go(func() error {
 			return partition.SetupAndRecover(recoverCtx, v.opts.autoreconnect)
 		})
@@ -268,7 +265,6 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 	catchupErrg, catchupCtx := multierr.NewErrGroup(ctx)
 
 	for _, partition := range v.partitions {
-		partition := partition
 		catchupErrg.Go(func() error {
 			return partition.CatchupForever(catchupCtx, v.opts.autoreconnect)
 		})
@@ -285,7 +281,6 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 func (v *View) close() error {
 	errg, _ := multierr.NewErrGroup(context.Background())
 	for _, p := range v.partitions {
-		p := p
 		errg.Go(func() error {
 			return p.Close()
 		})
@@ -330,7 +325,7 @@ func (v *View) Topic() string {
 // Get returns the value for the key in the view, if exists. Nil if it doesn't.
 // Get can be called by multiple goroutines concurrently.
 // Get can only be called after Recovered returns true.
-func (v *View) Get(key string) (interface{}, error) {
+func (v *View) Get(key string) (any, error) {
 	if v.state.IsState(State(ViewStateIdle)) || v.state.IsState(State(ViewStateInitializing)) {
 		return nil, fmt.Errorf("View is either not running, not correctly initialized or stopped again. It's not safe to retrieve values")
 	}
@@ -489,7 +484,6 @@ func (v *View) statsWithContext(ctx context.Context) *ViewStats {
 	errg, ctx := multierr.NewErrGroup(ctx)
 
 	for _, partTable := range v.partitions {
-		partTable := partTable
 
 		errg.Go(func() error {
 			tableStats := partTable.fetchStats(ctx)

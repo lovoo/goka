@@ -1,6 +1,8 @@
 all:
 	@echo targets: start restart stop
 
+DOCKER_BIN ?= $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null || echo "docker")
+
 # stop and start docker compose (zookeeper and kafka)
 restart: stop start
 	@echo done
@@ -17,8 +19,8 @@ stop: compose-down
 
 compose-up:
 	@echo start docker compose
-	@docker-compose up -d
+	@$(DOCKER_BIN) compose up -d
 
 compose-down:
 	@echo stop docker compose
-	@docker-compose down
+	@$(DOCKER_BIN) compose down

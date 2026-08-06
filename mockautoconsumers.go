@@ -258,9 +258,7 @@ func (pc *MockAutoPartitionConsumer) Close() error {
 			wg       sync.WaitGroup
 		)
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			errs := make(sarama.ConsumerErrors, 0)
 			for err := range pc.errors {
@@ -270,15 +268,13 @@ func (pc *MockAutoPartitionConsumer) Close() error {
 			if len(errs) > 0 {
 				closeErr = errs
 			}
-		}()
+		})
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range pc.messages {
 				// drain
 			}
-		}()
+		})
 
 		wg.Wait()
 		err = closeErr

@@ -75,7 +75,7 @@ func main() {
 	errg, ctx := multierr.NewErrGroup(ctx)
 
 	g := goka.DefineGroup(group,
-		goka.Input(topic, new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+		goka.Input(topic, new(codec.Int64), func(ctx goka.Context, msg any) {
 			var counter int64
 			if val := ctx.Value(); val != nil {
 				counter = val.(int64)
@@ -85,7 +85,7 @@ func main() {
 			ctx.SetValue(counter)
 
 		}),
-		goka.Visitor("reset", func(ctx goka.Context, meta interface{}) {
+		goka.Visitor("reset", func(ctx goka.Context, meta any) {
 			log.Printf("resetting %s: %d", ctx.Key(), meta.(int64))
 			ctx.SetValue(meta)
 		}),

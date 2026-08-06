@@ -14,15 +14,15 @@ type failingT struct {
 	failed bool
 }
 
-func (ft *failingT) Errorf(format string, args ...interface{}) {
+func (ft *failingT) Errorf(format string, args ...any) {
 	ft.failed = true
 }
 
-func (ft *failingT) Fatalf(format string, args ...interface{}) {
+func (ft *failingT) Fatalf(format string, args ...any) {
 	ft.failed = true
 }
 
-func (ft *failingT) Fatal(a ...interface{}) {
+func (ft *failingT) Fatal(a ...any) {
 	ft.failed = true
 }
 
@@ -31,7 +31,7 @@ func TestTesterInvalidGroup(t *testing.T) {
 	gkt := New(&ft)
 
 	goka.NewProcessor(nil,
-		goka.DefineGroup("", goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+		goka.DefineGroup("", goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg any) {
 			// nothing called
 		})),
 		goka.WithTester(gkt))
@@ -50,7 +50,7 @@ func TestTesterConsume(t *testing.T) {
 		timestamp time.Time
 	)
 	proc, err := goka.NewProcessor(nil,
-		goka.DefineGroup("test", goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+		goka.DefineGroup("test", goka.Input("input", new(codec.String), func(ctx goka.Context, msg any) {
 			value = msg.(string)
 			key = ctx.Key()
 			timestamp = ctx.Timestamp()

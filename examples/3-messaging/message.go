@@ -19,22 +19,22 @@ type Message struct {
 
 type MessageCodec struct{}
 
-func (c *MessageCodec) Encode(value interface{}) ([]byte, error) {
+func (c *MessageCodec) Encode(value any) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-func (c *MessageCodec) Decode(data []byte) (interface{}, error) {
+func (c *MessageCodec) Decode(data []byte) (any, error) {
 	var m Message
 	return &m, json.Unmarshal(data, &m)
 }
 
 type MessageListCodec struct{}
 
-func (c *MessageListCodec) Encode(value interface{}) ([]byte, error) {
+func (c *MessageListCodec) Encode(value any) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-func (c *MessageListCodec) Decode(data []byte) (interface{}, error) {
+func (c *MessageListCodec) Decode(data []byte) (any, error) {
 	var m []Message
 	err := json.Unmarshal(data, &m)
 	return m, err

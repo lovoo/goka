@@ -80,7 +80,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	params := map[string]interface{}{
+	params := map[string]any{
 		"base_path":  s.basePath,
 		"page_title": "Monitor",
 		"menu_title": "Index",
@@ -97,7 +97,7 @@ func (s *Server) renderData(w http.ResponseWriter, r *http.Request) {
 	s.m.RLock()
 	defer s.m.RUnlock()
 
-	var stats interface{}
+	var stats any
 	vars := mux.Vars(r)
 	idx, err := strconv.Atoi(mux.Vars(r)["idx"])
 	if err != nil {
@@ -150,7 +150,7 @@ func (s *Server) renderProcessor(w http.ResponseWriter, r *http.Request) {
 	}
 	proc := s.processors[idx]
 
-	params := map[string]interface{}{
+	params := map[string]any{
 		"base_path":  s.basePath,
 		"page_title": fmt.Sprintf("Processor details for %s", proc.Graph().Group()),
 		"title":      proc.Graph().Group(),
@@ -179,7 +179,7 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) {
 	}
 	view := s.views[idx]
 
-	params := map[string]interface{}{
+	params := map[string]any{
 		"base_path":  s.basePath,
 		"page_title": fmt.Sprintf("View details for %s", view.Topic()),
 		"title":      view.Topic(),

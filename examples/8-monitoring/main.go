@@ -43,7 +43,7 @@ type user struct {
 type userCodec struct{}
 
 // Encodes a user into []byte
-func (jc *userCodec) Encode(value interface{}) ([]byte, error) {
+func (jc *userCodec) Encode(value any) ([]byte, error) {
 	if _, isUser := value.(*user); !isUser {
 		return nil, fmt.Errorf("Codec requires value *user, got %T", value)
 	}
@@ -51,7 +51,7 @@ func (jc *userCodec) Encode(value interface{}) ([]byte, error) {
 }
 
 // Decodes a user from []byte to it's go representation.
-func (jc *userCodec) Decode(data []byte) (interface{}, error) {
+func (jc *userCodec) Decode(data []byte) (any, error) {
 	var (
 		c   user
 		err error
@@ -91,7 +91,7 @@ func runEmitter(ctx context.Context) (rerr error) {
 	}
 }
 
-func process(ctx goka.Context, msg interface{}) {
+func process(ctx goka.Context, msg any) {
 	var u *user
 	if val := ctx.Value(); val != nil {
 		u = val.(*user)
@@ -107,7 +107,7 @@ func runStatelessProcessor(ctx context.Context, monitor *monitor.Server) error {
 	g := goka.DefineGroup(group+"-stateless",
 		goka.Input(topic,
 			new(codec.String),
-			func(ctx goka.Context, msg interface{}) {
+			func(ctx goka.Context, msg any) {
 				//ignored
 			}),
 	)
@@ -129,7 +129,7 @@ func runJoinProcessor(ctx context.Context,
 	g := goka.DefineGroup(joinGroup,
 		goka.Input(topic,
 			new(codec.String),
-			func(ctx goka.Context, msg interface{}) {
+			func(ctx goka.Context, msg any) {
 				var u *user
 				if val := ctx.Value(); val != nil {
 					u = val.(*user)
@@ -163,7 +163,7 @@ func runProcessor(ctx context.Context,
 	joinGroupInitialized chan struct{}) error {
 
 	// helper function that waits the configured number of times
-	waitVisitor := func(ctx goka.Context, value interface{}) {
+	waitVisitor := func(ctx goka.Context, value any) {
 
 		waitTime, ok := value.(int64)
 		if !ok {

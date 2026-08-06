@@ -12,7 +12,7 @@ import (
 
 var (
 	c  = new(codec.String)
-	cb = func(ctx Context, msg interface{}) {}
+	cb = func(ctx Context, msg any) {}
 )
 
 func TestGroupGraph_Validate(t *testing.T) {
@@ -202,7 +202,7 @@ func ExampleStringsToStreams() {
 
 	// use it, e.g. in the Inputs-Edge in the group graph
 	graph := DefineGroup("group",
-		Inputs(StringsToStreams(inputTopics...), new(codec.String), func(ctx Context, msg interface{}) {}),
+		Inputs(StringsToStreams(inputTopics...), new(codec.String), func(ctx Context, msg any) {}),
 	)
 	_ = graph
 }

@@ -56,9 +56,9 @@ func TestProcessorVisit(t *testing.T) {
 		proc, err := goka.NewProcessor(brokers,
 			goka.DefineGroup(
 				goka.Group(group),
-				goka.Input(input, new(codec.Int64), func(ctx goka.Context, msg interface{}) { ctx.SetValue(msg) }),
+				goka.Input(input, new(codec.Int64), func(ctx goka.Context, msg any) { ctx.SetValue(msg) }),
 				goka.Persist(new(codec.Int64)),
-				goka.Visitor("visitor", func(ctx goka.Context, msg interface{}) {
+				goka.Visitor("visitor", func(ctx goka.Context, msg any) {
 					select {
 					case <-ctx.Context().Done():
 					case <-time.After(pause):
@@ -149,7 +149,7 @@ func TestProcessorVisit(t *testing.T) {
 		// This way we can make sure that the visitor will have to block on
 		// pushing it to the partition-processor visitInputChannel.
 		numMsgs := visitChannelSize * numPartitions * 2
-		for i := 0; i < numMsgs; i++ {
+		for i := range numMsgs {
 			_, _ = em.Emit(fmt.Sprintf("value-%d", i), int64(1))
 		}
 
@@ -181,7 +181,7 @@ func TestProcessorVisit(t *testing.T) {
 		// This way we can make sure that the visitor will have to block on
 		// pushing it to the partition-processor visitInputChannel.
 		numMsgs := visitChannelSize * numPartitions * 2
-		for i := 0; i < numMsgs; i++ {
+		for i := range numMsgs {
 			_, _ = em.Emit(fmt.Sprintf("value-%d", i), int64(1))
 		}
 
@@ -296,14 +296,14 @@ func TestProcessorVisit(t *testing.T) {
 
 		// emit two values where goka.DefaultHasher says they're in the same partition.
 		// We need to achieve this to test that a shutdown will visit one value but not the other
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			_, _ = em.Emit(fmt.Sprintf("value-%d", i), int64(1))
 		}
 		// emFinish()
 
 		// poll until all values are there
 		pollTimed(t, "value-ok", func() bool {
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				val, _ := proc.Get(fmt.Sprintf("value-%d", i))
 				if val == nil || val.(int64) != 1 {
 					return false
@@ -349,13 +349,13 @@ func TestProcessorVisit(t *testing.T) {
 
 		// emit two values where goka.DefaultHasher says they're in the same partition.
 		// We need to achieve this to test that a shutdown will visit one value but not the other
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			_, _ = em.Emit(fmt.Sprintf("value-%d", i), int64(1))
 		}
 
 		// poll until all values are there
 		pollTimed(t, "value-ok", func() bool {
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				val, _ := proc1.Get(fmt.Sprintf("value-%d", i))
 				if val == nil || val.(int64) != 1 {
 					return false

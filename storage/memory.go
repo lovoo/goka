@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -141,9 +142,7 @@ func (m *memory) Iterator() (Iterator, error) {
 	keys := make([]string, len(m.keys))
 	copy(keys, m.keys)
 	storage := make(map[string][]byte, len(m.storage))
-	for k, v := range m.storage {
-		storage[k] = v
-	}
+	maps.Copy(storage, m.storage)
 	return &memiter{-1, keys, storage}, nil
 }
 

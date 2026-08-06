@@ -5,7 +5,7 @@
 # $1: expects the hostname from docker compose and port in array form: localhost:9092,localhost:9093
 #
 
-DOCKER_BIN=$([ docker --help ] && echo "docker" || echo "podman" )
+DOCKER_BIN=$(command -v docker 2>/dev/null || command -v podman 2>/dev/null || echo "docker")
 
 wait_for_kafka() {
     IFS=','; for i in $1; do

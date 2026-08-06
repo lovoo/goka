@@ -72,7 +72,7 @@ func expectCGConsume(bm *builderMock, table string, msgs []*sarama.ConsumerMessa
 // accumulate is a callback that increments the
 // table value by the incoming message.
 // Persist and incoming codecs must be codec.Int64
-func accumulate(ctx Context, msg interface{}) {
+func accumulate(ctx Context, msg any) {
 	inc := msg.(int64)
 	val := ctx.Value()
 	if val == nil {
@@ -176,7 +176,7 @@ func TestProcessor_Run(t *testing.T) {
 
 		graph := DefineGroup("test",
 			// input passes to loopback
-			Input("input", new(codec.Int64), func(ctx Context, msg interface{}) {
+			Input("input", new(codec.Int64), func(ctx Context, msg any) {
 				ctx.Loopback(ctx.Key(), msg)
 			}),
 			// this will not be called in the test but we define it, otherwise the context will raise an error
@@ -274,8 +274,7 @@ func TestProcessor_Run(t *testing.T) {
 			Input("input", new(codec.Int64), accumulate),
 		)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
@@ -311,8 +310,7 @@ func TestProcessor_Run(t *testing.T) {
 			Input("input", new(codec.Int64), accumulate),
 		)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
@@ -354,8 +352,7 @@ func TestProcessor_Run(t *testing.T) {
 			Input("input", new(codec.Int64), accumulate),
 		)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		newProc, err := NewProcessor([]string{"localhost:9092"}, graph,
 			bm.createProcessorOptions(consBuilder, groupBuilder)...,
@@ -401,7 +398,7 @@ func TestProcessor_Stop(t *testing.T) {
 		consBuilder, _ := createTestConsumerBuilder(t)
 
 		graph := DefineGroup("test",
-			Input("input", new(codec.Int64), func(ctx Context, msg interface{}) {
+			Input("input", new(codec.Int64), func(ctx Context, msg any) {
 				// Do nothing
 			}),
 		)
@@ -455,7 +452,7 @@ func TestProcessor_Stop(t *testing.T) {
 		consBuilder, _ := createTestConsumerBuilder(t)
 
 		graph := DefineGroup("test",
-			Input("input", new(codec.Int64), func(ctx Context, msg interface{}) {
+			Input("input", new(codec.Int64), func(ctx Context, msg any) {
 				// Do nothing
 			}),
 		)

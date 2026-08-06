@@ -34,7 +34,7 @@ func (e topicNoCreateError) Error() string {
 // this regex is used to filter out entries from the stack trace that origin
 // from the root-package of go (but not the subpackages, otherwise we would not see the stack in the example-tests)
 // reflect.TypeOf(Processor{}).PkgPath() returns (in the main repo) "github.com/lovoo/goka"
-var gokaPackageRegex = regexp.MustCompile(fmt.Sprintf(`%s(?:@[^/]+)?/[^/]+$`, reflect.TypeOf(Processor{}).PkgPath()))
+var gokaPackageRegex = regexp.MustCompile(fmt.Sprintf(`%s(?:@[^/]+)?/[^/]+$`, reflect.TypeFor[Processor]().PkgPath()))
 
 // ErrVisitAborted indicates a call to VisitAll could not finish due to rebalance or processor shutdown
 var ErrVisitAborted = errors.New("VisitAll aborted due to context cancel or rebalance")

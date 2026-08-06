@@ -32,7 +32,7 @@ const (
 
 // ProcessCallback function is called for every message received by the
 // processor.
-type ProcessCallback func(ctx Context, msg interface{})
+type ProcessCallback func(ctx Context, msg any)
 
 // Processor is a set of stateful callback functions that, on the arrival of
 // messages, modify the content of a table (the group table) and emit messages into other
@@ -159,7 +159,7 @@ func (g *Processor) isStateless() bool {
 // Get can be called by multiple goroutines concurrently.
 // Get can be only used with stateful processors (ie, when group table is
 // enabled) and after Recovered returns true.
-func (g *Processor) Get(key string) (interface{}, error) {
+func (g *Processor) Get(key string) (any, error) {
 	if g.isStateless() {
 		return nil, fmt.Errorf("can't get a value from stateless processor")
 	}
@@ -448,7 +448,6 @@ func (g *Processor) waitForStartupTables(ctx context.Context) error {
 	// the items that the processor is still waiting to recover before ready to go.
 	g.mTables.RLock()
 	for _, view := range g.lookupTables {
-		view := view
 
 		errg.Go(func() error {
 			name := fmt.Sprintf("lookup-table-%s", view.topic)
@@ -479,7 +478,6 @@ func (g *Processor) waitForStartupTables(ctx context.Context) error {
 			return fmt.Errorf("error finding dependent partitions: %w", err)
 		}
 		for _, part := range partitions {
-			part := part
 			pproc, err := g.createPartitionProcessor(ctx, part, runModeRecoverOnly, func(msg *message, meta string) {
 				panic("a partition processor in recover-only-mode never commits a message")
 			})
@@ -868,7 +866,6 @@ func (g *Processor) StatsWithContext(ctx context.Context) *ProcessorStats {
 	stats = newProcessorStats(len(g.partitions))
 
 	for partID, proc := range g.partitions {
-		partID, proc := partID, proc
 		errg.Go(func() error {
 			partStats := proc.fetchStats(ctx)
 
@@ -884,7 +881,6 @@ func (g *Processor) StatsWithContext(ctx context.Context) *ProcessorStats {
 
 	// get the lookup table stats
 	for topic, view := range g.lookupTables {
-		topic, view := topic, view
 		errg.Go(func() error {
 			m.Lock()
 			defer m.Unlock()
@@ -961,7 +957,7 @@ func (g *Processor) Error() error {
 // Return parameters:
 // * number of visited items
 // * error
-func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta interface{}) (int64, error) {
+func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta any) (int64, error) {
 	g.mTables.RLock()
 
 	if g.isStateless() {
@@ -990,7 +986,7 @@ func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta int
 }
 
 // VisitAll visits all values from the processor table.
-func (g *Processor) VisitAll(ctx context.Context, name string, meta interface{}) error {
+func (g *Processor) VisitAll(ctx context.Context, name string, meta any) error {
 	_, err := g.VisitAllWithStats(ctx, name, meta)
 	return err
 }

@@ -46,7 +46,7 @@ func runEmitter() {
 func runProcessor() {
 	// process callback is invoked for each message delivered from
 	// "example-stream" topic.
-	cb := func(ctx goka.Context, msg interface{}) {
+	cb := func(ctx goka.Context, msg any) {
 		var counter int64
 		// ctx.Value() gets from the group table the value that is stored for
 		// the message's key.

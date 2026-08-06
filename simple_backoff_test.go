@@ -10,7 +10,7 @@ import (
 func TestSimpleBackoff(t *testing.T) {
 	t.Run("simple progression", func(t *testing.T) {
 		backoff := NewSimpleBackoff(time.Second, 10*time.Second)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			require.Equal(t, backoff.Duration(), time.Duration(i)*time.Second)
 		}
 

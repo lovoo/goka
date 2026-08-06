@@ -23,7 +23,7 @@ func Test_1Input(t *testing.T) {
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
-		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+		goka.Input("input", new(codec.String), func(ctx goka.Context, msg any) {
 			receivedMessage = msg.(string)
 		}),
 	),
@@ -57,7 +57,7 @@ func Test_2InputOutput(t *testing.T) {
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
-		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+		goka.Input("input", new(codec.String), func(ctx goka.Context, msg any) {
 			ctx.Emit("output", ctx.Key(), fmt.Sprintf("forwarded: %v", msg))
 		}),
 		goka.Output("output", new(codec.String)),
@@ -87,7 +87,7 @@ func Test_SetTableValue(t *testing.T) {
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
-		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg any) {
 			ctx.SetValue(ctx.Value().(int64) + msg.(int64))
 		}),
 		goka.Persist(new(codec.Int64)),
@@ -111,7 +111,7 @@ func Test_JoinOutput(t *testing.T) {
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
-		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg any) {
 		}),
 		goka.Output("output", new(codec.Int64)),
 		goka.Join("join", new(codec.Int64)),
@@ -130,7 +130,7 @@ func Test_3Persist(t *testing.T) {
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
-		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+		goka.Input("input", new(codec.String), func(ctx goka.Context, msg any) {
 			ctx.SetValue(fmt.Sprintf("state: %v", msg))
 		}),
 		goka.Persist(new(codec.String)),
@@ -157,7 +157,7 @@ func Test_Subtest(t *testing.T) {
 
 	// create a new processor, registering the tester
 	proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
-		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+		goka.Input("input", new(codec.String), func(ctx goka.Context, msg any) {
 			ctx.SetValue(fmt.Sprintf("state: %v", msg))
 			ctx.Emit("output", "output-key", fmt.Sprintf("forwarded: %v", msg))
 		}),
@@ -213,10 +213,10 @@ func Test_Chain(t *testing.T) {
 	// First processor:
 	// input -> loop -> output1
 	proc1, _ := goka.NewProcessor([]string{}, goka.DefineGroup("proc1",
-		goka.Input("input", new(codec.String), func(ctx goka.Context, msg interface{}) {
+		goka.Input("input", new(codec.String), func(ctx goka.Context, msg any) {
 			ctx.Loopback(ctx.Key(), fmt.Sprintf("loop: %v", msg))
 		}),
-		goka.Loop(new(codec.String), func(ctx goka.Context, msg interface{}) {
+		goka.Loop(new(codec.String), func(ctx goka.Context, msg any) {
 			ctx.Emit("proc1-out", ctx.Key(), fmt.Sprintf("proc1-out: %v", msg))
 		}),
 		goka.Output("proc1-out", new(codec.String)),
@@ -228,7 +228,7 @@ func Test_Chain(t *testing.T) {
 	// input -> persist
 	// create a new processor, registering the tester
 	proc2, _ := goka.NewProcessor([]string{}, goka.DefineGroup("proc2",
-		goka.Input("proc1-out", new(codec.String), func(ctx goka.Context, msg interface{}) {
+		goka.Input("proc1-out", new(codec.String), func(ctx goka.Context, msg any) {
 			ctx.SetValue(fmt.Sprintf("persist: %v", msg))
 		}),
 		goka.Persist(new(codec.String)),
@@ -297,7 +297,7 @@ func Test_Failing(t *testing.T) {
 
 			// create a new processor, registering the tester
 			proc, _ := goka.NewProcessor([]string{}, goka.DefineGroup("group",
-				goka.Inputs(goka.StringsToStreams("input", "input2", "input3", "input4"), new(codec.String), func(ctx goka.Context, msg interface{}) {
+				goka.Inputs(goka.StringsToStreams("input", "input2", "input3", "input4"), new(codec.String), func(ctx goka.Context, msg any) {
 					testcase.failer(ctx)
 				}),
 			),

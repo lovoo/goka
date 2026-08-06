@@ -31,7 +31,7 @@ func TestMemoryStorage(t *testing.T) {
 					return nil
 				default:
 				}
-				mem.Set(fmt.Sprintf("%d", i%5), []byte(fmt.Sprintf("%d", i)))
+				mem.Set(fmt.Sprintf("%d", i%5), fmt.Appendf(nil, "%d", i))
 			}
 		})
 

@@ -54,7 +54,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	params := map[string]interface{}{
+	params := map[string]any{
 		"base_path":  s.basePath,
 		"components": s.components,
 	}

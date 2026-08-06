@@ -16,7 +16,7 @@ var (
 )
 
 func init() {
-	for i := 0; i < numKeys; i++ {
+	for i := range numKeys {
 		keys = append(keys, fmt.Sprintf("key-%d", i))
 	}
 }
@@ -33,7 +33,7 @@ func BenchmarkStateStorage_unbatched(b *testing.B) {
 	require.NoError(b, storage.MarkRecovered())
 	b.ResetTimer()
 	for i := 0; i < b.N*numWrites; i++ {
-		storage.Set(keys[i%len(keys)], []byte(fmt.Sprintf("value-%d", i)))
+		storage.Set(keys[i%len(keys)], fmt.Appendf(nil, "value-%d", i))
 	}
 	storage.Close()
 }
@@ -49,7 +49,7 @@ func BenchmarkStateStorage_transactioned(b *testing.B) {
 	require.NoError(b, err)
 	b.ResetTimer()
 	for i := 0; i < b.N*numWrites; i++ {
-		storage.Set(keys[i%len(keys)], []byte(fmt.Sprintf("value-%d", i)))
+		storage.Set(keys[i%len(keys)], fmt.Appendf(nil, "value-%d", i))
 	}
 	require.NoError(b, storage.MarkRecovered())
 	storage.Close()

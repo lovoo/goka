@@ -87,7 +87,7 @@ func main() {
 
 		p, err := goka.NewProcessor(brokers,
 			goka.DefineGroup("forwarder",
-				goka.Input(inputTopic, new(codec.String), func(ctx goka.Context, msg interface{}) {
+				goka.Input(inputTopic, new(codec.String), func(ctx goka.Context, msg any) {
 
 					// forward the incoming message to the "external" emitter
 					prom, err := forwardEmitter.Emit("time", msg)
@@ -118,7 +118,7 @@ func main() {
 		// processor that simply prints the incoming message.
 		p, err := goka.NewProcessor(brokers,
 			goka.DefineGroup("consumer",
-				goka.Input(forwardTopic, new(codec.String), func(ctx goka.Context, msg interface{}) {
+				goka.Input(forwardTopic, new(codec.String), func(ctx goka.Context, msg any) {
 					log.Printf("received message %s: %s", ctx.Key(), msg.(string))
 				}),
 			),

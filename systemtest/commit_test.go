@@ -52,7 +52,7 @@ func TestAutoCommit(t *testing.T) {
 
 	em, err := goka.NewEmitter(brokers, inputStream, new(codec.Int64))
 	require.NoError(t, err)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		require.NoError(t, em.EmitSync("key", int64(i)))
 	}
 
@@ -60,7 +60,7 @@ func TestAutoCommit(t *testing.T) {
 
 	createProc := func() *goka.Processor {
 		proc, err := goka.NewProcessor(brokers, goka.DefineGroup(group,
-			goka.Input(inputStream, new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			goka.Input(inputStream, new(codec.Int64), func(ctx goka.Context, msg any) {
 				val := msg.(int64)
 
 				// append offset
@@ -131,7 +131,7 @@ func TestUnmarkedMessages(t *testing.T) {
 
 	createProc := func() *goka.Processor {
 		proc, err := goka.NewProcessor(brokers, goka.DefineGroup(group,
-			goka.Input(inputStream, new(codec.Int64), func(ctx goka.Context, msg interface{}) {
+			goka.Input(inputStream, new(codec.Int64), func(ctx goka.Context, msg any) {
 				val := msg.(int64)
 				values = append(values, val)
 

@@ -2,6 +2,7 @@ package multierr
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -52,11 +53,12 @@ func (e *Errors) Error() string {
 	if len(e.errs) == 1 {
 		return e.errs[0].Error()
 	}
-	str := "Errors:\n"
+	var str strings.Builder
+	str.WriteString("Errors:\n")
 	for _, err := range e.errs {
-		str += fmt.Sprintf("\t* %s\n", err.Error())
+		str.WriteString(fmt.Sprintf("\t* %s\n", err.Error()))
 	}
-	return str
+	return str.String()
 }
 
 func (e *Errors) NilOrError() error {

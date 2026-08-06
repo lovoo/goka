@@ -546,7 +546,7 @@ func TestView_Run(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(oldest, nil).AnyTimes()
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(newest, nil).AnyTimes()
 		partConsumer := consumer.ExpectConsumePartition(viewTestTopic, partition, anyOffset)
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			partConsumer.YieldMessage(&sarama.ConsumerMessage{})
 		}
 

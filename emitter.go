@@ -57,7 +57,7 @@ func NewEmitter(brokers []string, topic Stream, codec Codec, options ...EmitterO
 func (e *Emitter) emitDone(err error) { e.wg.Done() }
 
 // EmitWithHeaders sends a message with the given headers for the passed key using the emitter's codec.
-func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers Headers) (*Promise, error) {
+func (e *Emitter) EmitWithHeaders(key string, msg any, headers Headers) (*Promise, error) {
 	var (
 		err  error
 		data []byte
@@ -90,12 +90,12 @@ func (e *Emitter) EmitWithHeaders(key string, msg interface{}, headers Headers) 
 }
 
 // Emit sends a message for passed key using the emitter's codec.
-func (e *Emitter) Emit(key string, msg interface{}) (*Promise, error) {
+func (e *Emitter) Emit(key string, msg any) (*Promise, error) {
 	return e.EmitWithHeaders(key, msg, nil)
 }
 
 // EmitSyncWithHeaders sends a message with the given headers to passed topic and key.
-func (e *Emitter) EmitSyncWithHeaders(key string, msg interface{}, headers Headers) error {
+func (e *Emitter) EmitSyncWithHeaders(key string, msg any, headers Headers) error {
 	var (
 		err     error
 		promise *Promise
@@ -116,7 +116,7 @@ func (e *Emitter) EmitSyncWithHeaders(key string, msg interface{}, headers Heade
 }
 
 // EmitSync sends a message to passed topic and key.
-func (e *Emitter) EmitSync(key string, msg interface{}) error {
+func (e *Emitter) EmitSync(key string, msg any) error {
 	return e.EmitSyncWithHeaders(key, msg, nil)
 }
 
