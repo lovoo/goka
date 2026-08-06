@@ -1,6 +1,7 @@
 package goka
 
 import (
+	"fmt"
 	"hash"
 
 	"github.com/IBM/sarama"
@@ -17,12 +18,47 @@ func DefaultProducerBuilder(brokers []string, clientID string, hasher func() has
 	return NewProducer(brokers, &config)
 }
 
-// ProducerBuilderWithConfig creates a Kafka consumer using the Sarama library.
-func ProducerBuilderWithConfig(config *sarama.Config) ProducerBuilder {
+// ProducerBuilderWithConfig creates a Kafka producer using the Sarama library.
+func ProducerBuilderWithConfig(config *sarama.Config, opts ...ProducerBuilderOption) ProducerBuilder {
+	pbOpts := new(producerBuilderOptions)
+	pbOpts.applyOptions(opts...)
+
 	return func(brokers []string, clientID string, hasher func() hash.Hash32) (Producer, error) {
 		config.ClientID = clientID
 		config.Producer.Partitioner = sarama.NewCustomHashPartitioner(hasher)
-		return NewProducer(brokers, config)
+		aprod, err := sarama.NewAsyncProducer(brokers, config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start Sarama producer: %w", err)
+		}
+		if pbOpts.asyncProducerWrapper != nil {
+			aprod = pbOpts.asyncProducerWrapper(config, aprod)
+		}
+		return NewProducerFromAsyncProducer(aprod), nil
+	}
+}
+
+// ProducerBuilderOption configures ProducerBuilderWithConfig.
+type ProducerBuilderOption func(*producerBuilderOptions)
+
+type producerBuilderOptions struct {
+	asyncProducerWrapper AsyncProducerWrapper
+}
+
+func (o *producerBuilderOptions) applyOptions(opts ...ProducerBuilderOption) {
+	for _, opt := range opts {
+		opt(o)
+	}
+}
+
+// AsyncProducerWrapper wraps a newly created sarama.AsyncProducer before goka
+// attaches its Promise completion loop.
+type AsyncProducerWrapper func(config *sarama.Config, producer sarama.AsyncProducer) sarama.AsyncProducer
+
+// WithAsyncProducerWrapper applies wrap to the sarama.AsyncProducer before
+// goka attaches its Promise completion loop.
+func WithAsyncProducerWrapper(wrap AsyncProducerWrapper) ProducerBuilderOption {
+	return func(o *producerBuilderOptions) {
+		o.asyncProducerWrapper = wrap
 	}
 }
 

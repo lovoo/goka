@@ -138,16 +138,18 @@ type poptions struct {
 	log      logger
 	clientID string
 
-	updateCallback         UpdateCallback
-	rebalanceCallback      RebalanceCallback
-	contextWrapper         ContextWrapper
-	partitionChannelSize   int
-	hasher                 func() hash.Hash32
-	nilHandling            NilHandling
-	backoffResetTime       time.Duration
-	hotStandby             bool
-	recoverAhead           bool
-	producerDefaultHeaders Headers
+	updateCallback               UpdateCallback
+	rebalanceCallback            RebalanceCallback
+	contextWrapper               ContextWrapper
+	processMiddlewares           []ProcessMiddleware
+	consumerGroupHandlerWrapper  ConsumerGroupHandlerWrapper
+	partitionChannelSize         int
+	hasher                       func() hash.Hash32
+	nilHandling                  NilHandling
+	backoffResetTime             time.Duration
+	hotStandby                   bool
+	recoverAhead                 bool
+	producerDefaultHeaders       Headers
 
 	builders struct {
 		storage        storage.Builder
@@ -159,12 +161,36 @@ type poptions struct {
 	}
 }
 
+// ConsumerGroupHandlerWrapper wraps the processor's ConsumerGroupHandler before
+// it is passed to ConsumerGroup.Consume.
+type ConsumerGroupHandlerWrapper func(handler sarama.ConsumerGroupHandler, group, clientID string) sarama.ConsumerGroupHandler
+
+// ProcessMiddleware wraps ProcessCallback for input and visit handling.
+// Middlewares are composed so the first registered is outermost.
+type ProcessMiddleware func(next ProcessCallback) ProcessCallback
+
 // WithContextWrapper allows to intercept the context passed to each callback invocation.
 // The wrapper function will be called concurrently across all partitions the returned context
 // must not be shared.
 func WithContextWrapper(wrapper ContextWrapper) ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.contextWrapper = wrapper
+	}
+}
+
+// WithProcessMiddleware registers middleware around ProcessCallback (inputs and visits).
+// Multiple middlewares may be registered; the first registered is outermost.
+func WithProcessMiddleware(mw ProcessMiddleware) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.processMiddlewares = append(o.processMiddlewares, mw)
+	}
+}
+
+// WithConsumerGroupHandlerWrapper wraps the processor handler passed to
+// ConsumerGroup.Consume.
+func WithConsumerGroupHandlerWrapper(w ConsumerGroupHandlerWrapper) ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.consumerGroupHandlerWrapper = w
 	}
 }
 

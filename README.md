@@ -33,6 +33,8 @@ This README provides a brief, high level overview of the ideas behind Goka.
 
 Package API documentation is available at [GoDoc] and the [Wiki](https://github.com/lovoo/goka/wiki/Tips#configuring-log-compaction-for-table-topics) provides several tips for configuring, extending, and deploying Goka applications.
 
+For distributed tracing with Sarama instrumentation libraries, see [docs/tracing.md](docs/tracing.md).
+
 ## Installation
 
 You can install Goka by running the following command:

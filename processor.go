@@ -379,7 +379,7 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 			g.handleSessionErrors(ctx, sessionCtx, sessionCtxCancel, consumerGroup)
 		}()
 
-		err := consumerGroup.Consume(ctx, topics, g)
+		err := consumerGroup.Consume(ctx, topics, g.consumerGroupHandler())
 		sessionCtxCancel()
 
 		// error consuming, no way to recover so we have to kill the processor
@@ -395,6 +395,14 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 			return nil
 		}
 	}
+}
+
+func (g *Processor) consumerGroupHandler() sarama.ConsumerGroupHandler {
+	var handler sarama.ConsumerGroupHandler = g
+	if g.opts.consumerGroupHandlerWrapper != nil {
+		handler = g.opts.consumerGroupHandlerWrapper(handler, string(g.graph.Group()), g.opts.clientID)
+	}
+	return handler
 }
 
 func (g *Processor) handleSessionErrors(ctx, sessionCtx context.Context, sessionCtxCancel context.CancelFunc, consumerGroup sarama.ConsumerGroup) {

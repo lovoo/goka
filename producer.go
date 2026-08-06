@@ -25,16 +25,20 @@ type producer struct {
 func NewProducer(brokers []string, config *sarama.Config) (Producer, error) {
 	aprod, err := sarama.NewAsyncProducer(brokers, config)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to start Sarama producer: %v", err)
+		return nil, fmt.Errorf("failed to start Sarama producer: %w", err)
 	}
+	return NewProducerFromAsyncProducer(aprod), nil
+}
 
-	p := producer{
+// NewProducerFromAsyncProducer creates a goka Producer from an existing
+// sarama.AsyncProducer. The returned Producer drains Successes/Errors to
+// resolve Promises.
+func NewProducerFromAsyncProducer(aprod sarama.AsyncProducer) Producer {
+	p := &producer{
 		producer: aprod,
 	}
-
 	p.run()
-
-	return &p, nil
+	return p
 }
 
 // Close stops the producer and waits for the Success/Error channels to drain.
