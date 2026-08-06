@@ -341,19 +341,13 @@ func (pp *PartitionProcessor) run(ctx context.Context) (rerr error) {
 
 	var (
 		// syncFailer is called synchronously from the callback within *this*
-		// goroutine
+		// goroutine.
+		// It must panic unconditionally, as documented by Context.Fail: the panic is
+		// what stops the callback and prevents processMessage from reaching
+		// msgContext.finish, which would commit the offset of a message that was
+		// never processed successfully. The panic is recovered below, which also
+		// takes care of the waitgroup accounting.
 		syncFailer = func(err error) {
-			// only fail processor if context not already Done
-			select {
-			case <-ctx.Done():
-				mutexErr.Lock()
-				rerr = multierror.Append(rerr,
-					newErrProcessing(pp.partition, fmt.Errorf("synchronous error in callback: %w", err)),
-				)
-				mutexErr.Unlock()
-				return
-			default:
-			}
 			panic(err)
 		}
 
