@@ -2,12 +2,14 @@ package goka
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/hashicorp/go-multierror"
+
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
 )
@@ -329,8 +331,13 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 	defer p.log.Debugf("... Loading done")
 
 	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, loadOffset)
-	if err != nil {
-		return fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, storedOffset, err)
+	if errors.Is(err, sarama.ErrOffsetOutOfRange) {
+		p.log.Printf("Offset %d out of range for topic %s, partition %d. Falling back to oldest offset.", loadOffset, p.topic, p.partition)
+
+		partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, sarama.OffsetOldest)
+		if err != nil {
+			return fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, storedOffset, err)
+		}
 	}
 
 	// close the consumer
@@ -347,6 +354,22 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 
 	// load messages and stop when you're at HWM
 	loadErr := p.loadMessages(ctx, partConsumer, hwm, stopAfterCatchup)
+	if loadErr != nil && errors.Is(loadErr, sarama.ErrOffsetOutOfRange) {
+		p.log.Printf("Offset out of range during consumption for topic %s, partition %d. Restarting consumer from oldest offset.", p.topic, p.partition)
+
+		// close current consumer before creating a new one
+		partConsumer.AsyncClose()
+		if drainErr := p.drainConsumer(partConsumer); drainErr != nil {
+			p.log.Printf("Error draining consumer for topic %s, partition %d: %v", p.topic, p.partition, drainErr)
+		}
+
+		partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, sarama.OffsetOldest)
+		if err != nil {
+			return fmt.Errorf("Error creating fallback partition consumer for topic %s, partition %d: %v", p.topic, p.partition, err)
+		}
+
+		loadErr = p.loadMessages(ctx, partConsumer, hwm, stopAfterCatchup)
+	}
 
 	if loadErr != nil {
 		return loadErr
