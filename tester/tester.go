@@ -186,7 +186,7 @@ func (tt *Tester) TopicManagerBuilder() goka.TopicManagerBuilder {
 
 // RegisterGroupGraph is called by a processor when the tester is passed via
 // `WithTester(..)`.
-// This will setup the tester with the neccessary consumer structure
+// This will setup the tester with the necessary consumer structure
 func (tt *Tester) RegisterGroupGraph(gg *goka.GroupGraph) string {
 	client := tt.nextClient()
 	// we need to expect a consumer group so we're creating one in the client
