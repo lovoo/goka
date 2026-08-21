@@ -11,16 +11,15 @@ var (
 )
 
 const (
-	// size of sarama buffer for consumer and producer
-	defaultChannelBufferSize = 256
 
 	// time sarama-cluster assumes the processing of an event may take
 	defaultMaxProcessingTime = 1 * time.Second
 
 	// producer flush configuration
-	defaultFlushFrequency     = 100 * time.Millisecond
-	defaultFlushBytes         = 64 * 1024
-	defaultProducerMaxRetries = 10
+	defaultFlushFrequency       = time.Second
+	defaultFlushBytes           = 1024 * 1024
+	defaultProducerMaxRetries   = 20
+	defaultProducerRetryBackoff = 500 * time.Millisecond
 )
 
 // DefaultConfig creates a new config used by goka per default
@@ -44,7 +43,10 @@ func DefaultConfig() *sarama.Config {
 	config.Producer.Flush.Bytes = defaultFlushBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
+	// retry budget must outlast a broker leader election / rolling restart, or
+	// a transient ErrNotLeaderForPartition will be treated as fatal.
 	config.Producer.Retry.Max = defaultProducerMaxRetries
+	config.Producer.Retry.Backoff = defaultProducerRetryBackoff
 	return config
 }
 

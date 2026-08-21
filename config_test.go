@@ -21,6 +21,7 @@ func TestConfig_DefaultConfig(t *testing.T) {
 		require.True(t, cfg.Producer.Return.Successes == true)
 		require.True(t, cfg.Producer.Return.Errors == true)
 		require.True(t, cfg.Producer.Retry.Max == defaultProducerMaxRetries)
+		require.True(t, cfg.Producer.Retry.Backoff == defaultProducerRetryBackoff)
 	})
 }
 
