@@ -147,6 +147,7 @@ type poptions struct {
 	backoffResetTime       time.Duration
 	hotStandby             bool
 	recoverAhead           bool
+	autoreconnect          bool
 	producerDefaultHeaders Headers
 
 	builders struct {
@@ -271,6 +272,15 @@ func WithHotStandby() ProcessorOption {
 func WithRecoverAhead() ProcessorOption {
 	return func(o *poptions, gg *GroupGraph) {
 		o.recoverAhead = true
+	}
+}
+
+// WithAutoReconnect configures the processor's internal lookup-table views, join-tables and
+// its own processor-table to reconnect internally in case of errors instead of failing.
+// This mirrors WithViewAutoReconnect for standalone views.
+func WithAutoReconnect() ProcessorOption {
+	return func(o *poptions, gg *GroupGraph) {
+		o.autoreconnect = true
 	}
 }
 

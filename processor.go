@@ -105,14 +105,20 @@ func NewProcessor(brokers []string, gg *GroupGraph, options ...ProcessorOption) 
 	// create views
 	lookupTables := make(map[string]*View)
 	for _, t := range gg.LookupTables() {
-		view, err := NewView(brokers, Table(t.Topic()), t.Codec(),
+
+		viewOptions := []ViewOption{
 			WithViewLogger(opts.log),
 			WithViewHasher(opts.hasher),
 			WithViewClientID(opts.clientID),
 			WithViewTopicManagerBuilder(opts.builders.topicmgr),
 			WithViewStorageBuilder(opts.builders.storage),
 			WithViewConsumerSaramaBuilder(opts.builders.consumerSarama),
-		)
+		}
+		if opts.autoreconnect {
+			viewOptions = append(viewOptions, WithViewAutoReconnect())
+		}
+
+		view, err := NewView(brokers, Table(t.Topic()), t.Codec(), viewOptions...)
 		if err != nil {
 			return nil, fmt.Errorf("error creating view: %v", err)
 		}

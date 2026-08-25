@@ -535,12 +535,7 @@ func TestCallbackFail(t *testing.T) {
 			if !ok {
 				return false
 			}
-			if err == nil {
-				return false
-			}
-			if err != nil {
-				return true
-			}
+			return err != nil
 		default:
 		}
 		return false

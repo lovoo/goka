@@ -211,7 +211,7 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 		setupErrg.Go(func() error {
 			pp.log.Debugf("catching up table")
 			defer pp.log.Debugf("catching up table done")
-			return pp.table.SetupAndRecover(setupCtx, false)
+			return pp.table.SetupAndRecover(setupCtx, pp.opts.autoreconnect)
 		})
 	}
 
@@ -229,7 +229,7 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 		pp.joins[join.Topic()] = table
 
 		setupErrg.Go(func() error {
-			return table.SetupAndRecover(setupCtx, false)
+			return table.SetupAndRecover(setupCtx, pp.opts.autoreconnect)
 		})
 	}
 
@@ -256,7 +256,7 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 	for _, join := range pp.joins {
 		pp.runnerGroup.Go(func() error {
 			defer pp.state.SetState(PPStateStopping)
-			return join.CatchupForever(runnerCtx, true)
+			return join.CatchupForever(runnerCtx, pp.opts.autoreconnect)
 		})
 	}
 
@@ -273,7 +273,7 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 			// (b) run the processor table in catchup mode so it keeps updating it's state.
 		case runModePassive:
 			if pp.table != nil {
-				err = pp.table.CatchupForever(runnerCtx, true)
+				err = pp.table.CatchupForever(runnerCtx, pp.opts.autoreconnect)
 			}
 		default:
 			err = fmt.Errorf("processor has invalid run mode")

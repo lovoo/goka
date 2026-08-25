@@ -47,6 +47,8 @@ func DefaultConfig() *sarama.Config {
 	// a transient ErrNotLeaderForPartition will be treated as fatal.
 	config.Producer.Retry.Max = defaultProducerMaxRetries
 	config.Producer.Retry.Backoff = defaultProducerRetryBackoff
+	config.Metadata.Retry.Max = 5
+	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 	return config
 }
 
