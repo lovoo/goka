@@ -72,6 +72,12 @@ type PartitionProcessor struct {
 	visitInput     chan *visit
 	visitCallbacks map[string]ProcessCallback
 
+	// visitMu serializes a visitor joining runnerGroup against Stop waiting
+	// on it. visitsClosed is set (under the lock) once Stop has committed to
+	// waiting, after which no visitor may join.
+	visitMu      sync.Mutex
+	visitsClosed bool
+
 	runnerGroup       *multierr.ErrGroup
 	cancelRunnerGroup func()
 
@@ -300,6 +306,14 @@ func (pp *PartitionProcessor) Stop() error {
 	if pp.cancelRunnerGroup != nil {
 		pp.cancelRunnerGroup()
 	}
+
+	// Refuse further visitors before waiting: VisitValues joins runnerGroup
+	// under the same lock, so after this point no goroutine can be added to
+	// the group we are about to wait for, and every visitor that did join is
+	// waited for below -- which is what makes closing visitInput safe.
+	pp.visitMu.Lock()
+	pp.visitsClosed = true
+	pp.visitMu.Unlock()
 
 	// wait for the runner to be done
 	runningErrs := multierror.Append(pp.runnerGroup.Wait().ErrorOrNil())
@@ -652,14 +666,23 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 
 	// register a channel that will close once the visitor itself is done.
 	visitDone := make(chan struct{})
-	defer close(visitDone)
 
 	// start a goroutine in the processor's runner-errgroup that prevents the broker from shutting down
-	// while the visitor is running.
+	// while the visitor is running. If Stop is already waiting for that group,
+	// abort instead of joining it: joining now would both race Wait and leave
+	// this visitor sending on a visitInput that Stop is about to close.
+	pp.visitMu.Lock()
+	if pp.visitsClosed {
+		pp.visitMu.Unlock()
+		return ErrVisitAborted
+	}
 	pp.runnerGroup.Go(func() error {
 		<-visitDone
 		return nil
 	})
+	pp.visitMu.Unlock()
+
+	defer close(visitDone)
 
 	defer it.Release()
 
