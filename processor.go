@@ -336,6 +336,16 @@ func (g *Processor) Run(ctx context.Context) (rerr error) {
 	return errg.Wait().ErrorOrNil()
 }
 
+// Pacing for rejoining the consumer group after Consume returns. A session
+// at least rebalanceMinSession long resets the backoff, so the rejoin after
+// an ordinary rebalance is immediate; consecutive shorter sessions wait
+// rebalanceBackoffStep longer each time, up to rebalanceBackoffMax.
+const (
+	rebalanceMinSession  = time.Second
+	rebalanceBackoffStep = 500 * time.Millisecond
+	rebalanceBackoffMax  = 5 * time.Second
+)
+
 func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 	// create kafka consumer
 	consumerGroup, err := g.opts.builders.consumerGroup(g.brokers, string(g.graph.Group()), g.opts.clientID)
@@ -372,6 +382,7 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 		g.log.Debugf("closing consumer group ... done")
 	}()
 
+	backoff := NewSimpleBackoff(rebalanceBackoffStep, rebalanceBackoffMax)
 	for {
 		sessionCtx, sessionCtxCancel := context.WithCancel(ctx)
 
@@ -379,6 +390,7 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 			g.handleSessionErrors(ctx, sessionCtx, sessionCtxCancel, consumerGroup)
 		}()
 
+		started := time.Now()
 		err := consumerGroup.Consume(ctx, topics, g)
 		sessionCtxCancel()
 
@@ -387,8 +399,20 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 			return fmt.Errorf("error consuming from group consumer: %w", err)
 		}
 
+		// Consume returns without an error when its session ends, which is
+		// what a rebalance does, so a session that lasted rejoins at once.
+		// Only a session that ended almost as soon as it began backs off,
+		// longer each time in a row, so a group that keeps returning
+		// immediately cannot spin.
+		var wait time.Duration
+		if time.Since(started) >= rebalanceMinSession {
+			backoff.Reset()
+		} else {
+			wait = backoff.Duration()
+		}
+
 		select {
-		case <-time.After(5 * time.Second):
+		case <-time.After(wait):
 			g.log.Printf("Consumer group returned, Rebalancing.")
 		case <-ctx.Done():
 			g.log.Printf("Consumer group cancelled. Stopping")
