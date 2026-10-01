@@ -614,7 +614,11 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 	msgContext.start()
 
 	// now call cb
-	cb(pp.opts.contextWrapper(msgContext), m)
+	wrapped := pp.opts.contextWrapper(msgContext)
+	cb(wrapped, m)
+	if finishable, ok := wrapped.(FinishableContext); ok {
+		finishable.OnCallbackDone()
+	}
 	msgContext.finish(nil)
 	return nil
 }

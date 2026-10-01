@@ -134,6 +134,11 @@ type Context interface {
 	DeferCommit() func(error)
 }
 
+type FinishableContext interface {
+	// WIP function that is called when the callback has returned
+	OnCallbackDone()
+}
+
 type message struct {
 	key       string
 	timestamp time.Time
