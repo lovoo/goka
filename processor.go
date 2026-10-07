@@ -220,23 +220,7 @@ func (g *Processor) setPartProc(partition int32, pproc *PartitionProcessor) {
 }
 
 func (g *Processor) hash(key string) (int32, error) {
-	// create a new hasher every time. Alternative would be to store the hash in
-	// view and every time reset the hasher (ie, hasher.Reset()). But that would
-	// also require us to protect the access of the hasher with a mutex.
-	hasher := g.opts.hasher()
-
-	_, err := hasher.Write([]byte(key))
-	if err != nil {
-		return -1, err
-	}
-	hash := int32(hasher.Sum32())
-	if hash < 0 {
-		hash = -hash
-	}
-	if g.partitionCount == 0 {
-		return 0, errors.New("can't hash with 0 partitions")
-	}
-	return hash % int32(g.partitionCount), nil
+	return PartitionForKey([]byte(key), int32(g.partitionCount), g.opts.hasher)
 }
 
 // Run starts the processor using passed context.
