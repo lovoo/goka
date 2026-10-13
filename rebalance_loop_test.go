@@ -2,6 +2,7 @@ package goka
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -17,6 +18,9 @@ import (
 type stubConsumerGroup struct {
 	session time.Duration
 	errs    chan error
+	// fail is what successive Consume calls return, at once and without a
+	// session; once it is used up, Consume runs a session and returns nil.
+	fail []error
 
 	mu      sync.Mutex
 	starts  []time.Time
@@ -26,6 +30,13 @@ type stubConsumerGroup struct {
 func (s *stubConsumerGroup) Consume(ctx context.Context, topics []string, handler sarama.ConsumerGroupHandler) error {
 	s.mu.Lock()
 	s.starts = append(s.starts, time.Now())
+	if len(s.fail) > 0 {
+		err := s.fail[0]
+		s.fail = s.fail[1:]
+		s.returns = append(s.returns, time.Now())
+		s.mu.Unlock()
+		return err
+	}
 	s.mu.Unlock()
 	select {
 	case <-time.After(s.session):
@@ -61,6 +72,12 @@ func (s *stubConsumerGroup) waitForStarts(t *testing.T, n int, within time.Durat
 }
 
 func runWithStubGroup(t *testing.T, stub *stubConsumerGroup) (context.CancelFunc, *Processor) {
+	cancel, proc, _ := runWithStubGroupErr(t, stub)
+	return cancel, proc
+}
+
+// runWithStubGroupErr is runWithStubGroup, also returning what Run returns.
+func runWithStubGroupErr(t *testing.T, stub *stubConsumerGroup) (context.CancelFunc, *Processor, <-chan error) {
 	ctrl, bm := createMockBuilder(t)
 	t.Cleanup(ctrl.Finish)
 	bm.producer.EXPECT().Close().Return(nil).AnyTimes()
@@ -75,8 +92,9 @@ func runWithStubGroup(t *testing.T, stub *stubConsumerGroup) (context.CancelFunc
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { _ = proc.Run(ctx) }()
-	return cancel, proc
+	done := make(chan error, 1)
+	go func() { done <- proc.Run(ctx) }()
+	return cancel, proc, done
 }
 
 // A session that lasts — an ordinary rebalance — must rejoin at once rather
@@ -108,4 +126,74 @@ func TestRebalanceLoop_BacksOffWhenSessionsEndAtOnce(t *testing.T) {
 	require.Less(t, gaps[0], 200*time.Millisecond, "the first quick return rejoins at once: %v", gaps)
 	require.GreaterOrEqual(t, gaps[1], rebalanceBackoffStep-50*time.Millisecond, "the second waits a step: %v", gaps)
 	require.GreaterOrEqual(t, gaps[2], 2*rebalanceBackoffStep-50*time.Millisecond, "the third waits two: %v", gaps)
+}
+
+// A coordinator that is still loading the group's offsets, as one is just
+// after its broker restarts, is waited out: the processor backs off and
+// rejoins, longer each time, and runs once the coordinator answers.
+func TestRebalanceLoop_RejoinsAfterACoordinatorThatIsNotReady(t *testing.T) {
+	stub := &stubConsumerGroup{session: time.Hour, errs: make(chan error), fail: []error{
+		sarama.ErrOffsetsLoadInProgress,
+		fmt.Errorf("joining: %w", sarama.ErrOffsetsLoadInProgress),
+		sarama.ErrNotCoordinatorForConsumer,
+		sarama.ErrConsumerCoordinatorNotAvailable,
+		sarama.ErrRebalanceInProgress,
+	}}
+	cancel, _, done := runWithStubGroupErr(t, stub)
+
+	starts, returns := stub.waitForStarts(t, 6, 15*time.Second)
+	for i := 1; i < 6; i++ {
+		gap := starts[i].Sub(returns[i-1])
+		want := time.Duration(i-1) * rebalanceBackoffStep
+		require.GreaterOrEqualf(t, gap, want-50*time.Millisecond, "rejoin %d waited %v, want at least %v", i, gap, want)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("the processor stopped on a retriable error: %v", err)
+	default:
+	}
+	cancel()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the processor did not stop once canceled")
+	}
+}
+
+// Any other error from Consume still stops the processor, with the error.
+func TestRebalanceLoop_StopsOnAnErrorThatIsNotRetriable(t *testing.T) {
+	stub := &stubConsumerGroup{session: time.Hour, errs: make(chan error), fail: []error{sarama.ErrGroupAuthorizationFailed}}
+	cancel, _, done := runWithStubGroupErr(t, stub)
+	defer cancel()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, sarama.ErrGroupAuthorizationFailed)
+		require.ErrorContains(t, err, "error consuming from group consumer")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the processor kept running after a non-retriable error")
+	}
+	_, _ = stub.waitForStarts(t, 1, time.Second)
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	require.Len(t, stub.starts, 1, "a non-retriable error was retried")
+}
+
+// A processor canceled while it waits to rejoin stops at once.
+func TestRebalanceLoop_StopsWhenCanceledWhileWaitingToRejoin(t *testing.T) {
+	stub := &stubConsumerGroup{session: time.Hour, errs: make(chan error), fail: []error{
+		sarama.ErrOffsetsLoadInProgress, sarama.ErrOffsetsLoadInProgress, sarama.ErrOffsetsLoadInProgress,
+		sarama.ErrOffsetsLoadInProgress, sarama.ErrOffsetsLoadInProgress, sarama.ErrOffsetsLoadInProgress,
+	}}
+	cancel, _, done := runWithStubGroupErr(t, stub)
+	_, _ = stub.waitForStarts(t, 3, 5*time.Second)
+	canceled := time.Now()
+	cancel()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+		require.Less(t, time.Since(canceled), 2*rebalanceBackoffStep, "the processor finished its wait before stopping")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the processor did not stop once canceled")
+	}
 }

@@ -394,6 +394,23 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 		err := consumerGroup.Consume(ctx, topics, g)
 		sessionCtxCancel()
 
+		// A coordinator that is loading the group's offsets, has moved, or
+		// is mid-rebalance answers with an error a later join gets past, as
+		// it does while its broker restarts. sarama retries a join a few
+		// times itself; an error that outlasts those backs off and rejoins
+		// rather than stopping the processor.
+		if err != nil && isRetriableConsumeErr(err) {
+			wait := backoff.Duration()
+			g.log.Printf("Consumer group returned a retriable error, rejoining in %v: %v", wait, err)
+			select {
+			case <-time.After(wait):
+				continue
+			case <-ctx.Done():
+				g.log.Printf("Consumer group cancelled. Stopping")
+				return nil
+			}
+		}
+
 		// error consuming, no way to recover so we have to kill the processor
 		if err != nil {
 			return fmt.Errorf("error consuming from group consumer: %w", err)
@@ -419,6 +436,26 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 			return nil
 		}
 	}
+}
+
+// retriableConsumeErrs are the errors Consume returns while the group's
+// coordinator is unready, which a later join gets past.
+var retriableConsumeErrs = []error{
+	sarama.ErrOffsetsLoadInProgress,
+	sarama.ErrConsumerCoordinatorNotAvailable,
+	sarama.ErrNotCoordinatorForConsumer,
+	sarama.ErrRebalanceInProgress,
+}
+
+// isRetriableConsumeErr reports whether err, from Consume, is one of
+// retriableConsumeErrs.
+func isRetriableConsumeErr(err error) bool {
+	for _, r := range retriableConsumeErrs {
+		if errors.Is(err, r) {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *Processor) handleSessionErrors(ctx, sessionCtx context.Context, sessionCtxCancel context.CancelFunc, consumerGroup sarama.ConsumerGroup) {
