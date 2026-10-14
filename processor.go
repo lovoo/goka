@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -394,11 +397,12 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 		err := consumerGroup.Consume(ctx, topics, g)
 		sessionCtxCancel()
 
-		// A coordinator that is loading the group's offsets, has moved, or
-		// is mid-rebalance answers with an error a later join gets past, as
-		// it does while its broker restarts. sarama retries a join a few
-		// times itself; an error that outlasts those backs off and rejoins
-		// rather than stopping the processor.
+		// While a broker restarts, Consume fails with errors a later join
+		// gets past: a coordinator loading the group's offsets, moved or
+		// mid-rebalance, or a connection lost or timed out, in the join or
+		// in setting up the partitions (retriableConsumeErrs). sarama
+		// retries a join a few times itself; an error that outlasts those
+		// backs off and rejoins rather than stopping the processor.
 		if err != nil && isRetriableConsumeErr(err) {
 			wait := backoff.Duration()
 			g.log.Printf("Consumer group returned a retriable error, rejoining in %v: %v", wait, err)
@@ -438,24 +442,41 @@ func (g *Processor) rebalanceLoop(ctx context.Context) (rerr error) {
 	}
 }
 
-// retriableConsumeErrs are the errors Consume returns while the group's
-// coordinator is unready, which a later join gets past.
+// retriableConsumeErrs are the errors Consume returns while a broker
+// restarts, which a later join gets past: the group's coordinator is
+// unready or has moved, a partition's leader is moving, or the client
+// lost its connection to the broker.
 var retriableConsumeErrs = []error{
 	sarama.ErrOffsetsLoadInProgress,
 	sarama.ErrConsumerCoordinatorNotAvailable,
 	sarama.ErrNotCoordinatorForConsumer,
 	sarama.ErrRebalanceInProgress,
+	sarama.ErrLeaderNotAvailable,
+	sarama.ErrNotLeaderForPartition,
+	sarama.ErrRequestTimedOut,
+	sarama.ErrBrokerNotAvailable,
+	sarama.ErrNetworkException,
+	sarama.ErrNotConnected,
+	sarama.ErrOutOfBrokers,
+	io.EOF,
+	io.ErrUnexpectedEOF,
+	syscall.ECONNREFUSED,
+	syscall.ECONNRESET,
+	syscall.EPIPE,
 }
 
 // isRetriableConsumeErr reports whether err, from Consume, is one of
-// retriableConsumeErrs.
+// retriableConsumeErrs or a network timeout. Any other network error
+// is not: a TLS alert, such as a certificate the broker refuses,
+// arrives as one and does not clear by rejoining.
 func isRetriableConsumeErr(err error) bool {
 	for _, r := range retriableConsumeErrs {
 		if errors.Is(err, r) {
 			return true
 		}
 	}
-	return false
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
 }
 
 func (g *Processor) handleSessionErrors(ctx, sessionCtx context.Context, sessionCtxCancel context.CancelFunc, consumerGroup sarama.ConsumerGroup) {

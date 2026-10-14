@@ -2,13 +2,20 @@ package goka
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net"
+	"os"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -196,4 +203,102 @@ func TestRebalanceLoop_StopsWhenCanceledWhileWaitingToRejoin(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the processor did not stop once canceled")
 	}
+}
+
+// A client that lost its broker, as one does while the broker restarts,
+// is waited out like a coordinator that is not ready: a read that timed
+// out in the join, and a partition table that could not ask a broker
+// for its offsets while the processor set up its partitions.
+func TestRebalanceLoop_RejoinsAfterABrokerConnectionIsLost(t *testing.T) {
+	timedOut := &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}
+	stub := &stubConsumerGroup{session: time.Hour, errs: make(chan error), fail: []error{
+		timedOut,
+		setupFailure(sarama.ErrNotConnected),
+		sarama.ErrOutOfBrokers,
+	}}
+	cancel, _, done := runWithStubGroupErr(t, stub)
+	_, _ = stub.waitForStarts(t, 4, 10*time.Second)
+	select {
+	case err := <-done:
+		t.Fatalf("the processor stopped on a lost broker: %v", err)
+	default:
+	}
+	cancel()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the processor did not stop once canceled")
+	}
+}
+
+// setupFailure is err as Consume returns it from Setup when a partition
+// table cannot find its offsets: wrapped as Processor.Setup,
+// PartitionProcessor.Start and PartitionTable.findOffsetToLoad wrap it.
+func setupFailure(err error) error {
+	table := fmt.Errorf("Error getting oldest offset for topic/partition table/3: %w", err)
+	start := fmt.Errorf("Setup failed. Cannot start processor for partition 3: %w", multierror.Append(nil, table))
+	return multierror.Append(nil, newErrSetup(3, start))
+}
+
+// Which errors from Consume rejoin and which stop the processor.
+func TestIsRetriableConsumeErr(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"loading offsets", sarama.ErrOffsetsLoadInProgress, true},
+		{"coordinator unavailable", sarama.ErrConsumerCoordinatorNotAvailable, true},
+		{"not coordinator", sarama.ErrNotCoordinatorForConsumer, true},
+		{"rebalance in progress", sarama.ErrRebalanceInProgress, true},
+		{"leader not available", sarama.ErrLeaderNotAvailable, true},
+		{"not leader", sarama.ErrNotLeaderForPartition, true},
+		{"request timed out", sarama.ErrRequestTimedOut, true},
+		{"broker not available", sarama.ErrBrokerNotAvailable, true},
+		{"network exception", sarama.ErrNetworkException, true},
+		{"not connected", sarama.ErrNotConnected, true},
+		{"out of brokers", sarama.ErrOutOfBrokers, true},
+		{"connection closed", fmt.Errorf("reading: %w", io.EOF), true},
+		{"connection cut short", io.ErrUnexpectedEOF, true},
+		{"connection refused", &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}, true},
+		{"connection reset", &net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("read", syscall.ECONNRESET)}, true},
+		{"broken pipe", &net.OpError{Op: "write", Net: "tcp", Err: os.NewSyscallError("write", syscall.EPIPE)}, true},
+		{"read timed out", &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, true},
+		{"table setup without a broker", setupFailure(sarama.ErrNotConnected), true},
+		{"table setup that cannot recover", setupFailure(errors.New("the table might be gone")), false},
+		{"group not authorized", sarama.ErrGroupAuthorizationFailed, false},
+		{"topic not authorized", setupFailure(sarama.ErrTopicAuthorizationFailed), false},
+		{"closed client", sarama.ErrClosedClient, false},
+		{"TLS alert", &net.OpError{Op: "remote error", Err: errors.New("tls: bad certificate")}, false},
+		{"unknown host", &net.DNSError{Err: "no such host", Name: "kafka-9"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, isRetriableConsumeErr(tc.err), "%v", tc.err)
+		})
+	}
+}
+
+// A partition processor whose table cannot ask a broker for its offsets
+// fails to start with an error that still names the lost broker, so the
+// processor's Setup error rejoins rather than stops it.
+func TestPartitionProcessorStart_KeepsALostBrokerInItsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	bm := newBuilderMock(ctrl)
+	graph := DefineGroup("lost-broker",
+		Input("input", new(codec.String), func(Context, any) {}),
+		Persist(new(codec.String)),
+	)
+	opts := new(poptions)
+	require.NoError(t, opts.applyOptions(graph, WithStorageBuilder(storage.MemoryBuilder())))
+	bm.tmgr.EXPECT().GetOffset(graph.GroupTable().Topic(), int32(3), sarama.OffsetOldest).Return(int64(0), sarama.ErrNotConnected)
+
+	pp := newPartitionProcessor(3, graph, func(*message, string) {}, defaultLogger, opts, runModeActive,
+		nil, nil, nil, bm.tmgr, NewSimpleBackoff(defaultBackoffStep, defaultBackoffMax), time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := pp.Start(ctx, ctx)
+	require.ErrorIs(t, err, sarama.ErrNotConnected)
+	require.True(t, isRetriableConsumeErr(newErrSetup(3, err)), "%v", err)
 }
