@@ -383,7 +383,7 @@ func (v *View) Iterator() (Iterator, error) {
 	}
 
 	return &iterator{
-		iter:  storage.NewMultiIterator(iters),
+		iter:  v.opts.builders.multiIterator(iters),
 		codec: v.opts.tableCodec,
 	}, nil
 }
@@ -406,7 +406,7 @@ func (v *View) IteratorWithRange(start, limit string) (Iterator, error) {
 	}
 
 	return &iterator{
-		iter:  storage.NewMultiIterator(iters),
+		iter:  v.opts.builders.multiIterator(iters),
 		codec: v.opts.tableCodec,
 	}, nil
 }
