@@ -16,7 +16,7 @@ func TestMemStorageDelete(t *testing.T) {
 	has, err := storage.Has("key-1")
 	require.NoError(t, err)
 	require.False(t, has)
-	require.Equal(t, 0, len(storage.(*memory).keys))
+	require.Equal(t, 0, len(storage.(*memory).storage))
 
 	err = storage.Set("key-1", []byte("content-1"))
 	require.NoError(t, err)
@@ -24,7 +24,7 @@ func TestMemStorageDelete(t *testing.T) {
 	has, err = storage.Has("key-1")
 	require.NoError(t, err)
 	require.True(t, has)
-	require.Equal(t, 1, len(storage.(*memory).keys))
+	require.Equal(t, 1, len(storage.(*memory).storage))
 
 	err = storage.Delete("key-1")
 	require.NoError(t, err)
@@ -32,7 +32,7 @@ func TestMemStorageDelete(t *testing.T) {
 	has, err = storage.Has("key-1")
 	require.NoError(t, err)
 	require.False(t, has)
-	require.Equal(t, 0, len(storage.(*memory).keys))
+	require.Equal(t, 0, len(storage.(*memory).storage))
 }
 
 func TestMemIter(t *testing.T) {
