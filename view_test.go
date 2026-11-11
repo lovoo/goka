@@ -6,6 +6,7 @@ import (
 	"hash"
 	"log"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -408,7 +409,8 @@ func TestView_close(t *testing.T) {
 
 		err := view.close()
 		require.NoError(t, err)
-		require.True(t, len(view.partitions) == 0)
+		require.True(t, view.closed.Load())
+		require.Len(t, view.partitions, 3)
 	})
 	t.Run("fail", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
@@ -429,7 +431,8 @@ func TestView_close(t *testing.T) {
 
 		err := view.close()
 		require.Error(t, err)
-		require.True(t, len(view.partitions) == 0)
+		require.True(t, view.closed.Load())
+		require.Len(t, view.partitions, 3)
 	})
 }
 
@@ -454,7 +457,8 @@ func TestView_Terminate(t *testing.T) {
 
 		ret := view.close()
 		require.NoError(t, ret)
-		require.True(t, len(view.partitions) == 0)
+		require.True(t, view.closed.Load())
+		require.Len(t, view.partitions, 3)
 	})
 
 	t.Run("succeed_twice", func(t *testing.T) {
@@ -477,10 +481,12 @@ func TestView_Terminate(t *testing.T) {
 
 		ret := view.close()
 		require.NoError(t, ret)
-		require.True(t, len(view.partitions) == 0)
+		require.True(t, view.closed.Load())
+		require.Len(t, view.partitions, 3)
 		ret = view.close()
 		require.NoError(t, ret)
-		require.True(t, len(view.partitions) == 0)
+		require.True(t, view.closed.Load())
+		require.Len(t, view.partitions, 3)
 	})
 
 	t.Run("fail", func(t *testing.T) {
@@ -504,7 +510,8 @@ func TestView_Terminate(t *testing.T) {
 
 		ret := view.close()
 		require.Error(t, ret)
-		require.True(t, len(view.partitions) == 0)
+		require.True(t, view.closed.Load())
+		require.Len(t, view.partitions, 3)
 	})
 }
 
@@ -797,4 +804,52 @@ func ExampleView_autoreconnect() {
 	// Stop the view and wait for it to shutdown before returning
 	cancel()
 	<-done
+}
+
+// TestView_ReadsRaceClose pins that a View's readers may run while Run
+// closes it: close leaves the partitions in place for them, and once it
+// has run they get ErrViewClosed or false, not an index panic.
+func TestView_ReadsRaceClose(t *testing.T) {
+	view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+	defer ctrl.Finish()
+	bm.useMemoryStorage()
+	consumer := defaultSaramaAutoConsumerMock(t)
+	for i := range int32(3) {
+		view.partitions = append(view.partitions, newPartitionTable(viewTestTopic, i, consumer, bm.tmgr,
+			DefaultUpdate, bm.getStorageBuilder(), defaultLogger, NewSimpleBackoff(defaultBackoffStep, defaultBackoffMax), time.Minute))
+	}
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				_ = view.Recovered()
+				_, _ = view.find("some-key")
+				_, _ = view.Get("some-key")
+			}
+		}()
+	}
+	time.Sleep(10 * time.Millisecond)
+	require.NoError(t, view.close())
+	time.Sleep(10 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+
+	_, err := view.find("some-key")
+	require.ErrorIs(t, err, ErrViewClosed)
+	_, err = view.Get("some-key")
+	require.Error(t, err)
+	_, err = view.Iterator()
+	require.ErrorIs(t, err, ErrViewClosed)
+	_, err = view.IteratorWithRange("a", "z")
+	require.ErrorIs(t, err, ErrViewClosed)
+	require.False(t, view.Recovered())
 }
