@@ -134,6 +134,13 @@ type Context interface {
 	DeferCommit() func(error)
 }
 
+// mixin interface making a context finishable. If the interface is implemented,
+// the processor will call that function on every callback after the callback has terminated.
+type finishableContext interface {
+	// WIP function that is called when the callback has returned
+	OnCallbackDone()
+}
+
 type message struct {
 	key       string
 	timestamp time.Time
