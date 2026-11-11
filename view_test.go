@@ -608,6 +608,46 @@ func TestView_Run(t *testing.T) {
 		ret := view.Run(ctx)
 		require.Error(t, ret)
 	})
+	t.Run("fail-keeps-the-broker-error", func(t *testing.T) {
+		// A caller that retries a transient broker error, as a lost
+		// leader during a broker restart, finds it in the error Run
+		// returns from a failed recovery.
+		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
+		defer ctrl.Finish()
+
+		var (
+			partition int32
+			consumer  = defaultSaramaAutoConsumerMock(t)
+			updateCB  UpdateCallback
+			retErr    = sarama.ErrNotLeaderForPartition
+		)
+		bm.useMemoryStorage()
+
+		pt := newPartitionTable(
+			viewTestTopic,
+			partition,
+			consumer,
+			bm.tmgr,
+			updateCB,
+			bm.getStorageBuilder(),
+			defaultLogger,
+			NewSimpleBackoff(defaultBackoffStep, defaultBackoffMax),
+			time.Minute,
+		)
+
+		pt.consumer = consumer
+		view.partitions = []*PartitionTable{pt}
+		view.state = newViewSignal()
+
+		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(sarama.OffsetNewest, retErr).AnyTimes()
+		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(sarama.OffsetOldest, retErr).AnyTimes()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+
+		ret := view.Run(ctx)
+		require.ErrorIs(t, ret, sarama.ErrNotLeaderForPartition)
+	})
 }
 
 func TestView_createPartitions(t *testing.T) {
@@ -632,7 +672,7 @@ func TestView_createPartitions(t *testing.T) {
 		bm.tmgr.EXPECT().Close()
 
 		ret := view.createPartitions([]string{""})
-		require.Error(t, ret)
+		require.ErrorIs(t, ret, retErr)
 		require.True(t, len(view.partitions) == 0)
 	})
 }

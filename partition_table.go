@@ -243,11 +243,11 @@ func (p *PartitionTable) createStorage(ctx context.Context) (*storageProxy, erro
 func (p *PartitionTable) findOffsetToLoad(storedOffset int64) (int64, int64, error) {
 	oldest, err := p.tmgr.GetOffset(p.topic, p.partition, sarama.OffsetOldest)
 	if err != nil {
-		return 0, 0, fmt.Errorf("Error getting oldest offset for topic/partition %s/%d: %v", p.topic, p.partition, err)
+		return 0, 0, fmt.Errorf("Error getting oldest offset for topic/partition %s/%d: %w", p.topic, p.partition, err)
 	}
 	hwm, err := p.tmgr.GetOffset(p.topic, p.partition, sarama.OffsetNewest)
 	if err != nil {
-		return 0, 0, fmt.Errorf("Error getting newest offset for topic/partition %s/%d: %v", p.topic, p.partition, err)
+		return 0, 0, fmt.Errorf("Error getting newest offset for topic/partition %s/%d: %w", p.topic, p.partition, err)
 	}
 	p.log.Debugf("topic manager gives us oldest: %d, hwm: %d", oldest, hwm)
 
@@ -330,7 +330,7 @@ func (p *PartitionTable) load(ctx context.Context, stopAfterCatchup bool) (rerr 
 
 	partConsumer, err = p.consumer.ConsumePartition(p.topic, p.partition, loadOffset)
 	if err != nil {
-		return fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %v", p.topic, p.partition, storedOffset, err)
+		return fmt.Errorf("Error creating partition consumer for topic %s, partition %d, offset %d: %w", p.topic, p.partition, storedOffset, err)
 	}
 
 	// close the consumer
