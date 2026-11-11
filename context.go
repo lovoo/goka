@@ -259,6 +259,30 @@ func (ctx *cbContext) Delete(options ...ContextOption) {
 	}
 }
 
+// RawValuer is implemented by the Context a processor's callbacks are
+// given, visit callbacks included. A callback that only needs to know
+// whether a value has changed can read its bytes without paying for a
+// decode, by asserting its Context to a RawValuer.
+type RawValuer interface {
+	// RawValue returns the value of the key in the group table as the
+	// table stores it, encoded, or nil if the key has none. It fails the
+	// context on an error, as Value does. The caller must not modify the
+	// slice, nor keep it after the callback returns: the storage may
+	// reuse it.
+	RawValue() []byte
+}
+
+var _ RawValuer = (*cbContext)(nil)
+
+// RawValue implements RawValuer.
+func (ctx *cbContext) RawValue() []byte {
+	data, err := ctx.rawValueForKey(ctx.Key())
+	if err != nil {
+		ctx.Fail(err)
+	}
+	return data
+}
+
 // Value returns the value of the key in the group table.
 func (ctx *cbContext) Value() any {
 	val, err := ctx.valueForKey(ctx.Key())
@@ -346,8 +370,9 @@ func (ctx *cbContext) Lookup(topic Table, key string) any {
 	return val
 }
 
-// valueForKey returns the value of key in the processor state.
-func (ctx *cbContext) valueForKey(key string) (any, error) {
+// rawValueForKey returns the encoded value of key in the processor
+// state, or nil if it has none.
+func (ctx *cbContext) rawValueForKey(key string) ([]byte, error) {
 	if ctx.table == nil {
 		return nil, fmt.Errorf("Cannot access state in stateless processor")
 	}
@@ -355,6 +380,15 @@ func (ctx *cbContext) valueForKey(key string) (any, error) {
 	data, err := ctx.table.Get(key)
 	if err != nil {
 		return nil, fmt.Errorf("error reading value: %v", err)
+	}
+	return data, nil
+}
+
+// valueForKey returns the value of key in the processor state.
+func (ctx *cbContext) valueForKey(key string) (any, error) {
+	data, err := ctx.rawValueForKey(key)
+	if err != nil {
+		return nil, err
 	} else if data == nil {
 		return nil, nil
 	}

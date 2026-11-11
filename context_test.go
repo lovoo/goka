@@ -632,3 +632,49 @@ func TestContext_Fail(t *testing.T) {
 
 	require.Panics(t, func() { ctx.Fail(errors.New("blubb")) })
 }
+
+func TestContext_RawValue(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var (
+		key = "key"
+		st  = NewMockStorage(ctrl)
+		pt  = &PartitionTable{
+			st:    &storageProxy{Storage: st},
+			state: newPartitionTableState().SetState(State(PartitionRunning)),
+			stats: newTableStats(),
+		}
+		failed error
+	)
+	ctx := &cbContext{
+		table:      pt,
+		graph:      DefineGroup("some-group", Persist(new(codec.String))),
+		msg:        &message{key: key},
+		syncFailer: func(err error) { failed = err },
+	}
+	var rv RawValuer = ctx
+
+	// The bytes as stored, not decoded: codec.String would decode them
+	// into a string.
+	st.EXPECT().Get(key).Return([]byte("encoded"), nil)
+	require.Equal(t, []byte("encoded"), rv.RawValue())
+
+	// An absent key has none.
+	st.EXPECT().Get(key).Return(nil, nil)
+	require.Nil(t, rv.RawValue())
+
+	// A storage error fails the context, as Value's does.
+	st.EXPECT().Get(key).Return(nil, errors.New("disk on fire"))
+	require.Nil(t, rv.RawValue())
+	require.ErrorContains(t, failed, "error reading value: disk on fire")
+}
+
+func TestContext_RawValueStateless(t *testing.T) {
+	ctx := &cbContext{
+		graph:      DefineGroup("group"),
+		msg:        new(message),
+		syncFailer: func(err error) { panic(err) },
+	}
+	require.PanicsWithError(t, "Cannot access state in stateless processor", func() { ctx.RawValue() })
+}
