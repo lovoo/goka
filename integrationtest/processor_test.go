@@ -292,6 +292,55 @@ func TestProcessorContextWrapper(t *testing.T) {
 	<-done
 }
 
+type finishableWrapper struct {
+	gokaCtx
+	callbackReturned <-chan struct{}
+	done             chan bool
+}
+
+func (w *finishableWrapper) OnCallbackDone() {
+	select {
+	case <-w.callbackReturned:
+		w.done <- true
+	default:
+		w.done <- false
+	}
+}
+
+func TestProcessorContextWrapperOnCallbackDone(t *testing.T) {
+	gkt := tester.New(t)
+	callbackReturned := make(chan struct{})
+	done := make(chan bool, 1)
+
+	proc, err := goka.NewProcessor(nil, goka.DefineGroup("proc",
+		goka.Input("input", new(codec.Int64), func(ctx goka.Context, msg any) {
+			defer close(callbackReturned)
+		}),
+	),
+		goka.WithTester(gkt),
+		goka.WithContextWrapper(func(ctx goka.Context) goka.Context {
+			return &finishableWrapper{gokaCtx: ctx, callbackReturned: callbackReturned, done: done}
+		}),
+	)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	procDone := make(chan error, 1)
+	go func() { procDone <- proc.Run(ctx) }()
+
+	gkt.Consume("input", "key", int64(23))
+	select {
+	case afterCallback := <-done:
+		require.True(t, afterCallback, "OnCallbackDone ran before the callback returned")
+	default:
+		t.Fatal("OnCallbackDone was not called")
+	}
+
+	cancel()
+	require.NoError(t, <-procDone)
+}
+
 /*
 import (
 	"context"
