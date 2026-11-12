@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -985,6 +986,7 @@ func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta any
 	g.mTables.RLock()
 
 	if g.isStateless() {
+		g.mTables.RUnlock()
 		return 0, fmt.Errorf("cannot visit values in stateless processor")
 	}
 
@@ -1006,7 +1008,9 @@ func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta any
 
 	// wait for the visitors
 	err := errg.Wait().ErrorOrNil()
-	return visited, err
+	// Visits that VisitValues stopped waiting for on cancellation may still be
+	// incrementing this counter, so read it atomically.
+	return atomic.LoadInt64(&visited), err
 }
 
 // VisitAll visits all values from the processor table.
