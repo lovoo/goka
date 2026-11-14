@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"maps"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -74,7 +74,6 @@ func (i *memiter) Seek(key []byte) bool {
 
 type memory struct {
 	sync.RWMutex
-	keys      []string
 	storage   map[string][]byte
 	offset    *int64
 	recovered bool
@@ -83,7 +82,6 @@ type memory struct {
 // NewMemory returns a new in-memory storage.
 func NewMemory() Storage {
 	return &memory{
-		keys:      make([]string, 0),
 		storage:   make(map[string][]byte),
 		recovered: false,
 	}
@@ -111,10 +109,6 @@ func (m *memory) Set(key string, value []byte) error {
 	if value == nil {
 		return fmt.Errorf("cannot write nil value")
 	}
-	if _, exists := m.storage[key]; !exists {
-		m.keys = append(m.keys, key)
-		sort.Strings(m.keys)
-	}
 	m.storage[key] = value
 	return nil
 }
@@ -123,12 +117,6 @@ func (m *memory) Delete(key string) error {
 	m.Lock()
 	defer m.Unlock()
 	delete(m.storage, key)
-	for i, k := range m.keys {
-		if k == key {
-			m.keys = append(m.keys[:i], m.keys[i+1:]...)
-			break
-		}
-	}
 	return nil
 }
 
@@ -138,12 +126,12 @@ func (m *memory) Delete(key string) error {
 // be used concurrently.
 func (m *memory) Iterator() (Iterator, error) {
 	m.RLock()
-	defer m.RUnlock()
-	keys := make([]string, len(m.keys))
-	copy(keys, m.keys)
-	storage := make(map[string][]byte, len(m.storage))
-	maps.Copy(storage, m.storage)
-	return &memiter{-1, keys, storage}, nil
+	storage := maps.Clone(m.storage)
+	m.RUnlock()
+
+	// Sorting here rather than on every Set keeps writes O(1): a table recovering n keys
+	// would otherwise re-sort the key list n times.
+	return &memiter{-1, slices.Sorted(maps.Keys(storage)), storage}, nil
 }
 
 // Returns an interator on a snapshot of the storage within the specified range of keys.
@@ -151,21 +139,19 @@ func (m *memory) Iterator() (Iterator, error) {
 // The iterator is not concurrency-safe, but multiple iterators can
 // be used concurrently.
 func (m *memory) IteratorWithRange(start, limit []byte) (Iterator, error) {
-	m.RLock()
-	defer m.RUnlock()
-	keys := []string{} // using slice as keys has an unknown size
 	if len(limit) == 0 {
 		limit = util.BytesPrefix(start).Limit
 	}
 	storage := make(map[string][]byte)
-	for _, k := range m.keys {
+	m.RLock()
+	for k, v := range m.storage {
 		if bytes.Compare([]byte(k), start) > -1 && bytes.Compare([]byte(k), limit) < 1 {
-			keys = append(keys, k)
-			storage[k] = m.storage[k]
+			storage[k] = v
 		}
 	}
+	m.RUnlock()
 
-	return &memiter{-1, keys, storage}, nil
+	return &memiter{-1, slices.Sorted(maps.Keys(storage)), storage}, nil
 }
 
 func (m *memory) MarkRecovered() error {
