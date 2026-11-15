@@ -6,6 +6,7 @@ import (
 
 	"github.com/lovoo/goka"
 	"github.com/lovoo/goka/codec"
+	"github.com/lovoo/goka/storage"
 	"github.com/lovoo/goka/tester"
 	"github.com/stretchr/testify/require"
 )
@@ -62,5 +63,45 @@ func TestView(t *testing.T) {
 		// stop the view and wait for it to finish up
 		cancel()
 		<-done
+	})
+
+	t.Run("custom_multi_iterator", func(t *testing.T) {
+		gkt := tester.New(t)
+
+		var built int
+		view, err := goka.NewView(nil, "test", new(codec.String),
+			goka.WithViewTester(gkt),
+			goka.WithViewMultiIteratorBuilder(func(iters []storage.Iterator) storage.Iterator {
+				built++
+				return storage.NewMultiIterator(iters)
+			}),
+		)
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			if err := view.Run(ctx); err != nil {
+				panic(err)
+			}
+		}()
+		defer func() {
+			cancel()
+			<-done
+		}()
+
+		// waits until the view is running, iterators fail before that
+		gkt.SetTableValue("test", "key", "value")
+
+		it, err := view.Iterator()
+		require.NoError(t, err)
+		it.Release()
+		require.Equal(t, 1, built)
+
+		it, err = view.IteratorWithRange("", "")
+		require.NoError(t, err)
+		it.Release()
+		require.Equal(t, 2, built)
 	})
 }

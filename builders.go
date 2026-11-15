@@ -4,6 +4,7 @@ import (
 	"hash"
 
 	"github.com/IBM/sarama"
+	"github.com/lovoo/goka/storage"
 )
 
 // ProducerBuilder create a Kafka producer.
@@ -96,3 +97,9 @@ type BackoffBuilder func() (Backoff, error)
 func DefaultBackoffBuilder() (Backoff, error) {
 	return NewSimpleBackoff(defaultBackoffStep, defaultBackoffMax), nil
 }
+
+// MultiIteratorBuilder combines the per-partition iterators of a view into a
+// single iterator. The returned iterator takes ownership of iters and must
+// release them on Release. The default is storage.NewMultiIterator, which
+// merges the partitions in lexicographical key order.
+type MultiIteratorBuilder func(iters []storage.Iterator) storage.Iterator

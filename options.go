@@ -418,6 +418,7 @@ type voptions struct {
 		consumerSarama SaramaConsumerBuilder
 		topicmgr       TopicManagerBuilder
 		backoff        BackoffBuilder
+		multiIterator  MultiIteratorBuilder
 	}
 }
 
@@ -445,6 +446,15 @@ func WithViewCallback(cb UpdateCallback) ViewOption {
 func WithViewStorageBuilder(sb storage.Builder) ViewOption {
 	return func(o *voptions, table Table, codec Codec) {
 		o.builders.storage = sb
+	}
+}
+
+// WithViewMultiIteratorBuilder replaces how View.Iterator and View.IteratorWithRange
+// combine the partition iterators, e.g. to skip the ordered merge when key order
+// is not needed.
+func WithViewMultiIteratorBuilder(mib MultiIteratorBuilder) ViewOption {
+	return func(o *voptions, table Table, codec Codec) {
+		o.builders.multiIterator = mib
 	}
 }
 
@@ -543,6 +553,10 @@ func (opt *voptions) applyOptions(topic Table, codec Codec, opts ...ViewOption) 
 
 	if opt.builders.backoff == nil {
 		opt.builders.backoff = DefaultBackoffBuilder
+	}
+
+	if opt.builders.multiIterator == nil {
+		opt.builders.multiIterator = storage.NewMultiIterator
 	}
 
 	return nil
