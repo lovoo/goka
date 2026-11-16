@@ -2,6 +2,7 @@ package goka
 
 import (
 	"errors"
+	"github.com/turbolytics/temper"
 	"hash"
 	"strconv"
 	"testing"
@@ -58,6 +59,7 @@ func TestEmitter_NewEmitter(t *testing.T) {
 }
 
 func TestEmitter_Emit(t *testing.T) {
+	temper.Covers(t, "emitter")
 	t.Run("succeed", func(t *testing.T) {
 		emitter, bm, ctrl := createEmitter(t)
 		defer ctrl.Finish()
@@ -136,6 +138,7 @@ func TestEmitter_Emit(t *testing.T) {
 }
 
 func TestEmitter_EmitSync(t *testing.T) {
+	temper.Covers(t, "emitter")
 	t.Run("succeed", func(t *testing.T) {
 		emitter, bm, ctrl := createEmitter(t)
 		defer ctrl.Finish()

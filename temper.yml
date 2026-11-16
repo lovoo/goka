@@ -1,0 +1,8 @@
+temper: "0.1"
+project: goka
+
+levels:
+  - name: unit
+    description: go test ./..., the command goka's CI runs
+  - name: integration
+    description: the storage contract against a real Redis; GOKA_REDIS_ADDR=host:port go test -run '^TestIntegration' ./storage/...

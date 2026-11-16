@@ -3,6 +3,7 @@ package goka
 import (
 	"context"
 	"fmt"
+	"github.com/turbolytics/temper"
 	"strconv"
 	"strings"
 	"testing"
@@ -83,6 +84,7 @@ func accumulate(ctx Context, msg any) {
 }
 
 func TestProcessor_Run(t *testing.T) {
+	temper.Covers(t, "processor")
 	t.Run("input-persist", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)
 		defer ctrl.Finish()
