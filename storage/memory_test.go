@@ -95,3 +95,25 @@ func TestMemoryStorage(t *testing.T) {
 		require.NoError(t, errg.Wait().ErrorOrNil())
 	})
 }
+
+// IteratorWithRange's range is half-open, [start, limit), as the Storage
+// interface documents: limit itself is excluded.
+func TestMemoryStorage_IteratorWithRangeExcludesLimit(t *testing.T) {
+	mem := NewMemory()
+	defer mem.Close()
+	for i := 0; i < 300; i++ {
+		require.NoError(t, mem.Set(fmt.Sprintf("key%05d", i), []byte("v")))
+	}
+
+	it, err := mem.IteratorWithRange([]byte("key00100"), []byte("key00200"))
+	require.NoError(t, err)
+	defer it.Release()
+
+	var keys []string
+	for it.Next() {
+		keys = append(keys, string(it.Key()))
+	}
+	require.Len(t, keys, 100)
+	require.Contains(t, keys, "key00100")
+	require.NotContains(t, keys, "key00200")
+}

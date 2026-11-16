@@ -159,7 +159,7 @@ func (m *memory) IteratorWithRange(start, limit []byte) (Iterator, error) {
 	}
 	storage := make(map[string][]byte)
 	for _, k := range m.keys {
-		if bytes.Compare([]byte(k), start) > -1 && bytes.Compare([]byte(k), limit) < 1 {
+		if bytes.Compare([]byte(k), start) > -1 && bytes.Compare([]byte(k), limit) < 0 {
 			keys = append(keys, k)
 			storage[k] = m.storage[k]
 		}
