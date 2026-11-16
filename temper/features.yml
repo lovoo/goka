@@ -1,0 +1,29 @@
+# The components goka's README describes.
+features:
+  - id: emitter
+    description: Emitters deliver key-value messages into Kafka.
+    requires: [unit]
+  - id: processor
+    description: A processor is a set of callbacks that consume messages and transform the group table's state.
+    requires: [unit]
+  - id: group_table
+    description: The group table is a processor group's partitioned key-value state, recovered from Kafka.
+    requires: [unit]
+  - id: view
+    description: Views are local, read-only caches of a complete group table.
+    requires: [unit]
+
+  # Local storage: "By default, the local storage uses LevelDB, but in-memory
+  # map and Redis-based storage are also available."
+  - id: storage.leveldb
+    description: Local storage in LevelDB, the default.
+    requires: [unit]
+  - id: storage.memory
+    description: Local storage in an in-memory map.
+    requires: [unit]
+  - id: storage.redis
+    description: Local storage in a Redis hash.
+    requires: [integration]
+  - id: storage.null
+    description: A storage that discards everything it is given, for debugging.
+    requires: [unit]

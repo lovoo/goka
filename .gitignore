@@ -4,3 +4,5 @@ tmp*
 vendor
 .vscode
 .idea
+
+/.temper/

@@ -1,0 +1,16 @@
+id: storage.null
+kind: storage
+feature: storage.null
+exempt:
+  - invariant: storage.get.returns_set
+    reason: Null discards everything it is given, by design.
+    proven_by: TestNullStorage_KeepsNothing
+  - invariant: storage.offset.roundtrip
+    reason: Null discards everything it is given, by design.
+    proven_by: TestNullStorage_KeepsNothing
+  - invariant: storage.iterator.visits_every_key
+    reason: Null discards everything it is given, by design.
+    proven_by: TestNullStorage_KeepsNothing
+  - invariant: storage.range.half_open
+    reason: Null discards everything it is given, by design.
+    proven_by: TestNullStorage_KeepsNothing

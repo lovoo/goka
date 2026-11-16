@@ -1,0 +1,38 @@
+# The Storage contract, as storage/storage.go documents it. Every backend must
+# hold it; a backend that cannot says so with an exemption and a proof.
+invariants:
+  - id: storage.get.returns_set
+    claim: Get returns the value Set stored for a key, and nil for a key that does not exist.
+    applies_to: storage
+    family: storage
+    requires_any: [unit, integration]
+
+  - id: storage.delete.removes
+    claim: After Delete, Has reports false and Get returns nil.
+    applies_to: storage
+    family: storage
+    requires_any: [unit, integration]
+
+  - id: storage.offset.roundtrip
+    claim: GetOffset returns the offset SetOffset stored.
+    applies_to: storage
+    family: storage
+    requires_any: [unit, integration]
+
+  - id: storage.iterator.visits_every_key
+    claim: Iterator traverses a snapshot of the storage, yielding every stored key once and never the offset key.
+    applies_to: storage
+    family: storage
+    requires_any: [unit, integration]
+
+  - id: storage.range.half_open
+    claim: IteratorWithRange(start, limit) yields exactly the keys in the half-open range [start, limit).
+    applies_to: storage
+    family: storage
+    requires_any: [unit, integration]
+
+  - id: storage.seek.never_backward
+    claim: After Seek(key), the next key the iterator yields is never before key.
+    applies_to: storage
+    family: storage
+    requires_any: [unit, integration]
