@@ -11,6 +11,7 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/hashicorp/go-multierror"
 	"github.com/lovoo/goka/multierr"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -626,7 +627,8 @@ func (pp *PartitionProcessor) processMessage(ctx context.Context, wg *sync.WaitG
 // VisitValues iterates over all values in the table and calls the "visit"-callback for the passed name.
 // Optional parameter value can be set, which will just be forwarded to the visitor-function
 // the function returns after all items of the table have been added to the channel.
-func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta any, visited *int64) error {
+// The limiter must be non-nil; use rate.Inf for unlimited visits.
+func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta any, visited *int64, limiter *rate.Limiter) error {
 	if _, ok := pp.visitCallbacks[name]; !ok {
 		return fmt.Errorf("unconfigured visit callback. Did you initialize the processor with DefineGroup(..., Visit(%s, ...), ...)?", name)
 	}
@@ -658,19 +660,37 @@ func (pp *PartitionProcessor) VisitValues(ctx context.Context, name string, meta
 	visitDone := make(chan struct{})
 	defer close(visitDone)
 
+	stopping, doneWaitingForStop := pp.stopping()
+	defer doneWaitingForStop()
+
+	waitCtx, cancelWait := context.WithCancel(ctx)
+	defer cancelWait()
+
 	// start a goroutine in the processor's runner-errgroup that prevents the broker from shutting down
 	// while the visitor is running.
 	pp.runnerGroup.Go(func() error {
-		<-visitDone
+		select {
+		case <-stopping:
+			cancelWait()
+			<-visitDone
+		case <-visitDone:
+		}
 		return nil
 	})
 
 	defer it.Release()
 
-	stopping, doneWaitingForStop := pp.stopping()
-	defer doneWaitingForStop()
-
 	for it.Next() {
+		if err := limiter.Wait(waitCtx); err != nil {
+			drainUntilEmpty()
+			select {
+			case <-stopping:
+				return ErrVisitAborted
+			default:
+				return err
+			}
+		}
+
 		// add one that we were able to be put into the queue.
 		// wg.Done will be called by the visit handler as commit
 		wg.Add(1)
