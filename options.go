@@ -10,6 +10,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/lovoo/goka/storage"
+	"golang.org/x/time/rate"
 )
 
 // UpdateContext defines the interface for UpdateCallback arguments.
@@ -643,6 +644,28 @@ func (opt *eoptions) applyOptions(topic Stream, codec Codec, opts ...EmitterOpti
 	}
 	if opt.builders.topicmgr == nil {
 		opt.builders.topicmgr = DefaultTopicManagerBuilder
+	}
+}
+
+type visitOptions struct {
+	// Aggregate visits per second across active partitions; rate.Inf means unlimited.
+	rateLimit rate.Limit
+}
+
+// VisitOption configures a VisitAll or VisitAllWithStats invocation.
+type VisitOption func(*visitOptions) error
+
+// WithVisitRateLimit limits enqueued visits per second across all active partitions
+// of a processor for one visit invocation. The limit must be positive and finite.
+// The first visit can be enqueued immediately; subsequent visits are paced with
+// a burst size of one. Without this option, visits are not rate limited.
+func WithVisitRateLimit(limit rate.Limit) VisitOption {
+	return func(opts *visitOptions) error {
+		if !(limit > 0 && limit <= rate.Inf) {
+			return fmt.Errorf("visit rate limit must be positive and finite")
+		}
+		opts.rateLimit = limit
+		return nil
 	}
 }
 
