@@ -83,3 +83,39 @@ func TestTesterConsume(t *testing.T) {
 	cancel()
 	<-done
 }
+
+// Stopping a processor while the tester is still waiting for a message to be
+// processed must not race with the tester closing the claim (#481).
+func TestTesterStopWhileConsuming(t *testing.T) {
+	for range 10 {
+		gkt := New(t)
+
+		proc, err := goka.NewProcessor(nil,
+			goka.DefineGroup("test", goka.Input("input", new(codec.String), func(ctx goka.Context, msg any) {
+				time.Sleep(50 * time.Millisecond)
+			})),
+			goka.WithTester(gkt))
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() {
+			done <- proc.Run(ctx)
+		}()
+		require.NoError(t, proc.WaitForReadyContext(ctx))
+
+		consumed := make(chan struct{})
+		go func() {
+			defer close(consumed)
+			gkt.Consume("input", "key", "value")
+		}()
+
+		// stop the processor while the message is being processed. This sleeps
+		// instead of waiting on the callback, because waiting on it would order
+		// the tester's send before the cancel and hide the race.
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+		require.NoError(t, <-done)
+		<-consumed
+	}
+}
