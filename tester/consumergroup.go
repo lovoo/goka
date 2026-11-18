@@ -81,6 +81,9 @@ func (cg *consumerGroup) Consume(ctx context.Context, topics []string, handler s
 			case <-innerCtx.Done():
 			case <-session.ctx.Done():
 			}
+			// wait for a running catchup to stop pushing to the claim before closing it
+			session.mCatchup.Lock()
+			defer session.mCatchup.Unlock()
 			claim.close()
 			return nil
 		})
@@ -306,6 +309,11 @@ func (cgs *cgSession) makeMsgKey(topic string, offset int64) string {
 }
 
 func (cgs *cgSession) pushMessageToClaim(claim *cgClaim, msg *message) {
+	// session is done, so the claim may be closed already
+	if cgs.ctx.Err() != nil {
+		return
+	}
+
 	cgs.mMessages.Lock()
 
 	msgKey := cgs.makeMsgKey(claim.Topic(), msg.offset)
