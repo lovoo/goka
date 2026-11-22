@@ -9,6 +9,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/lovoo/goka"
+	"github.com/lovoo/goka/codec"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,4 +91,41 @@ func newTopicName() string {
 	topicBytes := make([]byte, 4)
 	rand.Read(topicBytes)
 	return hex.EncodeToString(topicBytes)
+}
+
+func TestProcessorGroupTablePartitions(t *testing.T) {
+	brokers := initSystemTest(t)
+	tm, err := goka.NewTopicManager(brokers, goka.DefaultConfig(), goka.NewTopicManagerConfig())
+	require.NoError(t, err)
+	defer tm.Close()
+
+	input := newTopicName()
+	require.NoError(t, tm.EnsureStreamExists(input, 2))
+	for _, tc := range []struct {
+		name       string
+		partitions int
+	}{
+		{"fewer", 1},
+		{"matching", 2},
+		{"more", 3},
+		{"create", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			group := goka.Group(newTopicName())
+			table := string(goka.GroupTable(group))
+			if tc.partitions != 0 {
+				require.NoError(t, tm.EnsureTableExists(table, tc.partitions))
+			}
+			graph := goka.DefineGroup(group,
+				goka.Input(goka.Stream(input), new(codec.String), func(goka.Context, any) {}),
+				goka.Persist(new(codec.String)),
+			)
+			_, err := goka.NewProcessor(brokers, graph)
+			if tc.partitions == 1 || tc.partitions == 3 {
+				require.ErrorContains(t, err, table)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

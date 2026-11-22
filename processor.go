@@ -1044,6 +1044,17 @@ func prepareTopics(brokers []string, gg *GroupGraph, opts *poptions) (npar int, 
 		if err = tm.EnsureTableExists(gt.Topic(), npar); err != nil {
 			return 0, err
 		}
+		// EnsureTableExists may only warn about a mismatch. A processor needs
+		// one state partition for each input partition regardless of that policy.
+		partitions, err := tm.Partitions(gt.Topic())
+		if err != nil {
+			// With creation checks disabled, a newly created table may not be visible yet.
+			if !errors.Is(err, errTopicNotFound) {
+				return 0, fmt.Errorf("fetching group table partitions for %s: %w", gt.Topic(), err)
+			}
+		} else if len(partitions) != npar {
+			return 0, fmt.Errorf("group table %s has %d partitions, expected %d to match input topics", gt.Topic(), len(partitions), npar)
+		}
 	}
 
 	return
