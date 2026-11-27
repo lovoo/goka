@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/IBM/sarama"
 	"github.com/hashicorp/go-multierror"
@@ -41,15 +42,23 @@ type Getter func(string) (any, error)
 
 // View is a materialized (i.e. persistent) cache of a group table.
 type View struct {
-	brokers    []string
-	topic      string
-	opts       *voptions
-	log        logger
+	brokers []string
+	topic   string
+	opts    *voptions
+	log     logger
+	// partitions are set once, by NewView, and never written again, so
+	// readers may range over them without a lock while the view closes.
 	partitions []*PartitionTable
 	consumer   sarama.Consumer
 	tmgr       TopicManager
 	state      *Signal
+	// closed is set by close, before it closes any partition's storage;
+	// a reader seeing it set returns ErrViewClosed.
+	closed atomic.Bool
 }
+
+// ErrViewClosed is returned by a read of a view whose Run has closed it.
+var ErrViewClosed = errors.New("view is closed")
 
 // NewView creates a new View object from a group.
 func NewView(brokers []string, topic Table, codec Codec, options ...ViewOption) (*View, error) {
@@ -277,15 +286,23 @@ func (v *View) Run(ctx context.Context) (rerr error) {
 	return
 }
 
-// close closes all storage partitions
+// close marks the view closed and closes all storage partitions. It
+// leaves v.partitions as it is: readers range over it without a lock, so
+// clearing it raced them, and a read between hash's length check and
+// find's index panicked.
+//
+// A second close does nothing, as it did when the first left no
+// partitions to close.
 func (v *View) close() error {
+	if v.closed.Swap(true) {
+		return nil
+	}
 	errg, _ := multierr.NewErrGroup(context.Background())
 	for _, p := range v.partitions {
 		errg.Go(func() error {
 			return p.Close()
 		})
 	}
-	v.partitions = nil
 	return errg.Wait().ErrorOrNil()
 }
 
@@ -310,6 +327,9 @@ func (v *View) hash(key string) (int32, error) {
 }
 
 func (v *View) find(key string) (*PartitionTable, error) {
+	if v.closed.Load() {
+		return nil, ErrViewClosed
+	}
 	h, err := v.hash(key)
 	if err != nil {
 		return nil, err
@@ -367,6 +387,9 @@ func (v *View) Has(key string) (bool, error) {
 
 // Iterator returns an iterator that iterates over the state of the View.
 func (v *View) Iterator() (Iterator, error) {
+	if v.closed.Load() {
+		return nil, ErrViewClosed
+	}
 	iters := make([]storage.Iterator, 0, len(v.partitions))
 	for i := range v.partitions {
 		iter, err := v.partitions[i].Iterator()
@@ -390,6 +413,9 @@ func (v *View) Iterator() (Iterator, error) {
 
 // IteratorWithRange returns an iterator that iterates over the state of the View. This iterator is build using the range.
 func (v *View) IteratorWithRange(start, limit string) (Iterator, error) {
+	if v.closed.Load() {
+		return nil, ErrViewClosed
+	}
 	iters := make([]storage.Iterator, 0, len(v.partitions))
 	for i := range v.partitions {
 		iter, err := v.partitions[i].IteratorWithRange([]byte(start), []byte(limit))
@@ -426,7 +452,7 @@ func (v *View) Evict(key string) error {
 func (v *View) Recovered() bool {
 	// no partitions --> never recover
 	// Otherwise we might mask errors of initializing the view
-	if len(v.partitions) == 0 {
+	if len(v.partitions) == 0 || v.closed.Load() {
 		return false
 	}
 
