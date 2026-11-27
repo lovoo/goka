@@ -129,6 +129,9 @@ type Context interface {
 	// It returns a function that *must* be called eventually to mark the message processing as finished.
 	// If the function is not called, the processor might reprocess the message in future.
 	// Note when calling DeferCommit multiple times, all returned functions must be called.
+	// Until the message is marked as finished, the messages consumed after it on the
+	// same topic are not committed either, because committing them would acknowledge
+	// this message as well.
 	// *Important*: the context where `DeferCommit` is called, is only safe to use within this callback,
 	// never pass it into asynchronous code or goroutines.
 	DeferCommit() func(error)
