@@ -3,6 +3,7 @@ package goka
 import (
 	"context"
 	"fmt"
+	"github.com/turbolytics/temper"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -307,6 +308,7 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 }
 
 func TestPT_load(t *testing.T) {
+	temper.Covers(t, "group_table")
 	t.Run("succeed_no_load_stopAfterCatchup", func(t *testing.T) {
 		var (
 			oldest           int64 = 161
@@ -706,6 +708,7 @@ func TestPT_loadMessages(t *testing.T) {
 }
 
 func TestPT_storeEvent(t *testing.T) {
+	temper.Covers(t, "group_table")
 	t.Run("succeed", func(t *testing.T) {
 		var (
 			localOffset     int64

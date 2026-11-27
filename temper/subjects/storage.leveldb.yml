@@ -1,0 +1,3 @@
+id: storage.leveldb
+kind: storage
+feature: storage.leveldb

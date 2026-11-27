@@ -3,6 +3,7 @@ package goka
 import (
 	"context"
 	"fmt"
+	"github.com/turbolytics/temper"
 	"hash"
 	"log"
 	"strconv"
@@ -170,6 +171,7 @@ func TestView_find(t *testing.T) {
 }
 
 func TestView_Get(t *testing.T) {
+	temper.Covers(t, "view")
 	t.Run("succeed", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()
@@ -253,6 +255,7 @@ func TestView_Get(t *testing.T) {
 }
 
 func TestView_Has(t *testing.T) {
+	temper.Covers(t, "view")
 	t.Run("succeed", func(t *testing.T) {
 		view, bm, ctrl := createTestView(t, NewMockAutoConsumer(t, DefaultConfig()))
 		defer ctrl.Finish()

@@ -1,0 +1,3 @@
+id: storage.redis
+kind: storage
+feature: storage.redis
