@@ -82,6 +82,80 @@ func accumulate(ctx Context, msg any) {
 	}
 }
 
+func TestProcessor_VisitAllOptions(t *testing.T) {
+	ctrl, bm := createMockBuilder(t)
+	t.Cleanup(ctrl.Finish)
+
+	const key = "test-key"
+	input := &sarama.ConsumerMessage{
+		Topic: "input",
+		Key:   []byte(key),
+		Value: []byte("3"),
+	}
+	expectCGConsume(bm, "test-table", []*sarama.ConsumerMessage{input})
+	expectCGEmit(bm, "test-table", []*sarama.ConsumerMessage{input})
+
+	groupBuilder, cg := createTestConsumerGroupBuilder(t)
+	consBuilder, _ := createTestConsumerBuilder(t)
+	graph := DefineGroup("test",
+		Input("input", new(codec.Int64), accumulate),
+		Persist(new(codec.Int64)),
+		Visitor("reset", func(ctx Context, msg any) {
+			ctx.SetValue(msg)
+		}),
+	)
+	proc, err := NewProcessor([]string{"localhost:9092"}, graph,
+		bm.createProcessorOptions(consBuilder, groupBuilder)...,
+	)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- proc.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case err := <-runErr:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("processor did not shut down")
+		}
+	})
+	proc.WaitForReady()
+	cg.SendMessageWait(input)
+
+	t.Run("with stats", func(t *testing.T) {
+		bm.producer.EXPECT().EmitWithHeaders("test-table", key, []byte("25"), nil).
+			Return(NewPromise().finish(nil, nil))
+		visited, err := proc.VisitAllWithStats(ctx, "reset", int64(25), WithVisitRateLimit(100))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), visited)
+		value, err := proc.Get(key)
+		require.NoError(t, err)
+		require.Equal(t, int64(25), value)
+	})
+	t.Run("without ratelimit", func(t *testing.T) {
+		bm.producer.EXPECT().EmitWithHeaders("test-table", key, []byte("25"), nil).
+			Return(NewPromise().finish(nil, nil))
+		visited, err := proc.VisitAllWithStats(ctx, "reset", int64(25))
+		require.NoError(t, err)
+		require.Equal(t, int64(1), visited)
+		value, err := proc.Get(key)
+		require.NoError(t, err)
+		require.Equal(t, int64(25), value)
+	})
+
+	t.Run("invalid option", func(t *testing.T) {
+		visited, err := proc.VisitAllWithStats(ctx, "reset", nil, WithVisitRateLimit(0))
+		require.ErrorContains(t, err, "visit rate limit must be positive and finite")
+		require.Zero(t, visited)
+		require.ErrorContains(t, proc.VisitAll(ctx, "reset", nil, WithVisitRateLimit(0)),
+			"visit rate limit must be positive and finite")
+	})
+}
+
 func TestProcessor_Run(t *testing.T) {
 	t.Run("input-persist", func(t *testing.T) {
 		ctrl, bm := createMockBuilder(t)

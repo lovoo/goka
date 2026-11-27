@@ -10,6 +10,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/hashicorp/go-multierror"
+	"golang.org/x/time/rate"
 
 	"github.com/lovoo/goka/multierr"
 	"github.com/lovoo/goka/storage"
@@ -974,6 +975,7 @@ func (g *Processor) Error() error {
 // VisitAllWithStats visits all keys in parallel by passing the visit request
 // to all partitions.
 // The optional argument "meta" will be forwarded to the visit-function of each key of the table.
+// Options apply to this invocation across all active partitions of this processor.
 // The function returns when
 // * all values have been visited or
 // * the context is cancelled or
@@ -981,7 +983,20 @@ func (g *Processor) Error() error {
 // Return parameters:
 // * number of visited items
 // * error
-func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta any) (int64, error) {
+func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta any, opts ...VisitOption) (int64, error) {
+	options := visitOptions{
+		// default with infinite rate (i.e. no rate limit)
+		rateLimit: rate.Inf,
+	}
+	for _, opt := range opts {
+		if err := opt(&options); err != nil {
+			return 0, err
+		}
+	}
+
+	// 1 -> no burst
+	limiter := rate.NewLimiter(options.rateLimit, 1)
+
 	g.mTables.RLock()
 
 	if g.isStateless() {
@@ -998,7 +1013,7 @@ func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta any
 		}
 		part := part
 		errg.Go(func() error {
-			return part.VisitValues(visitCtx, name, meta, &visited)
+			return part.VisitValues(visitCtx, name, meta, &visited, limiter)
 		})
 	}
 
@@ -1010,8 +1025,9 @@ func (g *Processor) VisitAllWithStats(ctx context.Context, name string, meta any
 }
 
 // VisitAll visits all values from the processor table.
-func (g *Processor) VisitAll(ctx context.Context, name string, meta any) error {
-	_, err := g.VisitAllWithStats(ctx, name, meta)
+// Options apply to this invocation across all active partitions of this processor.
+func (g *Processor) VisitAll(ctx context.Context, name string, meta any, opts ...VisitOption) error {
+	_, err := g.VisitAllWithStats(ctx, name, meta, opts...)
 	return err
 }
 
