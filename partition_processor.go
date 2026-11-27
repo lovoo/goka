@@ -236,7 +236,7 @@ func (pp *PartitionProcessor) Start(setupCtx, ctx context.Context) error {
 	// here we wait for our table and the joins to recover
 	err := setupErrg.Wait().ErrorOrNil()
 	if err != nil {
-		return fmt.Errorf("Setup failed. Cannot start processor for partition %d: %v", pp.partition, err)
+		return fmt.Errorf("Setup failed. Cannot start processor for partition %d: %w", pp.partition, err)
 	}
 
 	// check if one of the contexts might have been closed in the meantime

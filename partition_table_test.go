@@ -283,7 +283,7 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetOldest).Return(int64(0), expectedErr)
 
 		_, _, err := pt.findOffsetToLoad(sarama.OffsetOldest)
-		require.Error(t, err)
+		require.ErrorIs(t, err, expectedErr)
 	})
 	t.Run("fail_getoffset2", func(t *testing.T) {
 		var (
@@ -302,7 +302,7 @@ func TestPT_findOffsetToLoad(t *testing.T) {
 		bm.tmgr.EXPECT().GetOffset(pt.topic, pt.partition, sarama.OffsetNewest).Return(int64(0), expectedErr)
 
 		_, _, err := pt.findOffsetToLoad(sarama.OffsetOldest)
-		require.Error(t, err)
+		require.ErrorIs(t, err, expectedErr)
 	})
 }
 
